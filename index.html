@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACE Clinic | Management System Luxury</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        /* --- [1. GLOBAL STYLES] --- */
+        body { font-family: 'Sarabun', sans-serif; background-color: #FDF7F8; color: #4B5563; }
+        .gold-bg { background: linear-gradient(45deg, #C5A059, #E4C580); }
+        .ace-pink { color: #D48197; }
+        .ace-bg-pink { background-color: #D48197; }
+
+        /* --- [2. NAVIGATION & UI] --- */
+        .sidebar-item { transition: 0.3s; border-radius: 15px; cursor: pointer; display: flex; align-items: center; padding: 0.9rem 1.2rem; margin-bottom: 5px; font-weight: 600; }
+        .sidebar-item:hover { background-color: #FFF0F3; color: #D48197; transform: translateX(5px); }
+        .active-menu { background-color: #D48197 !important; color: white !important; shadow: 0 10px 15px -3px rgba(212, 129, 151, 0.4); }
+        
+        .glass-card { background: white; border-radius: 2rem; padding: 2rem; border: 1px solid #FDF2F4; box-shadow: 0 10px 30px rgba(0,0,0,0.03); }
+        
+        /* --- [3. MODAL & TABS] --- */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.4); backdrop-filter: blur(4px); }
+        .modal-content { background-color: white; margin: 3% auto; padding: 2.5rem; border-radius: 2.5rem; width: 90%; max-width: 900px; border: 1px solid #E4C580; max-height: 90vh; overflow-y: auto; }
+        
+        .profile-tab { padding: 12px 20px; font-weight: 800; cursor: pointer; border-bottom: 3px solid transparent; color: #9CA3AF; transition: 0.3s; font-style: italic; }
+        .profile-tab.active { color: #D48197; border-bottom-color: #D48197; }
+        
+        .btn-period { transition: 0.3s; border-radius: 10px; padding: 0.5rem 1.2rem; font-weight: 700; font-size: 0.8rem; border: 1px solid #F1F1F1; }
+        .btn-period.active { background-color: #D48197; color: white; border-color: #D48197; }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #D48197; border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="loginPage" class="min-h-screen flex items-center justify-center p-4 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
+        <div class="bg-white/90 backdrop-blur-md p-12 rounded-[3rem] shadow-2xl w-full max-w-md border border-[#E4C580]/30 text-center animate-in fade-in zoom-in duration-500">
+            <img src="ace-logo.jpg" alt="ACE CLINIC" class="w-32 mx-auto mb-3">
+            <h1 class="text-2xl font-black ace-pink tracking-tight uppercase italic font-bold">ACE Clinic - เอซ ลินิก</h1>
+            <p class="text-[#C5A059] font-bold tracking-[0.2em] text-[10px] mb-8 uppercase">Management System</p>
+            
+            <div class="space-y-4 text-left font-bold">
+                <input type="text" id="uIn" placeholder="ชื่อผู้ใช้ / Email" class="w-full px-5 py-4 rounded-2xl border border-pink-100 outline-none focus:ring-2 focus:ring-[#D48197]">
+                <input type="password" id="pIn" placeholder="รหัสผ่าน" class="w-full px-5 py-4 rounded-2xl border border-pink-100 outline-none focus:ring-2 focus:ring-[#D48197]">
+                <button onclick="doLogin()" class="w-full gold-bg text-white font-black py-4 rounded-2xl shadow-lg mt-6 hover:brightness-110 transform active:scale-95 transition-all text-lg uppercase italic font-black">เข้าสู่ระบบ</button>
+                <p class="text-center text-xs text-gray-400 mt-4 italic font-bold">พนักงานใหม่? <span class="ace-pink cursor-pointer font-black hover:underline" onclick="alert('กรุณาติดต่อแอดมินเพื่อลงทะเบียน')">ลงทะเบียนที่นี่</span></p>
+            </div>
+        </div>
+    </div>
+
+    <div id="mainDashboard" class="hidden min-h-screen flex">
+        <aside class="w-80 bg-white shadow-2xl border-r border-pink-50 flex flex-col p-6 z-50">
+            <div class="px-4 py-8 text-center border-b border-pink-50 mb-8 font-black">
+                <img src="ace-logo.jpg" alt="ACE CLINIC" class="w-32 mx-auto mb-3">
+                <div id="userBranchBadge" class="inline-block px-4 py-1 rounded-full gold-bg text-white text-[10px] uppercase italic tracking-widest font-black">สาขาบางพลี</div>
+            </div>
+            
+            <nav id="menuContainer" class="flex-1 space-y-2 overflow-y-auto font-black italic text-sm uppercase"></nav>
+            
+            <div class="mt-auto pt-6 border-t border-pink-50">
+                <div class="flex items-center gap-3 p-3 rounded-2xl bg-pink-50/50 font-black italic">
+                    <div id="userInitial" class="w-10 h-10 rounded-full bg-[#D48197] flex items-center justify-center text-white text-xs uppercase font-black">อน</div>
+                    <div>
+                        <p id="userNameLabel" class="text-[11px] text-gray-700 uppercase tracking-tighter font-black italic"></p>
+                        <p onclick="location.reload()" class="text-[10px] text-red-400 cursor-pointer hover:underline uppercase italic font-black">Logout</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="flex-1 p-10 overflow-y-auto bg-[#FDF7F8]">
+            <header class="bg-white px-6 py-3 flex items-center justify-between border-b sticky top-0 z-[110] rounded-2xl mb-8 shadow-sm">
+                <div class="flex items-center gap-4 font-black italic">
+                    <button class="text-2xl text-gray-400 hover:text-pink-400 transition-colors">☰</button>
+                    <h1 id="pageTitle" class="text-xl ace-pink uppercase tracking-tighter font-black">DASHBOARD ภาพรวม</h1>
+                </div>
+                <div class="flex items-center gap-6 font-black italic text-[11px] uppercase">
+                    <div class="hidden lg:flex items-center gap-2 text-gray-500 border-r pr-4 tracking-widest">🌐 ภาษา TH</div>
+                    <div class="hidden lg:flex items-center gap-2 border-r pr-4 font-black">
+                        <span class="text-lg">🏪</span>
+                        <select class="text-xs outline-none bg-transparent cursor-pointer font-black italic">
+                            <option>สาขาบางพลี</option><option>สาขาชลบุรี</option><option>สาขาอุดมสุข</option>
+                        </select>
+                    </div>
+                    <button onclick="location.reload()" class="text-red-400 hover:underline">ออกจากระบบ</button>
+                </div>
+            </header>
+            
+            <div id="dynamicContent" class="animate-in fade-in duration-500"></div>
+        </main>
+    </div>
+
+    <div id="customerModal" class="modal">
+        <div class="modal-content shadow-2xl border-t-8 border-[#C5A059]">
+            <div class="flex justify-between items-center mb-8 border-b border-pink-50 pb-6">
+                <div><h3 class="text-3xl font-black ace-pink italic tracking-tight uppercase font-black">✨ ลงทะเบียนประวัติใหม่</h3></div>
+                <button onclick="closeModal()" class="w-10 h-10 flex items-center justify-center rounded-full bg-pink-50 text-gray-400 hover:bg-red-500 hover:text-white transition-all font-bold">✕</button>
+            </div>
+            
+            <div class="bg-gradient-to-r from-[#C5A059] to-[#E4C580] p-6 rounded-[2rem] flex justify-between items-center mb-8 shadow-xl text-white font-black italic">
+                <div>
+                    <h4 class="text-sm uppercase tracking-widest font-black italic">Smart Card Sync</h4>
+                    <p class="text-[10px] opacity-80 font-bold italic uppercase font-black">ดึงข้อมูลอัตโนมัติจากบัตรประชาชน</p>
+                </div>
+                <button class="bg-white text-[#C5A059] px-6 py-3 rounded-xl font-black text-xs shadow-xl uppercase italic font-black">💳 ดึงข้อมูลจากบัตร</button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10 font-black italic uppercase">
+                <div class="group"><label class="text-[10px] text-gray-400 uppercase tracking-widest font-black italic italic">ชื่อ-นามสกุล</label><input type="text" id="newName" class="w-full border-b-2 border-pink-50 py-3 outline-none focus:border-[#D48197] font-black text-lg bg-transparent uppercase"></div>
+                <div class="group"><label class="text-[10px] text-gray-400 uppercase tracking-widest font-black italic uppercase italic">เบอร์โทรศัพท์</label><input type="text" id="newPhone" class="w-full border-b-2 border-pink-50 py-3 outline-none focus:border-[#D48197] font-black text-lg bg-transparent font-black italic"></div>
+                <div class="group"><label class="text-[10px] text-gray-400 uppercase tracking-widest font-black italic uppercase italic">UID LINE</label><input type="text" id="newLine" class="w-full border-b-2 border-pink-50 py-3 outline-none focus:border-[#D48197] font-black text-lg bg-transparent font-black italic"></div>
+                <div class="group"><label class="text-[10px] text-gray-400 uppercase tracking-widest font-black italic uppercase italic tracking-widest">เลือกสาขา</label>
+                    <select id="newBranch" class="w-full border-b-2 border-pink-100 py-3 outline-none font-black text-sm bg-transparent italic font-black uppercase"><option>สาขาบางพลี</option><option>สาขาชลบุรี</option><option>สาขาอุดมสุข</option></select>
+                </div>
+            </div>
+            <button onclick="saveCustomerData()" class="w-full gold-bg text-white font-black py-5 rounded-3xl shadow-2xl uppercase italic text-lg font-black tracking-widest">💾 บันทึกข้อมูลประวัติ</button>
+        </div>
+    </div>
+
+    <script>
+        /* --- [4.1 DATA: ข้อมูลระบบ] --- */
+        const users = [
+            { email: '1111', pass: '1111', name: 'คุณอรอุมา', role: 'admin', branch: 'ทุกสาขา' },
+            { email: 'staff@ace.com', pass: '1111', name: 'น้องเจี๊ยบ', role: 'staff', branch: 'สาขาบางพลี' },
+            { email: 'account@ace.com', pass: '2222', name: 'พี่บัญชี', role: 'accounting', branch: 'ส่วนกลาง' }
+        ];
+
+        const menuConfig = [
+            { id: 1, n: 'Dashboard ภาพรวม', i: '📊', roles: ['admin', 'accounting'] },
+            { id: 2, n: 'จัดการลูกค้า/ประวัติ', i: '👥', roles: ['admin', 'staff'] },
+            { id: 3, n: 'บันทึกยอดขาย/เปิดบิล', i: '💸', roles: ['admin', 'staff'] },
+            { id: 4, n: 'ระบบนัดหมาย', i: '📅', roles: ['admin', 'staff'] },
+            { id: 5, n: 'ใช้คอร์สบริการ', i: '✨', roles: ['admin', 'staff'] },
+            { id: 6, n: 'เมนูรายงาน/กราฟ', i: '📈', roles: ['admin', 'accounting'] },
+            { id: 7, n: 'จัดการพนักงาน', i: '🩺', roles: ['admin'] },
+            { id: 8, n: 'ตั้งค่าระบบ', i: '⚙️', roles: ['admin'] }
+        ];
+
+        let customerDB = [{ id: 1, hn: 'HN-69001', name: 'คุณอริสา รักสวย', phone: '0812345678', line: '@Arisa_ACE', branch: 'สาขาบางพลี', status: 'ปกติ' }];
+
+        /* --- [4.2 CORE SYSTEM: ระบบหลัก] --- */
+        function doLogin() {
+            const u = document.getElementById('uIn').value;
+            const p = document.getElementById('pIn').value;
+            const user = users.find(x => x.email === u && x.pass === p);
+            if (user) {
+                document.getElementById('loginPage').classList.add('hidden');
+                document.getElementById('mainDashboard').classList.remove('hidden');
+                document.getElementById('userNameLabel').innerText = `${user.name} (${user.role.toUpperCase()})`;
+                document.getElementById('userInitial').innerText = user.name.substring(0, 2);
+                renderMenuByRole(user.role);
+                loadPage(1, 'Dashboard ภาพรวม');
+            } else { 
+                alert("❌ รหัสผ่านไม่ถูกต้อง"); 
+            }
+        }
+
+        function renderMenuByRole(role) {
+            const container = document.getElementById('menuContainer');
+            container.innerHTML = menuConfig.filter(m => m.roles.includes(role)).map(m => `
+                <div class="sidebar-item" id="menu-${m.id}" onclick="loadPage(${m.id}, '${m.n}')">
+                    <span class="mr-3 text-xl">${m.i}</span><span class="text-sm font-black italic uppercase">${m.n}</span>
+                </div>`).join('');
+        }
+
+        function loadPage(id, title) {
+            document.getElementById('pageTitle').innerText = title.toUpperCase();
+            document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active-menu'));
+            if(document.getElementById(`menu-${id}`)) document.getElementById(`menu-${id}`).classList.add('active-menu');
+            
+            const target = document.getElementById('dynamicContent');
+            if(id === 1) renderDashboard(target);
+            else if(id === 2) renderCustomerList(target);
+            else target.innerHTML = `<div class="glass-card text-center py-32 font-black ace-pink uppercase italic tracking-widest text-2xl font-black italic">เมนู ${title} <br> กำลังพัฒนา...</div>`;
+        }
+
+        /* --- [4.3 DASHBOARD: หน้าภาพรวม] --- */
+        function renderDashboard(target) {
+            target.innerHTML = `
+                <div class="flex justify-end mb-6 gap-2 font-black italic uppercase">
+                    <button class="btn-period active uppercase italic">รายวัน</button><button class="btn-period uppercase italic">รายเดือน</button><button class="btn-period uppercase italic">รายปี</button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 font-black italic uppercase italic">
+                    <div class="glass-card border-l-8 border-[#C5A059]"><p class="text-[10px] text-gray-400 tracking-widest font-black italic uppercase">ยอดขายวันนี้</p><p class="text-3xl text-gray-800 mt-2 font-black italic uppercase">฿45,200</p><p class="text-[10px] text-green-500 font-black italic mt-1 uppercase">กำไรสุทธิ: ฿22,600</p></div>
+                    <div class="glass-card border-l-8 border-[#D48197]"><p class="text-[10px] text-gray-400 tracking-widest font-black italic uppercase">จำนวนลูกค้าวันนี้</p><p class="text-3xl text-gray-800 mt-2 font-black italic uppercase">12 คน</p><p class="text-[10px] text-pink-400 font-black italic mt-1 uppercase">ลูกค้าใหม่ 3 | ลูกค้าเก่า 9</p></div>
+                    <div class="glass-card border-l-8 border-blue-400"><p class="text-[10px] text-gray-400 tracking-widest font-black italic uppercase">คอร์สที่ขายวันนี้</p><p class="text-3xl text-gray-800 mt-2 font-black italic uppercase">8 รายการ</p><p class="text-[10px] text-blue-500 font-black italic mt-1 uppercase italic">มูลค่า: ฿32,000</p></div>
+                    <div class="glass-card border-l-8 border-green-400"><p class="text-[10px] text-gray-400 tracking-widest font-black italic uppercase italic">ช่องทางหลัก</p><p class="text-xl text-green-600 mt-2 font-black italic uppercase italic">โอน (QR Code)</p></div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8 font-black italic uppercase italic">
+                    <div class="lg:col-span-2 glass-card"><h3 class="text-xs uppercase mb-6 font-black italic">📉 สถิติยอดขาย 7 วันล่าสุด</h3><canvas id="salesChart" height="120"></canvas></div>
+                    <div class="glass-card"><h3 class="text-xs uppercase mb-6 font-black italic">💳 ช่องทางชำระเงิน</h3><canvas id="paymentChart"></canvas></div>
+                </div>`;
+            setTimeout(initCharts, 100);
+        }
+
+        function initCharts() {
+            new Chart(document.getElementById('salesChart'), {
+                type: 'line',
+                data: { labels: ['08 Feb','09 Feb','10 Feb','11 Feb','12 Feb','13 Feb','14 Feb'], datasets: [{ label: 'ยอดขาย', data: [32000, 45000, 28000, 50000, 62000, 40000, 55000], borderColor: '#D48197', fill: true, backgroundColor:'rgba(212, 129, 151, 0.1)', tension: 0.4 }] }
+            });
+            new Chart(document.getElementById('paymentChart'), {
+                type: 'pie',
+                data: { labels: ['เงินสด','โอน','บัตร','Shopee'], datasets: [{ data: [15, 45, 30, 10], backgroundColor: ['#facc15','#D48197','#60a5fa','#f87171'] }] }
+            });
+        }
+
+        /* --- [4.4 CUSTOMERS: ระบบจัดการลูกค้า] --- */
+        function renderCustomerList(target) {
+            target.innerHTML = `
+                <div class="glass-card mb-8 border-t-4 border-[#D48197] animate-in slide-in-from-top duration-500 font-black italic uppercase italic">
+                    <div class="flex flex-col md:flex-row gap-4 justify-between items-center font-black italic uppercase italic">
+                        <div class="flex gap-2 w-full md:w-auto">
+                            <select class="border-2 border-pink-50 rounded-2xl px-4 py-2 text-xs font-black outline-none italic font-black uppercase"><option>สาขาบางพลี</option></select>
+                            <input type="text" placeholder="ระบุชื่อ / HN..." class="flex-1 border-2 border-pink-50 rounded-2xl px-5 py-2 text-xs font-black outline-none uppercase italic">
+                            <button class="gold-bg text-white px-8 rounded-2xl font-black text-xs shadow-lg uppercase italic font-black">ค้นหา</button>
+                        </div>
+                        <button onclick="openModalForAdd()" class="bg-black text-white px-8 py-3 rounded-2xl font-black text-xs shadow-xl tracking-widest uppercase font-black">+ เพิ่มลูกค้าใหม่</button>
+                    </div>
+                </div>
+                <div class="glass-card shadow-2xl font-black italic uppercase">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left font-black italic tracking-tighter">
+                            <thead class="bg-pink-50/50 border-b text-[#D48197] text-[11px] font-black uppercase">
+                                <tr><th class="p-5 font-black italic uppercase">HN CODE</th><th class="p-5 font-black italic uppercase">ชื่อลูกค้า</th><th class="p-5 font-black italic uppercase">เบอร์โทร</th><th class="p-5 text-center font-black italic uppercase">จัดการ</th></tr>
+                            </thead>
+                            <tbody class="text-sm font-black italic text-gray-600">
+                                ${customerDB.map((c, idx) => `<tr><td class="p-5 text-gray-400 font-black italic uppercase">#${c.hn}</td><td class="p-5 uppercase font-black italic font-black">${c.name}</td><td class="p-5 italic font-black">${c.phone}</td><td class="p-5 text-center font-black italic uppercase"><button onclick="showCustomerDetail(${idx})" class="gold-bg text-white px-6 py-2 rounded-xl text-[10px] font-black shadow-lg uppercase italic">📝 รายละเอียด</button></td></tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>`;
+        }
+
+        /* --- [4.5 PROFILE: หน้าละเอียดลูกค้า] --- */
+        function showCustomerDetail(index) {
+            const c = customerDB[index];
+            const content = document.getElementById('dynamicContent');
+            content.innerHTML = `
+                <div class="glass-card mb-6 border-t-8 border-[#C5A059] animate-in slide-in-from-top duration-500 font-black italic uppercase">
+                    <div class="flex flex-col md:flex-row justify-between items-center gap-8 font-black uppercase italic">
+                        <div class="flex items-center gap-8">
+                            <div class="w-32 h-32 rounded-[3rem] gold-bg flex items-center justify-center text-white text-5xl font-black shadow-2xl italic font-black">ACE</div>
+                            <div><h2 class="text-4xl text-gray-800 tracking-tighter font-black italic uppercase">${c.name}</h2><p class="text-sm text-gray-400 mt-1 font-black italic uppercase">CODE: ${c.hn} | สาขา: ${c.branch}</p></div>
+                        </div>
+                        <div class="flex gap-3 font-black uppercase italic">
+                            <button class="gold-bg text-white px-8 py-4 rounded-[1.5rem] font-black text-xs shadow-xl italic font-black">+ เพิ่มใบเสร็จ</button>
+                            <div class="relative group"><button class="bg-white border-2 border-gray-100 px-8 py-4 rounded-[1.5rem] text-xs font-black shadow-sm group-hover:bg-gray-50 italic uppercase font-black">จัดการ ▼</button>
+                                <div class="hidden group-hover:block absolute right-0 w-56 bg-white shadow-2xl rounded-2xl border border-pink-50 z-[200] overflow-hidden font-black italic"><button class="w-full text-left p-5 text-[11px] hover:bg-pink-50 border-b font-black italic uppercase">📄 แก้ไขข้อมูล</button></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex gap-2 border-b border-pink-100 mb-8 overflow-x-auto font-black italic uppercase font-black italic font-black">
+                    <div class="profile-tab active uppercase font-black italic font-black">ข้อมูลส่วนตัว</div><div class="profile-tab font-black italic font-black">ประวัติรักษา</div><div class="profile-tab font-black italic font-black">คอร์ส <span class="bg-red-500 text-white text-[9px] px-1.5 rounded-full ml-1 font-black italic font-black">1</span></div><div class="profile-tab font-black italic font-black">การชำระเงิน</div><div class="profile-tab font-black italic font-black">รูปภาพ</div><div class="profile-tab font-black italic font-black">หมายเหตุ</div><div class="profile-tab font-black italic font-black">สถิติ</div>
+                </div>
+                <div class="glass-card font-black italic uppercase">
+                    <h4 class="ace-pink uppercase mb-6 underline decoration-pink-100 text-lg font-black italic tracking-tighter uppercase font-black">👤 ข้อมูลพื้นฐานส่วนบุคคล</h4>
+                    <p class="text-gray-800 uppercase italic font-black tracking-tighter">เบอร์โทร: ${c.phone}</p>
+                    <p class="text-red-500 mt-2 italic font-black tracking-tighter underline">🚨 ประวัติแพ้ยา: ไม่มีข้อมูล</p>
+                </div>`;
+        }
+
+        /* --- [4.6 UTILITIES: ฟังก์ชันเสริมอื่นๆ] --- */
+        function openModalForAdd() { document.getElementById('customerModal').style.display = 'block'; }
+        function closeModal() { document.getElementById('customerModal').style.display = 'none'; }
+        function saveCustomerData() { closeModal(); alert("✅ บันทึกแล้ว"); }
+    </script>
+</body>
+</html>

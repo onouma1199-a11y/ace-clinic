@@ -1156,42 +1156,29 @@ function editCustomer(index){
 
 }
 
-
-
-
-
-
-
-/* --- render ตาราง (ฉบับแก้ไขรูปภาพ Responsive) --- */
+/* --- ก๊อปปี้ส่วนนี้ไปวางทับฟังก์ชัน renderCustomerTable เดิม --- */
 function renderCustomerTable(data) {
     const tbody = document.getElementById("customerTableBody");
     if (!tbody) return;
     tbody.innerHTML = "";
 
     const limitedData = data.slice(0, currentPageSize);
-
     limitedData.forEach((c, index) => {
         const realIndex = customerDB.findIndex(item => item.hn === c.hn);
-
         tbody.innerHTML += `
             <tr class="border-b hover:bg-pink-50 transition">
                 <td class="p-3">${index + 1}</td>
                 <td class="p-3">
-                    <img src="${c.photo || 'https://via.placeholder.com/40'}" 
-                         class="customer-photo shadow-sm"> 
+                    <img src="${c.photo || 'https://via.placeholder.com/150'}" class="customer-photo shadow-sm"> 
                 </td>
-                <td class="p-3">${c.createdAt || '-'}</td>
                 <td class="p-3 font-bold">${c.hn || '-'}</td>
                 <td class="p-3">${c.fullname || '-'}</td>
-                <td class="p-3">${c.nickname || '-'}</td>
                 <td class="p-3">${c.phone || '-'}</td>
-                <td class="p-3">${c.branch || '-'}</td>
-                <td class="p-3 text-center space-x-2">
+                <td class="p-3 text-center">
                     <button onclick="openModalForEdit(${realIndex})" class="text-blue-500 font-bold">แก้ไข</button>
-                    <button onclick="deleteCustomer(${realIndex})" class="text-red-500 font-bold">ลบ</button>
                 </td>
             </tr>`;
-    });
+    }); // <--- ตรวจสอบปิดปีกกาตรงนี้ให้ครบนะคะ
 }
       
 

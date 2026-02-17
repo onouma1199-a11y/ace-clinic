@@ -19,6 +19,20 @@
     
 
     <style>
+/* --- ปรับปรุงรูปโปรไฟล์และตาราง (Responsive) --- */
+.customer-photo {
+    width: 45px !important;
+    height: 45px !important;
+    border-radius: 50% !important;
+    object-fit: cover !important; /* ป้องกันรูปเบี้ยว */
+    border: 2px solid #D48197;
+}
+
+/* ทำให้ตารางในมือถือใช้นิ้วเลื่อนซ้าย-ขวาได้ */
+.glass-card {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
 
         /* --- [1. GLOBAL STYLES] --- */
 
@@ -117,9 +131,6 @@
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.2; } 100% { opacity: 1; } }
 
         .control-group { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
-
-
-
 
 
     </style>
@@ -286,7 +297,7 @@ class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
 
 
 
-    <div id="mainDashboard" class="hidden min-h-screen flex">
+   <div id="mainDashboard" class="hidden min-h-screen md:flex flex-row">
 
         <aside class="w-80 bg-white shadow-2xl border-r border-pink-50 flex flex-col p-6 z-50">
 
@@ -926,175 +937,58 @@ let currentPageSize = 10;
 
 
 
-/* --- แสดงหน้า list --- */
-
+/* --- แสดงหน้า list (ฉบับแก้ไขปีกกาปิดเพื่อให้ Login ได้) --- */
 function renderCustomerList(target) {
-
-
-
     target.innerHTML = `
-
-    
-
-    <!-- FILTER BAR -->
-
     <div class="glass-card mb-6 flex flex-wrap gap-4 items-center font-black italic uppercase">
-
-        
-
         <select id="pageSize" class="border border-pink-100 px-4 py-2 rounded-xl text-xs">
-
             <option value="10">10 รายการ</option>
-
             <option value="25">25 รายการ</option>
-
             <option value="50">50 รายการ</option>
-
         </select>
-
-
-
-        <select id="branchFilter"
-
-            class="border border-pink-100 px-4 py-2 rounded-xl text-xs">
-
+        <select id="branchFilter" class="border border-pink-100 px-4 py-2 rounded-xl text-xs">
             <option value="ทั้งหมด">ทุกสาขา</option>
-
             <option value="สาขาบางพลี">สาขาบางพลี</option>
-
             <option value="สาขาชลบุรี">สาขาชลบุรี</option>
-
-            <option value="สาขาอุดมสุข">สาขาอุดมสุข</option>
-
         </select>
-
-
-
-        <input id="searchInput" type="text"
-
-            placeholder="🔍 ค้นหาชื่อ / HN / เบอร์โทร"
-
-            class="flex-1 border border-pink-100 px-5 py-2 rounded-xl text-xs outline-none">
-
-
-
-        <button id="searchBtn"
-
-            class="gold-bg text-white px-6 py-2 rounded-xl text-xs shadow-lg">
-
-            ค้นหา
-
-        </button>
-
-
-
-        <button id="addCustomerBtn"
-
-            class="bg-black text-white px-6 py-2 rounded-xl text-xs shadow-lg">
-
-            + เพิ่มลูกค้า
-
-        </button>
-
-
-
+        <input id="searchInput" type="text" placeholder="🔍 ค้นหาชื่อ / HN / เบอร์โทร" class="flex-1 border border-pink-100 px-5 py-2 rounded-xl text-xs outline-none">
+        <button id="searchBtn" class="gold-bg text-white px-6 py-2 rounded-xl text-xs shadow-lg">ค้นหา</button>
+        <button onclick="openModalForAdd()" id="addCustomerBtn" class="bg-black text-white px-6 py-2 rounded-xl text-xs shadow-lg"> + เพิ่มลูกค้า </button>
     </div>
-
-
-
-    <!-- TABLE -->
 
     <div class="glass-card shadow-2xl">
-
         <table class="w-full text-left text-xs">
-
             <thead class="bg-pink-50 border-b text-[#D48197]">
-
                 <tr>
-
-                    <th class="p-3">ลำดับ</th>
-
-                    <th class="p-3">รูป</th>
-
-                    <th class="p-3">สร้างเมื่อ</th>
-
-                    <th class="p-3">HN</th>
-
-                    <th class="p-3">ชื่อ-นามสกุล</th>
-
-                    <th class="p-3">ชื่อเล่น</th>
-
-                    <th class="p-3">เบอร์โทร</th>
-
-                    <th class="p-3">สาขา</th>
-
-                    <th class="p-3 text-center">จัดการ</th>
-
+                    <th class="p-3">ลำดับ</th><th class="p-3">รูป</th><th class="p-3">สร้างเมื่อ</th>
+                    <th class="p-3">HN</th><th class="p-3">ชื่อ-นามสกุล</th><th class="p-3">ชื่อเล่น</th>
+                    <th class="p-3">เบอร์โทร</th><th class="p-3">สาขา</th><th class="p-3 text-center">จัดการ</th>
                 </tr>
-
             </thead>
-
             <tbody id="customerTableBody"></tbody>
-
         </table>
+    </div>`;
 
-    </div>
-
-    `;
-
-
-
-    /* ===== bind events หลัง render ===== */
-
-
-
+    // ===== แก้ไขจุดตาย: ปิดวงเล็บให้ครบเพื่อให้ระบบ Login ทำงานได้ =====
     document.getElementById("pageSize").addEventListener("change", function(e){
-
         currentPageSize = parseInt(e.target.value);
-
         renderCustomerTable(customerDB);
+    }); // <--- ต้องมีตัวปิด }); ตรงนี้ค่ะ!
 
-
-
-    });
-
-
-
-    document.getElementById("searchBtn")
-
-        .addEventListener("click", applyCustomerFilter);
-
-
-
-    document.getElementById("addCustomerBtn")
-
-        .addEventListener("click", openModalForAdd);
-
-
-
+    document.getElementById("searchBtn").addEventListener("click", applyCustomerFilter);
+    
     renderCustomerTable(customerDB);
-
 }
-
-
-
 
 
 /* --- filter --- */
 
 function applyCustomerFilter() {
-
-
-
     const keyword = document.getElementById("searchInput").value.toLowerCase();
 
     const branch = document.getElementById("branchFilter").value;
 
-
-
     let filtered = customerDB.filter(c => {
-
-
 
         const matchKeyword =
 
@@ -1117,14 +1011,9 @@ function applyCustomerFilter() {
     });
 
 
-
     renderCustomerTable(filtered);
 
 }
-
-
-
-
 
 /* --- ลบลูกค้า --- */
 
@@ -1145,9 +1034,6 @@ function deleteCustomer(index) {
 }
 
 
-
-
-
 /* --- แก้ไขลูกค้า --- */
 
 function editCustomer(index){
@@ -1157,11 +1043,6 @@ function editCustomer(index){
 }
 
 
-
-
-
-
-
 /* --- render ตาราง (ฉบับแก้ไขรูปภาพ Responsive) --- */
 function renderCustomerTable(data) {
     const tbody = document.getElementById("customerTableBody");
@@ -1169,16 +1050,13 @@ function renderCustomerTable(data) {
     tbody.innerHTML = "";
 
     const limitedData = data.slice(0, currentPageSize);
-
     limitedData.forEach((c, index) => {
         const realIndex = customerDB.findIndex(item => item.hn === c.hn);
-
         tbody.innerHTML += `
             <tr class="border-b hover:bg-pink-50 transition">
-                <td class="p-3">${index + 1}</td>
+                <td class="p-3 text-[10px]">${index + 1}</td>
                 <td class="p-3">
-                    <img src="${c.photo || 'https://via.placeholder.com/40'}" 
-                         class="customer-photo shadow-sm"> 
+                    <img src="${c.photo || 'https://via.placeholder.com/150'}" class="customer-photo shadow-sm">
                 </td>
                 <td class="p-3">${c.createdAt || '-'}</td>
                 <td class="p-3 font-bold">${c.hn || '-'}</td>
@@ -1610,6 +1488,64 @@ document.addEventListener("DOMContentLoaded", function(){
 
 });
 
+function loadPage(id, title) {
+    document.getElementById('pageTitle').innerText = title.toUpperCase();
+    document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active-menu'));
+    
+    const activeMenu = document.getElementById(`menu-${id}`);
+    if(activeMenu) activeMenu.classList.add('active-menu');
+    
+    const target = document.getElementById('dynamicContent');
+    if(id === 1) renderDashboard(target);
+    else if(id === 2) renderCustomerList(target);
+    else {
+        target.innerHTML = `<div class="glass-card text-center py-32 font-black ace-pink uppercase italic text-2xl">เมนู ${title} <br> กำลังพัฒนา...</div>`;
+    }
+}
+/* --- กู้คืนระบบ Login และฟังก์ชันสลับหน้า (ชุดสมบูรณ์) --- */
+
+// 1. ฟังก์ชันเข้าสู่ระบบ
+window.doLogin = function() {
+    const u = document.getElementById('uIn').value;
+    const p = document.getElementById('pIn').value;
+    const user = users.find(x => x.email === u && x.pass === p);
+    
+    if (user) {
+        document.getElementById('loginPage').classList.add('hidden');
+        document.getElementById('mainDashboard').classList.remove('hidden');
+        document.getElementById('userNameLabel').innerText = `${user.name}`;
+        renderMenuByRole(user.role);
+        loadPage(1, 'Dashboard ภาพรวม');
+    } else { 
+        alert("❌ รหัสผ่านไม่ถูกต้อง (ลองใช้ 1111 / 1111 นะคะ)"); 
+    }
+};
+
+// 2. ฟังก์ชันสลับหน้า Dashboard
+function loadPage(id, title) {
+    document.getElementById('pageTitle').innerText = title.toUpperCase();
+    document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active-menu'));
+    
+    const activeMenu = document.getElementById(`menu-${id}`);
+    if(activeMenu) activeMenu.classList.add('active-menu');
+    
+    const target = document.getElementById('dynamicContent');
+    if(id === 1) renderDashboard(target);
+    else if(id === 2) renderCustomerList(target);
+    else {
+        target.innerHTML = `<div class="glass-card text-center py-32 font-black ace-pink uppercase italic text-2xl">เมนู ${title} <br> กำลังพัฒนา...</div>`;
+    }
+}
+
+// 3. ฟังก์ชันดึงข้อมูลบัตรประชาชน (Smart Card)
+window.readSmartCard = function() {
+    alert("💳 กำลังดึงข้อมูลจากบัตรประชาชน...");
+    setTimeout(() => {
+        document.getElementById("modalFirstName").value = "สมหญิง";
+        document.getElementById("modalLastName").value = "รักษาสวย";
+        alert("ดึงข้อมูลสำเร็จ!");
+    }, 800);
+};
 
     </script>
 

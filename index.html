@@ -15,10 +15,52 @@
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
     
 
     <style>
+
+/* ปรับแต่งหัวตารางให้ชิดขอบและดู Luxury */
+.course-container {
+    background: white;
+    border-radius: 0.1rem; 
+    border: none;
+    overflow: hidden; 
+    box-shadow: 0 15px 50px rgba(0,0,0,0.05);
+    margin-top: 0 !important; 
+}
+.course-header-row {
+    background-color: #D48197 !important; /* ชมพูเข้มหวาน */
+    color: white !important;
+    font-weight: 800;
+    font-size: 14px; /* ใหญ่ขึ้นนิดหน่อยให้อ่านง่าย */
+    letter-spacing: 1px;
+}
+/* แก้ไขช่องสีชมพู */
+.course-header-row th {
+    border: none !important;
+    padding-top: 12px !important;    /* 👈 ปรับลดจาก 25px เพื่อให้แถบเล็กลง */
+    padding-bottom: 12px !important; /* 👈 ปรับลดจาก 25px */
+    white-space: nowrap;            /* 👈 เพิ่มบรรทัดนี้เพื่อป้องกันตัวหนังสือตกช่อง */
+    text-align: center;             /* 👈 จัดให้อยู่กลางช่องเพื่อความสวยงาม */
+}
+/* เพิ่มส่วนนี้เข้าไปเพื่อคุมเนื้อหาในตารางไม่ให้เบียด */
+.course-container tbody td {
+    padding: 35px 10px !important;  /* 👈 ปรับระยะห่างช่องไฟในตารางให้พอดี */
+    font-size: 14px;
+	vertical-align: middle !important;
+}
+
+/* บังคับให้ตารางยอมให้เมนูลอยออกมาได้ (ไม่โดนตัดขอบ) */
+#dynamicContent .glass-card {
+    overflow: visible !important;
+}
+
+/* เพิ่มระยะห่างให้ชื่อเมนูดูแพง */
+[id^="action-menu-"] button {
+    transition: 0.3s;
+    white-space: nowrap; /* ป้องกันตัวหนังสือตัดบรรทัด */
+}
+
 /* --- ปรับปรุงรูปโปรไฟล์และตาราง (Responsive) --- */
 .customer-photo {
     width: 45px !important;
@@ -32,6 +74,44 @@
 .glass-card {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+}
+/* สไตล์ปุ่มแก้ไขแบบกลุ่มสีชมพู */
+.action-group {
+    display: inline-flex;
+    align-items: center;
+    background-color: #D48197;
+    border-radius: 9999px;
+    padding: 2px;
+}
+
+/* ป้องกันเมนูหลุดขอบจอในมือถือ */
+[id^="action-menu-"] {
+    animation: fadeInScale 0.2s ease-out;
+}
+
+@keyframes fadeInScale {
+    from { opacity: 0; transform: scale(0.95) translateY(-10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.course-table th {
+    font-weight: 600;
+    color: #D48197;
+    background-color: #FFF9FA;
+    border-bottom: 1px solid #FEE2E7;
+}
+
+.course-table td {
+    font-weight: 300; /* ปรับตัวอักษรให้ผอมลง */
+}
+/* 🚫 เอาลูกศรขึ้น-ลงออกจากช่อง Input Number ทุกจุด */
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+    -webkit-appearance: none; 
+    margin: 0; 
+}
+input[type=number] {
+    -moz-appearance: textfield; /* สำหรับ Firefox */
 }
 
         /* --- [1. GLOBAL STYLES] --- */
@@ -102,14 +182,25 @@
 
 }
 
+     
 
+     /* ดีไซน์แท็บแบบเส้นใต้ (Minimal Luxury) */
+.profile-tab {
+    padding: 12px 25px;
+    font-weight: 400;
+    color: #9CA3AF;
+    background: transparent !important;
+    border-bottom: 2px solid transparent;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
 
-        
-
-        .profile-tab { padding: 12px 20px; font-weight: 800; cursor: pointer; border-bottom: 3px solid transparent; color: #9CA3AF; transition: 0.3s; font-style: italic; }
-
-        .profile-tab.active { color: #D48197; border-bottom-color: #D48197; }
-
+.profile-tab.active {
+    color: #D48197 !important;
+    border-bottom: 2px solid #D48197;
+    background: transparent !important; /* บังคับให้พื้นหลังใส ไม่ทับตัวหนังสือ */
+    font-weight: 600;
+}
         
 
         .btn-period { transition: 0.3s; border-radius: 10px; padding: 0.5rem 1.2rem; font-weight: 700; font-size: 0.8rem; border: 1px solid #F1F1F1; }
@@ -131,8 +222,68 @@
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.2; } 100% { opacity: 1; } }
 
         .control-group { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+/* ปรับตัวอักษรให้ดูผอมเพรียวทั้งหน้าจอ */
+body { font-family: 'Sarabun', sans-serif; font-weight: 300; }
 
+/* ปรับปรุงกล่อง "ระบบการส่งสัญญาณและคอร์ส" ให้ชัดและสวย */
+.course-container {
+    background: white;
+    border-radius: 2.5rem;
+    border: 1px solid #F3F4F6;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.03); /* เพิ่มเงาให้นุ่มนวล */
+    overflow: hidden;
+}
 
+/* ปรับหัวตารางให้ตัวใหญ่ขึ้น สีขาว และพื้นหลังชมพูเข้มหวาน */
+.course-header-row {
+    background-color: #D48197 !important; /* ชมพูเข้มหวานประจำคลินิก */
+    color: white !important; /* ตัวหนังสือสีขาว */
+    font-weight: 800; /* ทำเป็นตัวหนา */
+    text-transform: uppercase;
+    font-size: 13px; /* ปรับขนาดให้ใหญ่ขึ้นตามสั่ง */
+    letter-spacing: 1px;
+}
+
+/* แถม: ปรับให้ขอบหัวตารางมนรับกับกล่อง */
+.course-container thead tr th:first-child { border-top-left-radius: 2rem; }
+.course-container thead tr th:last-child { border-top-right-radius: 2rem; }
+
+/* บีบระยะห่างระหว่างปุ่มเมนู (Tabs) กับตารางให้ชิดกัน */
+.flex.flex-wrap.gap-2.mb-8 { 
+    margin-bottom: 0.25rem !important; /* ลดจาก mb-8 ที่เคยกว้างๆ ให้เหลือแค่นิดเดียวค่ะ */
+}
+
+/* ปรับให้ขอบตารางชิดขึ้นไปอีก */
+.course-container {
+    margin-top: 0 !important;
+position: relative;
+    top: -1px;
+}
+
+/* --- 💎 สไตล์สำหรับเมนูซ่อน/โชว์ (Luxury ACE Style) --- */
+.sidebar-item span { font-style: normal !important; } /* ตัวหนังสือตั้งตรง */
+.submenu {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.5s ease-in-out, opacity 0.3s ease;
+    padding-left: 1.5rem;
+    opacity: 0;
+}
+
+/* คลาสที่จะถูกเพิ่มเข้าไปเมื่อมีการ "คลิก" */
+.submenu.open {
+    max-height: 250px; /* ขยายความสูงออกมา */
+    opacity: 1;
+    margin-top: 5px;
+}
+
+/* หมุนลูกศรเมื่อเปิดเมนู */
+.arrow-icon {
+    transition: transform 0.3s;
+}
+.arrow-icon.rotate {
+    transform: rotate(180deg);
+}
     </style>
 
 </head>
@@ -238,7 +389,6 @@ class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
 
 
     </div>
-
 
 
     <div class="flex justify-end gap-4 mt-6">
@@ -415,17 +565,204 @@ class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
 
         </main>
 
-    </div>
-
-
-
-           
-
-           
+    </div>       
 
 
 
     <script>
+
+//ช่องหัวบิล ในประวัติลูกค้า///
+const productMaster = [
+    { name: "กลิตเตอร์ 2 ซีซี", price: 3500, category: "course" },
+    { name: "เลเซอร์หน้าใส", price: 1500, category: "course" },
+    { name: "ยาแก้ลดอักเสบ", price: 150, category: "medicine" },
+    { name: "ครีมบำรุงผิว ACE", price: 450, category: "medicine" }
+];
+
+window.openBillingTab = function(customerName) {
+    currentBillItems = [];
+    const body = document.getElementById('profileTabBody');
+    document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
+
+    body.innerHTML = `
+        <div class="animate-in fade-in duration-500 p-8 bg-white min-h-full font-bold">
+            
+            <div class="flex justify-between items-start mb-8">
+                <div>
+                    <h4 class="text-3xl text-[#FF4B91] font-bold">🧾 ออกใบเสร็จ / เปิดบิลใหม่</h4>
+                    <p class="text-slate-400 text-xs mt-1 uppercase tracking-widest font-bold">ชื่อลูกค้า: ${customerName}</p>
+                </div>
+                <button onclick="switchProfileTab(1)" 
+                    class="bg-pink-50 text-[#FF4B91] px-4 py-2 rounded-xl text-xs hover:bg-[#FF4B91] hover:text-white transition-all shadow-sm border border-pink-100 font-bold">
+                    ✕ ยกเลิกการเปิดบิล
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 text-left">
+                <div class="space-y-2">
+                    <label class="text-xs text-[#FF4B91] font-bold ml-1">📅 วันที่เปิดบิล</label>
+                    <input type="date" id="billDate" value="${new Date().toISOString().split('T')[0]}" 
+                        class="w-full bg-[#FFF0F5] border border-pink-100 rounded-2xl p-4 text-sm text-slate-700 outline-none font-bold focus:border-[#FF4B91]">
+                </div>
+                <div class="space-y-2 text-left">
+    <label class="text-xs text-[#FF4B91] font-bold ml-1">💳 ช่องทางการชำระเงิน</label>
+    <select id="billPaymentMethod" 
+        onchange="window.selectedPaymentMethod = this.value"
+        class="w-full bg-[#FFF0F5] border border-pink-100 rounded-2xl p-4 text-sm text-slate-700 outline-none font-bold focus:border-[#FF4B91] appearance-none cursor-pointer">
+        <option value="">-- กรุณาเลือกช่องทาง --</option>
+        <option value="เงินสด">เงินสด</option>
+        <option value="โอน (QR)">โอน (QR)</option>
+        <option value="โอนบริษัท">โอนบริษัท</option>
+        <option value="รูดบัตรเครดิต">รูดบัตรเครดิต</option>
+        <option value="Shopee">Shopee</option>
+        <option value="Gowabi">Gowabi</option>
+    </select>
+</div>
+</div>
+
+            <div class="bg-[#FFF0F5] rounded-[2.5rem] p-8 mb-8 relative border-2 border-dashed border-[#FF4B91]/20 text-left">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-end">
+                    <div class="lg:col-span-5 space-y-2 relative">
+                        <label class="text-xs text-[#FF4B91] ml-1 font-bold">🔍 ค้นหาคอร์ส หรือ ยา</label>
+                        <input type="text" id="itemName" oninput="searchProduct(this.value)" placeholder="พิมพ์ชื่อรายการ..." 
+                            class="w-full bg-white border border-pink-100 rounded-2xl p-4 text-sm text-slate-700 outline-none shadow-sm font-bold focus:border-[#FF4B91]">
+                        <div id="searchResult" class="absolute z-50 w-full bg-white shadow-xl rounded-2xl mt-1 hidden border border-pink-50 max-h-48 overflow-y-auto font-bold"></div>
+                    </div>
+
+                    <div class="lg:col-span-3 space-y-2">
+                        <label class="text-xs text-[#FF4B91] ml-1 font-bold text-center block">ราคา/หน่วย (฿)</label>
+                        <input type="number" id="billPrice" placeholder="0.00" 
+                            class="w-full bg-white border border-pink-100 rounded-2xl p-4 text-sm text-[#FF4B91] font-black outline-none shadow-sm text-center">
+                    </div>
+
+                    <div class="lg:col-span-2 space-y-2">
+                        <label class="text-xs text-[#FF4B91] ml-1 font-bold text-center block">จำนวน</label>
+                        <input type="number" id="billQty" value="1" 
+                            class="w-full bg-white border border-pink-100 rounded-2xl p-4 text-sm text-[#FF4B91] font-black outline-none shadow-sm text-center">
+                    </div>
+
+                    <div class="lg:col-span-2">
+                        <button onclick="addItemToBill()" class="w-full bg-[#FF4B91] text-white py-4 rounded-2xl text-[11px] hover:bg-[#E63980] transition-all shadow-lg font-bold uppercase">
+                            + เพิ่มลงบิล
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-8 overflow-hidden rounded-[1.5rem] border border-pink-50 shadow-sm">
+                <table class="w-full text-left font-bold">
+                    <thead class="bg-[#FFF0F5] text-[11px] text-[#FF4B91] uppercase tracking-wider">
+                        <tr>
+                            <th class="p-4">หมวด</th>
+                            <th class="p-4">ชื่อรายการบริการ / สินค้า</th>
+                            <th class="p-4 text-center">จำนวน</th>
+                            <th class="p-4 text-right">ราคา</th>
+                            <th class="p-4 text-right">รวม (฿)</th>
+                            <th class="p-4 text-center">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="billItemsList" class="text-[13px] text-slate-600 font-bold">
+                        <tr><td colspan="6" class="p-8 text-center text-slate-300 font-bold">ยังไม่มีรายการที่เลือก...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="flex flex-col md:flex-row justify-between items-end border-t border-pink-50 pt-8 gap-6">
+                <div class="text-right md:text-left">
+                    <p class="text-xs text-slate-400 font-bold uppercase">ยอดสุทธิที่ต้องชำระ</p>
+                    <h5 id="grandTotalDisplay" class="text-6xl text-[#FF4B91] font-bold tracking-tighter">฿0.00</h5>
+                </div>
+                <button onclick="confirmFinalPayment()" 
+                    class="w-full md:w-auto bg-[#FF4B91] text-white px-16 py-5 rounded-[2rem] text-sm shadow-xl hover:bg-[#E63980] transition-all font-bold uppercase tracking-widest">
+                    ยืนยันการชำระเงิน
+                </button>
+            </div>
+        </div>
+    `;
+};
+
+// ฟังก์ชันค้นหาสินค้าอัตโนมัติ (Auto-complete)
+window.searchProduct = function(val) {
+    const resDiv = document.getElementById('searchResult');
+    if (!val) { resDiv.classList.add('hidden'); return; }
+    
+    const matches = productMaster.filter(p => p.name.includes(val));
+    if (matches.length > 0) {
+        resDiv.innerHTML = matches.map(p => `
+            <div onclick="selectProduct('${p.name}', ${p.price}, '${p.category}')" 
+                class="p-4 hover:bg-pink-100 cursor-pointer border-b border-pink-50 flex justify-between items-center bg-white shadow-sm transition-all">
+                <span class="text-sm font-bold text-slate-900">${p.name}</span>
+                <span class="text-[10px] bg-slate-200 text-slate-600 px-3 py-1 rounded-full font-bold uppercase">
+                    ${p.category === 'medicine' ? 'ยา/สินค้า' : 'คอร์ส'}
+                </span>
+            </div>
+        `).join('');
+        resDiv.classList.remove('hidden');
+    } else {
+        resDiv.classList.add('hidden');
+    }
+};
+
+window.selectProduct = function(name, price, cat) {
+    document.getElementById('itemName').value = name;
+    document.getElementById('billPrice').value = price;
+    document.getElementById('searchResult').classList.add('hidden');
+    document.getElementById('itemName').dataset.category = cat;
+};
+
+// ฟังก์ชันเพิ่มรายการ (ใช้ข้อมูลจากหมวดหมู่ด้วย)
+window.addItemToBill = function() {
+    const name = document.getElementById('itemName').value;
+    const price = parseFloat(document.getElementById('billPrice').value) || 0;
+    const qty = parseFloat(document.getElementById('billQty').value) || 0;
+    const cat = document.getElementById('itemName').dataset.category || 'general';
+
+    if (!name || price <= 0) return;
+
+    currentBillItems.push({ name, price, qty, cat, total: price * qty });
+    renderBillItems();
+    
+    document.getElementById('itemName').value = '';
+    document.getElementById('billPrice').value = '';
+    document.getElementById('billQty').value = '1';
+};
+// ฟังก์ชันวาดตารางรายการใหม่ (ถ้าไม่มีส่วนนี้รายการจะไม่ขึ้นในตารางค่ะ)
+function renderBillItems() {
+    const listBody = document.getElementById('billItemsList');
+    let grandTotal = 0;
+
+    if (currentBillItems.length === 0) {
+        listBody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-slate-300 italic">ยังไม่มีรายการที่เลือก...</td></tr>`;
+    } else {
+        listBody.innerHTML = currentBillItems.map((item, index) => {
+            grandTotal += item.total;
+            return `
+                <tr class="border-b border-slate-50 hover:bg-pink-50/20 transition-all font-bold">
+                    <td class="p-4"><span class="bg-slate-100 px-2 py-1 rounded-lg text-[10px] uppercase">${item.cat === 'medicine' ? 'ยา/สินค้า' : 'คอร์ส'}</span></td>
+                    <td class="p-4 text-slate-700">${item.name}</td>
+                    <td class="p-4 text-center text-slate-600">${item.qty}</td>
+                    <td class="p-4 text-right text-slate-600">฿${item.price.toLocaleString()}</td>
+                    <td class="p-4 text-right ace-pink">฿${item.total.toLocaleString()}</td>
+                    <td class="p-4 text-center">
+                        <button onclick="removeItemFromBill(${index})" class="text-red-300 hover:text-red-500 transition-all">✕</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // อัปเดตยอดสุทธิด้านล่าง
+    const formatter = new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB' });
+    document.getElementById('grandTotalDisplay').innerText = formatter.format(grandTotal);
+}
+
+// ฟังก์ชันลบรายการออก
+window.removeItemFromBill = function(index) {
+    currentBillItems.splice(index, 1);
+    renderBillItems();
+};
+
+
 
         /* --- [4.1 DATA: ข้อมูลระบบ] --- */
 
@@ -441,26 +778,22 @@ class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
 
 
 
-        const menuConfig = [
+       const menuConfig = [
+    { id: 1, n: 'Dashboard ภาพรวม', i: '📊', roles: ['admin', 'accounting'] },
+    { id: 2, n: 'จัดการลูกค้า/ประวัติ', i: '👥', roles: ['admin', 'staff'] },
+    
+    // --- 💎 หมวดหมู่ระบบบัญชีที่คุณต้องการ (ต้องเก็บไว้ค่ะ) ---
+    { id: 'header', n: 'ระบบบัญชี / ใบเสร็จ', i: '🧾', roles: ['admin', 'staff'] }, 
+    { id: 3, n: 'ตีบิลรายรับ (INCOMING)', i:'',roles: ['admin', 'staff'] },
+    { id: 9, n: 'ตีบิลรายจ่าย (OUTGOING)', i:'',roles: ['admin', 'staff'] },
+    // ----------------------------------------------------
 
-            { id: 1, n: 'Dashboard ภาพรวม', i: '📊', roles: ['admin', 'accounting'] },
-
-            { id: 2, n: 'จัดการลูกค้า/ประวัติ', i: '👥', roles: ['admin', 'staff'] },
-
-            { id: 3, n: 'บันทึกยอดขาย/เปิดบิล', i: '💸', roles: ['admin', 'staff'] },
-
-            { id: 4, n: 'ระบบนัดหมาย', i: '📅', roles: ['admin', 'staff'] },
-
-            { id: 5, n: 'ใช้คอร์สบริการ', i: '✨', roles: ['admin', 'staff'] },
-
-            { id: 6, n: 'เมนูรายงาน/กราฟ', i: '📈', roles: ['admin', 'accounting'] },
-
-            { id: 7, n: 'จัดการพนักงาน', i: '🩺', roles: ['admin'] },
-
-            { id: 8, n: 'ตั้งค่าระบบ', i: '⚙️', roles: ['admin'] }
-
-        ];
-
+    { id: 4, n: 'ระบบนัดหมาย', i: '📅', roles: ['admin', 'staff'] },
+    { id: 5, n: 'ใช้คอร์สบริการ', i: '✨', roles: ['admin', 'staff'] },
+    { id: 6, n: 'เมนูรายงาน/กราฟ', i: '📈', roles: ['admin', 'accounting'] },
+    { id: 7, n: 'จัดการพนักงาน', i: '🩺', roles: ['admin'] },
+    { id: 8, n: 'ตั้งค่าระบบ', i: '⚙️', roles: ['admin'] }
+];
 
 
         let customerDB = [
@@ -725,42 +1058,57 @@ function generateHN() {
 
 
 
-        function renderMenuByRole(role) {
-
-            const container = document.getElementById('menuContainer');
-
-            container.innerHTML = menuConfig.filter(m => m.roles.includes(role)).map(m => `
-
+       function renderMenuByRole(role) {
+    const container = document.getElementById('menuContainer');
+    // ดึงเฉพาะเมนูที่อนุญาตตามสิทธิ (role)
+    const allowedMenu = menuConfig.filter(m => m.roles.includes(role));
+    
+    let menuHtml = '';
+    
+    allowedMenu.forEach(m => {
+        // ถ้าเป็นหัวข้อหลัก "ระบบบัญชี / ใบเสร็จ" ให้สร้างกลุ่มเมนูแบบคลิก
+        if (m.id === 'header') {
+            menuHtml += `
+                <div class="menu-group">
+                    <div class="sidebar-item bg-slate-50/80 cursor-pointer flex justify-between items-center" onclick="toggleBillingMenu()">
+                        <div class="flex items-center">
+                            <span class="mr-3 text-xl">${m.i}</span><span class="text-sm font-bold uppercase">${m.n}</span>
+                        </div>
+                        <span id="billingArrow" class="arrow-icon text-[10px]">▼</span>
+                    </div>
+                    <div id="billingSubmenu" class="submenu">`;
+        } 
+        // ถ้าเป็นเมนูย่อย (เลข 3 และ 9) ให้เอามาใส่ในกลุ่ม
+        else if (m.id === 3 || m.id === 9) {
+            menuHtml += `
+                <div class="sidebar-item mb-1 hover:translate-x-2 transition-transform" id="menu-${m.id}" onclick="loadPage(${m.id}, '${m.n}')">
+                    <span class="mr-3 text-lg">${m.i}</span><span class="text-[11px] font-bold uppercase">${m.n}</span>
+                </div>`;
+            // ถ้าเป็นเมนู 9 (อันสุดท้ายของกลุ่ม) ให้ปิด Tag div
+            if (m.id === 9) menuHtml += `</div></div>`;
+        } 
+        // เมนูทั่วไปอื่นๆ (1, 2, 4, 5, 6, 7, 8) ให้แสดงผลปกติ
+        else {
+            menuHtml += `
                 <div class="sidebar-item" id="menu-${m.id}" onclick="loadPage(${m.id}, '${m.n}')">
-
-                    <span class="mr-3 text-xl">${m.i}</span><span class="text-sm font-black italic uppercase">${m.n}</span>
-
-                </div>`).join('');
-
+                    <span class="mr-3 text-xl">${m.i}</span><span class="text-sm font-bold uppercase">${m.n}</span>
+                </div>`;
         }
+    });
+    
+    container.innerHTML = menuHtml;
+}
 
-
-
-        function loadPage(id, title) {
-
-            document.getElementById('pageTitle').innerText = title.toUpperCase();
-
-            document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active-menu'));
-
-            if(document.getElementById(`menu-${id}`)) document.getElementById(`menu-${id}`).classList.add('active-menu');
-
-            
-
-            const target = document.getElementById('dynamicContent');
-
-            if(id === 1) renderDashboard(target);
-
-            else if(id === 2) renderCustomerList(target);
-
-            else target.innerHTML = `<div class="glass-card text-center py-32 font-black ace-pink uppercase italic tracking-widest text-2xl font-black italic">เมนู ${title} <br> กำลังพัฒนา...</div>`;
-
-        }
-
+/* --- 🖱️ ฟังก์ชันคลิกเพื่อเปิด-ปิด (Accordion) --- */
+function toggleBillingMenu() {
+    const submenu = document.getElementById('billingSubmenu');
+    const arrow = document.getElementById('billingArrow');
+    
+    // สลับคลาส open เพื่อยืดเมนูลงมา
+    submenu.classList.toggle('open');
+    // หมุนลูกศร
+    arrow.classList.toggle('rotate');
+}
 
 
         /* --- [4.3 DASHBOARD: หน้าภาพรวม] --- */
@@ -855,70 +1203,48 @@ function renderDashboard(target) {
 
 
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8 font-black italic uppercase">
-
-            <div class="glass-card shadow-lg border-t-4 border-[#C5A059]">
-
-                <h3 class="text-lg font-black ace-pink mb-6 border-b-2 border-dashed pb-2 italic text-center">💰 รายรับแยกตามบัญชี (Incoming)</h3>
-
-                <div class="space-y-3 text-sm font-black italic">
-
-                    <div class="flex justify-between border-b pb-1"><span>💵 เงินสด</span><span>5,000.-</span></div>
-
-                    <div class="flex justify-between border-b pb-1"><span>📱 โอน (QR)</span><span>15,200.-</span></div>
-
-                    <div class="flex justify-between border-b pb-1"><span>🏢 โอนบริษัท</span><span>10,000.-</span></div>
-
-                    <div class="flex justify-between border-b pb-1"><span>💳 รูดบัตร</span><span>8,000.-</span></div>
-
-                    <div class="flex justify-between border-b pb-1"><span>🛍️ Shopee</span><span>2,500.-</span></div>
-
-                    <div class="flex justify-between border-b pb-1"><span>🎟️ Gowabi</span><span>4,500.-</span></div>
-
-                    <div class="flex justify-between pt-3 text-xl ace-pink border-t-4 border-double font-black">
-
-                        <span>📊 รวมรายรับ</span><span>45,200.-</span>
-
-                    </div>
-
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8 font-bold uppercase">
+        
+        <div class="glass-card shadow-lg border-t-4 border-[#C5A059] bg-white p-8">
+            <h3 class="text-lg font-bold ace-pink mb-6 border-b-2 border-dashed pb-2 text-center">💰 รายรับแยกตามบัญชี (INCOMING)</h3>
+            <div class="space-y-3 text-sm font-bold text-slate-600">
+                <div class="flex justify-between border-b border-slate-50 pb-1"><span>💵 เงินสด</span><span class="text-slate-800">5,000.-</span></div>
+                <div class="flex justify-between border-b border-slate-50 pb-1"><span>📱 โอน (QR)</span><span class="text-slate-800">15,200.-</span></div>
+                <div class="flex justify-between border-b border-slate-50 pb-1"><span>🏢 โอนบริษัท</span><span class="text-slate-800">10,000.-</span></div>
+                <div class="flex justify-between border-b border-slate-50 pb-1"><span>💳 รูดบัตรเครดิต</span><span class="text-slate-800">8,000.-</span></div>
+                <div class="flex justify-between border-b border-slate-50 pb-1 text-slate-800"><span>🛍️ SHOPEE</span><span class="font-bold">2,500.-</span></div>
+<div class="flex justify-between border-b border-slate-50 pb-1 text-slate-800"><span>🎟️ GOWABI</span><span class="font-bold">4,500.-</span></div>
+                <div class="flex justify-between pt-3 text-xl ace-pink border-t-4 border-double font-bold mt-2">
+                    <span>📊 รวมรายรับ</span><span>45,200.-</span>
                 </div>
+            </div>
+        </div>
 
+        <div class="glass-card shadow-lg border-t-4 border-red-400 bg-slate-50/30 p-8">
+            <h3 class="text-lg font-bold text-red-500 mb-6 border-b-2 border-dashed pb-2 text-center">💸 รายการหักรายจ่าย (OUTGOING)</h3>
+            <div class="space-y-4 mb-10 min-h-[120px]">
+                <div class="p-4 bg-white rounded-2xl border-2 border-dashed border-red-100 flex justify-between items-center shadow-sm">
+                    <div>
+                        <p class="text-xs font-bold text-slate-600">📉 ค่าน้ำยาทำความสะอาด</p>
+                        <p class="text-[9px] text-gray-400 font-bold">หักจาก: 🏢 โอนบริษัท</p>
+                    </div>
+                    <span class="text-red-500 font-bold">- 500.-</span>
+                </div>
             </div>
 
-
-
-            <div class="glass-card shadow-lg border-t-4 border-red-400 bg-slate-50/30">
-
-                <h3 class="text-lg font-black text-red-500 mb-6 border-b-2 border-dashed pb-2 italic text-center">💸 รายการหักรายจ่าย (Outgoing)</h3>
-
-                <div class="space-y-4 mb-10 min-h-[120px]">
-
-                    <div class="p-3 bg-white rounded-2xl border-2 border-dashed border-red-100 flex justify-between items-center">
-
-                        <div><p class="text-xs italic">📉 ค่าน้ำยาทำความสะอาด</p><p class="text-[9px] text-gray-400 font-bold">หักจาก: 🏢 โอนบริษัท</p></div>
-
-                        <span class="text-red-500 font-black">- 500.-</span>
-
-                    </div>
-
-                </div>
-
-                <div class="bg-[#C97A8C] p-6 rounded-[2.5rem] text-white shadow-2xl">
-
-                    <div class="flex justify-between items-center">
-
-                        <div><p class="text-[10px] uppercase opacity-80 italic">คงเหลือสุทธิ (Net)</p><h2 class="text-4xl font-black italic tracking-tighter">฿43,700.-</h2></div>
-
-                        <div class="text-right italic"><p class="text-[9px] opacity-70">ปิดยอด: ADMIN</p><p class="text-[10px]">ACE CLINIC</p></div>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-        </div>`;
-
+          
+	<div class="gold-bg p-5 rounded-[2rem] text-white shadow-xl mt-6 border border-[#E4C580]/50">
+    <div class="flex justify-between items-center px-2">
+        <div>
+            <p class="text-[10px] uppercase opacity-90 font-bold tracking-wider">คงเหลือสุทธิ (NET)</p>
+            <h2 class="text-3xl font-bold tracking-tighter">฿43,700.-</h2>
+        </div>
+        <div class="text-right border-l border-white/20 pl-4">
+            <p class="text-[9px] opacity-80 font-bold">ปิดยอดโดย: ADMIN</p>
+            <p class="text-[10px] font-bold uppercase tracking-widest">ACE CLINIC</p>
+        </div>
+    </div>
+</div>`;
 }
 
 
@@ -1043,7 +1369,7 @@ function editCustomer(index){
 }
 
 
-/* --- render ตาราง (ฉบับแก้ไขรูปภาพ Responsive) --- */
+/* --- render ตาราง (ฉบับปุ่มแก้ไข + สามเหลี่ยม Dropdown) --- */
 function renderCustomerTable(data) {
     const tbody = document.getElementById("customerTableBody");
     if (!tbody) return;
@@ -1064,9 +1390,33 @@ function renderCustomerTable(data) {
                 <td class="p-3">${c.nickname || '-'}</td>
                 <td class="p-3">${c.phone || '-'}</td>
                 <td class="p-3">${c.branch || '-'}</td>
-                <td class="p-3 text-center space-x-2">
-                    <button onclick="openModalForEdit(${realIndex})" class="text-blue-500 font-bold">แก้ไข</button>
-                    <button onclick="deleteCustomer(${realIndex})" class="text-red-500 font-bold">ลบ</button>
+                <td class="p-3 text-center min-w-[160px] relative">
+                    <div class="inline-flex items-center bg-[#D48197] text-white rounded-full p-1 shadow-md relative">
+                        <button onclick="openModalForEdit(${realIndex})" 
+                                class="px-4 py-1 text-[11px] font-bold border-r border-white/30 hover:bg-white/10 rounded-l-full">
+                            แก้ไข
+                        </button>
+                        <button onclick="toggleActionMenu(event, ${index})" 
+                                class="px-2 py-1 text-[11px] hover:bg-white/10 rounded-r-full transition-all">
+                            ▼
+                        </button>
+                        
+                        <div id="action-menu-${index}" 
+                             class="hidden absolute right-0 top-10 w-48 bg-white border border-pink-100 rounded-2xl shadow-2xl z-[999] overflow-hidden text-left font-black italic">
+                            <button onclick="viewCustomerDetail(${realIndex})" class="w-full p-4 text-[11px] text-gray-600 hover:bg-pink-50 border-b flex items-center gap-2">
+                                👁️ ดูข้อมูลลูกค้า
+                            </button>
+                            <button onclick="printOPD(${realIndex})" class="w-full p-4 text-[11px] text-gray-600 hover:bg-pink-50 border-b flex items-center gap-2">
+                                📄 พิมพ์ OPD Card
+                            </button>
+                            <button class="w-full p-4 text-[11px] bg-gray-50 text-gray-400 cursor-not-allowed border-b flex items-center gap-2" disabled>
+                                🚫 ปริ้นใบเสร็จ (ปิดใช้งาน)
+                            </button>
+                            <button onclick="deleteCustomer(${realIndex})" class="w-full p-4 text-[11px] text-red-500 hover:bg-red-50 flex items-center gap-2 font-bold">
+                                🗑️ ลบข้อมูลคนไข้
+                            </button>
+                        </div>
+                    </div>
                 </td>
             </tr>`;
     });
@@ -1488,6 +1838,7 @@ document.addEventListener("DOMContentLoaded", function(){
 
 });
 
+/* --- ฟังก์ชันสลับหน้า: เชื่อมต่อเมนูที่ 3 รายรับ-รายจ่าย ตีบิล --- */
 function loadPage(id, title) {
     document.getElementById('pageTitle').innerText = title.toUpperCase();
     document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active-menu'));
@@ -1496,12 +1847,24 @@ function loadPage(id, title) {
     if(activeMenu) activeMenu.classList.add('active-menu');
     
     const target = document.getElementById('dynamicContent');
-    if(id === 1) renderDashboard(target);
-    else if(id === 2) renderCustomerList(target);
+    
+    if(id === 1) {
+        renderDashboard(target); // หน้าสรุปภาพรวม
+    } 
+    else if(id === 2) {
+        renderCustomerList(target); // หน้าจัดการลูกค้า
+    } 
+    else if(id === 3) {
+        renderSalesPage(); // 💸 หน้าบันทึกรายรับ (สีชมพูทอง)
+    } 
+    else if(id === 9) {
+        renderExpensePage(); // 💸 หน้าบันทึกรายจ่าย (สีแดง Luxury)
+    }
     else {
-        target.innerHTML = `<div class="glass-card text-center py-32 font-black ace-pink uppercase italic text-2xl">เมนู ${title} <br> กำลังพัฒนา...</div>`;
+        target.innerHTML = `<div class="glass-card text-center py-32 font-bold ace-pink uppercase text-2xl">เมนู ${title} <br> กำลังพัฒนา...</div>`;
     }
 }
+
 /* --- กู้คืนระบบ Login และฟังก์ชันสลับหน้า (ชุดสมบูรณ์) --- */
 
 // 1. ฟังก์ชันเข้าสู่ระบบ
@@ -1521,34 +1884,456 @@ window.doLogin = function() {
     }
 };
 
-// 2. ฟังก์ชันสลับหน้า Dashboard
-function loadPage(id, title) {
-    document.getElementById('pageTitle').innerText = title.toUpperCase();
-    document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active-menu'));
-    
-    const activeMenu = document.getElementById(`menu-${id}`);
-    if(activeMenu) activeMenu.classList.add('active-menu');
-    
+
+/* =======================================================
+   💎 ระบบจัดการเมนู และ หน้าแสดงผล (View Detail / OPD)
+   ======================================================= */
+
+window.toggleActionMenu = function(event, index) {
+    event.stopPropagation();
+    const menuId = `action-menu-${index}`;
+    document.querySelectorAll("[id^='action-menu-']").forEach(m => {
+        if(m.id !== menuId) m.classList.add('hidden');
+    });
+    const currentMenu = document.getElementById(menuId);
+    if(currentMenu) currentMenu.classList.toggle('hidden');
+};
+
+/* --- [หน้าโปรไฟล์ลูกค้าฉบับ LUXURY ตามรูปภาพ] --- */
+window.viewCustomerDetail = function(index) {
+    const c = customerDB[index];
     const target = document.getElementById('dynamicContent');
-    if(id === 1) renderDashboard(target);
-    else if(id === 2) renderCustomerList(target);
-    else {
-        target.innerHTML = `<div class="glass-card text-center py-32 font-black ace-pink uppercase italic text-2xl">เมนู ${title} <br> กำลังพัฒนา...</div>`;
+    
+    target.innerHTML = `
+        <div class="bg-white rounded-[3rem] shadow-2xl p-10 animate-in zoom-in duration-300 border border-pink-50">
+            <div class="flex justify-between items-center mb-10">
+                <div class="flex items-center gap-4">
+                    <h2 class="text-4xl font-black ace-pink italic">👤 โปรไฟล์ลูกค้า</h2>
+                    <span class="bg-purple-100 text-purple-600 px-4 py-1 rounded-full text-[10px] font-black italic">OPD / แผนกผู้ป่วยนอก</span>
+                    <button 
+    onclick="openBillingTab('${c.fullname}')" 
+    class="bg-slate-600 text-white px-5 py-2 rounded-xl text-[11px] font-black shadow-lg hover:bg-slate-700 transition-all">ต่อใบเสร็จ / ตีบิล</button>
+                </div>
+                <button onclick="loadPage(2, 'จัดการลูกค้า/ประวัติ')" class="text-3xl text-gray-300 hover:text-red-400">✕</button>
+            </div>
+
+            <div class="flex flex-col lg:flex-row gap-10">
+                <div class="w-full lg:w-80 space-y-6">
+                    <div class="bg-white border border-pink-50 rounded-[2.5rem] p-8 shadow-sm text-center">
+                        <div class="w-40 h-52 bg-pink-50 border-2 border-dashed border-pink-200 rounded-3xl mx-auto mb-6 flex items-center justify-center">
+                            <span class="text-gray-300 font-black italic text-xs">ID PHOTO</span>
+                        </div>
+                        <h3 class="text-2xl font-black text-gray-700 italic">${c.fullname}</h3>
+                        <p class="ace-pink font-black italic text-sm">@${c.nickname || '-'}</p>
+                        <div class="mt-8 space-y-3 text-left text-[11px] font-black italic">
+                            <div class="flex justify-between border-b pb-2"><span>วันเกิด:</span><span class="text-gray-700">19/08/1999</span></div>
+                            <div class="flex justify-between border-b pb-2"><span>เบอร์โทร:</span><span class="ace-pink">${c.phone}</span></div>
+                            <div class="flex justify-between border-b pb-2"><span>กลุ่มสินค้า:</span><span class="text-green-500">${c.branch}</span></div>
+                            <div class="flex justify-between text-red-500"><span>ค้างชำระ:</span><span>฿0.00</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex-1">
+                    <div class="flex flex-wrap gap-2 mb-8">
+                        <button onclick="switchProfileTab(1, ${index})" id="tab-1" class="profile-tab active px-6 py-2 rounded-2xl font-black italic text-xs transition-all">คอร์สคงเหลือ</button>
+                        <button onclick="switchProfileTab(2, ${index})" id="tab-2" class="profile-tab bg-slate-50 text-slate-400 px-6 py-2 rounded-2xl font-black italic text-xs transition-all">ตารางนัดหมาย</button>
+                        <button onclick="switchProfileTab(3, ${index})" id="tab-3" class="profile-tab bg-slate-50 text-slate-400 px-6 py-2 rounded-2xl font-black italic text-xs transition-all">ใบเสร็จ/การเงิน</button>
+                        <button onclick="switchProfileTab(4, ${index})" id="tab-4" class="profile-tab bg-slate-50 text-slate-400 px-6 py-2 rounded-2xl font-black italic text-xs transition-all">เอกสารแนบ</button>
+                    </div>
+
+                    
+		<div id="profileTabBody" class="bg-white border border-pink-50 rounded-[3rem] p-0 		min-h-[500px] shadow-sm relative overflow-hidden">
+   		 </div>
+                </div>
+            </div>
+        </div>`;
+    
+    // เรียกแสดงแท็บที่ 1 ทันทีเมื่อโหลดหน้า
+    switchProfileTab(1, index);
+};
+
+/* --- ฟังก์ชันสลับแท็บฉบับ Luxury (วางทับเพื่อลบปุ่มแก้ไขคอร์สและปรับสไตล์) --- */
+window.switchProfileTab = function(tabId, customerIndex) {
+    const body = document.getElementById('profileTabBody');
+    
+    // 1. จัดการปุ่มแท็บ (ให้สอดคล้องกับ CSS ใหม่ที่ไม่มีพื้นหลังสีชมพูทับ)
+    document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(`tab-${tabId}`).classList.add('active');
+
+    // 2. แสดงเนื้อหาตามแท็บที่เลือก (ลบปุ่มแก้ไขคอร์สออกเรียบร้อยแล้วค่ะ)
+if (tabId === 1) {
+    body.innerHTML = `
+        <div class="animate-in fade-in duration-500">
+            <div class="course-container overflow-hidden border-none shadow-2xl">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="course-header-row">
+                            <th style="width: 12%;">รหัสบิล</th>
+                            <th style="width: 18%;">วันที่/เวลา</th>
+                            <th style="width: 40%;">ชื่อรายการคอร์ส</th>
+                            <th style="width: 10%;">ใช้</th>
+                            <th style="width: 10%;">เหลือ</th>
+                            <th style="width: 110px; text-align: center;">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white">
+                        <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all">
+                            <td class="p-6 text-center font-bold text-slate-400">0167</td>
+                            <td class="p-6 text-slate-400 text-[11px]">17/01/2026<br>15:48</td>
+                            <td class="p-6 course-name-cell font-medium text-slate-700 italic">กลิตเตอร์ 2 ซีซี</td>
+                            <td class="p-6 text-center text-slate-300">0</td>
+                            <td class="p-6 text-center text-green-500 text-3xl font-black">2</td>
+                            <td class="p-6 text-center">
+                                <button 
+                                    onclick="loadPage(4, 'ใช้คอร์สบริการ')" 
+                                    class="bg-[#60A5FA] text-white px-3 py-2 rounded-full text-[10px] font-black shadow-lg hover:scale-95 transition-all whitespace-nowrap">
+                                    ใช้บริการ
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>`;
+}
+                   
+    else if (tabId === 2) { // แท็บตารางนัดหมาย
+        body.innerHTML = `<div class="p-20 text-center animate-in fade-in"><p class="text-slate-400 italic">📅 ขณะนี้ยังไม่มีรายการนัดหมายในระบบ</p></div>`;
     }
+    else if (tabId === 3) { // แท็บใบเสร็จ
+        body.innerHTML = `<div class="p-20 text-center animate-in fade-in"><p class="text-slate-400 italic">🧾 ไม่พบประวัติการออกใบเสร็จชำระเงิน</p></div>`;
+    }
+    else if (tabId === 4) { // แท็บเอกสารแนบ
+        body.innerHTML = `<div class="p-20 text-center animate-in fade-in"><p class="text-slate-400 italic">📁 ยังไม่มีการอัปโหลดเอกสารแนบ</p></div>`;
+    }
+};
+
+window.printOPD = function(index) {
+    const c = customerDB[index];
+    const target = document.getElementById('dynamicContent');
+    target.innerHTML = `
+        <div class="bg-white p-12 border-4 border-double border-gray-200 max-w-3xl mx-auto shadow-2xl animate-in fade-in font-black italic">
+            <h2 class="text-3xl ace-pink border-b-2 pb-4 mb-6">ACE CLINIC - OPD CARD</h2>
+            <p class="text-lg">ชื่อคนไข้: ${c.fullname} | HN: ${c.hn}</p>
+            <div class="mt-8 h-80 border-2 border-dashed border-gray-100 p-6 rounded-3xl">
+                <p class="text-gray-300">Doctor's Record...</p>
+            </div>
+            <div class="mt-10 flex justify-between no-print">
+                <button onclick="window.print()" class="gold-bg text-white px-8 py-3 rounded-2xl">🖨️ พิมพ์เอกสาร</button>
+                <button onclick="loadPage(2, 'จัดการลูกค้า/ประวัติ')" class="text-gray-400">ย้อนกลับ</button>
+            </div>
+        </div>`;
+};
+
+document.addEventListener('click', () => {
+    document.querySelectorAll("[id^='action-menu-']").forEach(m => m.classList.add('hidden'));
+});
+
+/* =======================================================
+   หน้า 3 💸 ระบบบันทึกยอดขาย / เปิดบิล (Luxury Clean Edition)
+   ======================================================= */
+window.renderSalesPage = function() {
+    const target = document.getElementById('dynamicContent');
+    currentBillItems = []; 
+
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 p-8 bg-white min-h-screen font-bold">
+            <div class="flex justify-between items-center mb-8">
+                <div>
+                    <h4 class="text-3xl text-[#FF4B91] font-bold">🧾 บันทึกยอดขาย / เปิดบิล</h4>
+                    <p class="text-slate-400 text-[11px] mt-2 font-bold uppercase">ลงบันทึกรายรับและออกใบเสร็จรับเงิน (INCOMING)</p>
+                </div>
+                <div class="flex gap-4">
+                    <div class="w-44 text-left">
+                        <label class="text-[10px] text-slate-400 uppercase font-bold">วันที่ตีบิล</label>
+                        <input type="date" id="billDate" 
+                            class="w-full bg-slate-50 border border-pink-100 rounded-xl p-3 text-sm outline-none font-bold text-slate-600">
+                    </div>
+                    <button onclick="loadPage(1, 'Dashboard ภาพรวม')" 
+                        class="bg-pink-50 text-[#FF4B91] px-6 py-2 rounded-2xl text-xs hover:bg-[#FF4B91] hover:text-white transition-all font-bold">
+                        ✕ ยกเลิก
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-[#FFF0F5] rounded-[2.5rem] p-8 mb-8 border-2 border-dashed border-[#FF4B91]/30">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-end">
+                    
+                   <div class="lg:col-span-3 space-y-2 text-left relative" style="z-index: 9999;">
+    <label class="text-xs text-[#FF4B91] font-bold ml-1">ชื่อลูกค้า / HN</label>
+    <input type="text" id="customerSearchInput" 
+        oninput="searchCustomerForBill(this.value)" 
+        placeholder="🔍 ค้นหาลูกค้า..." 
+        class="w-full bg-white border border-pink-200 rounded-2xl p-4 text-sm text-slate-700 outline-none shadow-sm font-bold focus:border-[#FF4B91]">
+    
+    <div id="customerSearchResult" 
+        class="absolute left-0 w-full bg-white shadow-2xl rounded-xl mt-1 hidden border border-pink-100 overflow-hidden" 
+        style="z-index: 10000;">
+    </div>
+</div>
+
+                    <div class="lg:col-span-4 space-y-2 text-left relative z-[1000]">
+                        <label class="text-xs text-[#FF4B91] font-bold ml-1">ชื่อคอร์ส หรือ ยา</label>
+                        <input type="text" id="itemName" oninput="searchProduct(this.value)" placeholder="พิมพ์ชื่อรายการ..." 
+                            class="w-full bg-white border border-pink-200 rounded-2xl p-4 text-sm text-slate-700 outline-none shadow-sm font-bold focus:border-[#FF4B91]">
+                        <div id="searchResult" class="absolute left-0 w-full bg-white shadow-xl rounded-2xl mt-1 hidden max-h-48 overflow-y-auto border border-pink-100"></div>
+                    </div>
+
+                    <div class="lg:col-span-2 space-y-2 text-left">
+                        <label class="text-xs text-[#FF4B91] font-bold ml-1">ราคา (฿)</label>
+                        <input type="number" id="billPrice" placeholder="0.00" 
+                            class="w-full bg-white border border-pink-200 rounded-2xl p-4 text-sm text-[#FF4B91] outline-none shadow-sm font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none">
+                    </div>
+
+                    <div class="lg:col-span-1 space-y-2 text-left">
+                        <label class="text-xs text-[#FF4B91] font-bold ml-1 text-center block">จำนวน</label>
+                        <input type="number" id="billQty" value="1" min="1"
+                            class="w-full bg-white border border-pink-200 rounded-2xl p-4 text-sm text-[#FF4B91] outline-none shadow-sm text-center font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none">
+                    </div>
+
+                    <div class="lg:col-span-2">
+                        <button onclick="addItemToBill()" class="w-full bg-[#FF4B91] text-white py-4 rounded-2xl text-[11px] hover:bg-[#E63980] transition-all shadow-lg font-bold uppercase tracking-wider">
+                            + เพิ่มรายการ
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-8 overflow-hidden rounded-[1.5rem] border border-pink-50 shadow-sm">
+                <table class="w-full text-left font-bold">
+                    <thead class="bg-[#FFF0F5] text-[11px] text-[#FF4B91] uppercase tracking-wider">
+                        <tr>
+                            <th class="p-4">หมวดหมู่</th>
+                            <th class="p-4">รายการบริการ / สินค้า</th>
+                            <th class="p-4 text-center">จำนวน</th>
+                            <th class="p-4 text-right">ราคา</th>
+                            <th class="p-4 text-right">รวม (฿)</th>
+                            <th class="p-4 text-center">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="billItemsList" class="text-[13px] text-slate-600 font-bold">
+                        <tr><td colspan="6" class="p-8 text-center text-slate-300">ยังไม่มีรายการที่เลือก...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-pink-50 pt-8">
+                <div class="space-y-4 text-left">
+                    <p class="text-xs text-slate-400 font-bold uppercase ml-1">เลือกช่องทางการชำระเงิน</p>
+                    <div class="grid grid-cols-3 gap-3" id="paymentMethods">
+                        ${['เงินสด', 'โอน (QR)', 'โอนบริษัท', 'รูดบัตรเครดิต', 'Shopee', 'Gowabi'].map(type => `
+                            <button onclick="selectPaymentType(this, '${type}')" 
+                                class="bg-white border border-slate-100 py-3 rounded-xl text-[11px] text-slate-600 hover:border-[#FF4B91] transition-all shadow-sm font-bold">
+                                ${type}
+                            </button>
+                        `).join('')}
+                    </div>
+                </div>
+                
+                <div class="text-right flex flex-col justify-end items-end">
+                    <p class="text-xs text-slate-400 font-bold">ยอดสุทธิที่ต้องชำระ (GRAND TOTAL)</p>
+                    <h5 id="grandTotalDisplay" class="text-6xl text-[#FF4B91] font-bold">฿0.00</h5>
+                    <button onclick="confirmFinalPayment()" 
+                        class="mt-6 bg-[#D4AF37] text-white px-16 py-4 rounded-2xl text-sm shadow-xl hover:bg-[#C5A028] transition-all font-bold">
+                        ยืนยันและออกใบเสร็จ
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+   
+    // ตั้งค่าวันที่ปัจจุบัน
+    document.getElementById('billDate').valueAsDate = new Date();
+};
+
+/* --- 🔍 ฟังก์ชันค้นหาลูกค้า: ปรับปรุงให้ดึงข้อมูลได้แม่นยำ --- */
+window.searchCustomerForBill = function(val) {
+    const resDiv = document.getElementById('customerSearchResult');
+    if (!val) { resDiv.classList.add('hidden'); return; }
+    
+    // 🎯 ตรวจสอบว่าระบบใช้ตัวแปรไหน (customerDB หรือ customerData)
+    const db = (typeof customerDB !== 'undefined') ? customerDB : (typeof customerData !== 'undefined' ? customerData : []);
+    
+    // ค้นหาโดยเช็คทั้งชื่อ (fullname/name) และ HN
+    const matches = db.filter(c => 
+        (c.fullname && c.fullname.includes(val)) || 
+        (c.name && c.name.includes(val)) || 
+        (c.hn && c.hn.includes(val))
+    );
+    
+    if (matches.length > 0) {
+        resDiv.innerHTML = matches.map(c => {
+            const displayName = c.fullname || c.name; // ดึงชื่อที่ถูกต้องมาโชว์
+            return `
+                <div onclick="window.selectCustomerForBill('${displayName}', '${c.hn}')" 
+                    class="p-4 hover:bg-pink-50 cursor-pointer border-b border-pink-50 flex justify-between items-center font-bold bg-white text-left">
+                    <span class="text-sm text-slate-700 pointer-events-none">${displayName}</span>
+                    <span class="text-[10px] bg-slate-100 px-2 py-1 rounded-full uppercase pointer-events-none text-slate-500">${c.hn}</span>
+                </div>
+            `;
+        }).join('');
+        resDiv.classList.remove('hidden');
+    } else {
+        resDiv.classList.add('hidden');
+    }
+};
+
+window.selectCustomerForBill = function(name, hn) {
+    const input = document.getElementById('customerSearchInput');
+    const display = document.getElementById('selectedCustomerDisplay');
+    const resDiv = document.getElementById('customerSearchResult');
+
+    if (input) {
+        input.value = name; // นำชื่อใส่ในช่องพิมพ์
+    }
+    
+    if (display) {
+        display.innerText = `✅ เลือกลูกค้า: ${name} (${hn})`;
+        display.style.color = "#FF4B91"; // สีชมพูสดใสตามธีมใหม่
+        display.classList.remove('italic');
+    }
+    
+    resDiv.classList.add('hidden'); // ปิดกล่องรายการ
+};
+
+/* --- ฟังก์ชันแสดงรายการในตารางบิล (ตัวหนังสือตั้งตรง 100%) --- */
+function renderBillItems() {
+    const listBody = document.getElementById('billItemsList');
+    let grandTotal = 0;
+
+    if (currentBillItems.length === 0) {
+        listBody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-slate-300 font-bold">ยังไม่มีรายการที่เลือก...</td></tr>`;
+    } else {
+        listBody.innerHTML = currentBillItems.map((item, index) => {
+            grandTotal += item.total;
+            return `
+                <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all font-bold">
+                    <td class="p-4"><span class="bg-slate-100 px-2 py-1 rounded-lg text-[10px] uppercase">${item.cat === 'medicine' ? 'ยา/สินค้า' : 'คอร์ส'}</span></td>
+                    <td class="p-4 text-slate-700">${item.name}</td>
+                    <td class="p-4 text-center text-slate-600">${item.qty}</td>
+                    <td class="p-4 text-right text-slate-600">฿${item.price.toLocaleString()}</td>
+                    <td class="p-4 text-right ace-pink">฿${item.total.toLocaleString()}</td>
+                    <td class="p-4 text-center">
+                        <button onclick="removeItemFromBill(${index})" class="text-red-300 hover:text-red-500 transition-all">✕</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+    document.getElementById('grandTotalDisplay').innerText = '฿' + grandTotal.toLocaleString();
 }
 
-// 3. ฟังก์ชันดึงข้อมูลบัตรประชาชน (Smart Card)
-window.readSmartCard = function() {
-    alert("💳 กำลังดึงข้อมูลจากบัตรประชาชน...");
-    setTimeout(() => {
-        document.getElementById("modalFirstName").value = "สมหญิง";
-        document.getElementById("modalLastName").value = "รักษาสวย";
-        alert("ดึงข้อมูลสำเร็จ!");
-    }, 800);
+    /* --- ส่วนที่ 1: ตัวแปรเก็บวิธีจ่ายเงิน --- */
+let selectedPaymentMethod = ""; 
+
+window.selectPaymentType = function(btn, type) {
+    document.querySelectorAll('#paymentMethods button').forEach(b => {
+        b.classList.remove('border-pink-500', 'text-pink-500', 'bg-pink-50');
+    });
+    btn.classList.add('border-pink-500', 'text-pink-500', 'bg-pink-50');
+    selectedPaymentMethod = type; // เก็บวิธีจ่ายเงินที่คุณเลือก
+};
+
+/* --- ส่วนที่ 2: ฟังก์ชันยืนยัน เพื่อสรุปยอดและเตรียมปลิ้นใบเสร็จ --- */
+window.confirmFinalPayment = function() {
+    // 1. ดึงค่าช่องทางการชำระเงินจาก Select ID: billPaymentMethod
+    const paymentSelect = document.getElementById('billPaymentMethod');
+    const paymentValue = paymentSelect ? paymentSelect.value : "";
+    
+    // 2. ดึงค่าวันที่จากช่อง Date ID: billDate
+    const billDate = document.getElementById('billDate') ? document.getElementById('billDate').value : "ไม่ได้ระบุวันที่";
+
+    if (currentBillItems.length === 0) {
+        alert('❌ คุณอรอุมาคะ ยังไม่มีรายการในบิลเลยค่ะ');
+        return;
+    }
+
+    // 🎯 แก้ไขจุดนี้: เช็คค่าจากตัวเลือกที่เรากดจริงบนหน้าจอ
+    if (!paymentValue) {
+        alert('⚠️ กรุณาเลือกช่องทางการชำระเงิน (เช่น เงินสด หรือ โอน) ก่อนค่ะ');
+        return;
+    }
+
+    const total = document.getElementById('grandTotalDisplay').innerText;
+    
+    // ดึงชื่อลูกค้า (กรณีเปิดบิลในหน้าประวัติ จะดึงจาก activeCustomer)
+    const customer = (typeof activeCustomer !== 'undefined' && activeCustomer.name) 
+                     ? activeCustomer.name 
+                     : (document.getElementById('customerSearchInput') ? document.getElementById('customerSearchInput').value : "ไม่ได้ระบุชื่อ");
+
+    // 🧾 สรุปยอดโชว์ให้เห็นชัดเจน (ปรับให้ตัวหนังสือตั้งตรงสวยงาม)
+    alert(`✅ บันทึกยอดขายสำเร็จ!
+---------------------------
+วันที่: ${billDate}
+ลูกค้า: ${customer}
+ยอดรวมสุทธิ: ${total}
+ชำระโดย: ${paymentValue}
+---------------------------
+ระบบกำลังส่งข้อมูลไปที่หน้า "พิมพ์ใบเสร็จ"...`);
+
+    // กลับไปหน้า Dashboard
+    loadPage(1, 'Dashboard ภาพรวม'); 
+};
+
+/* --- ✅ ฟังก์ชันสร้างหน้าบันทึกรายจ่าย (สีแดง Luxury) --- */
+window.renderExpensePage = function() {
+    const target = document.getElementById('dynamicContent');
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 p-8 bg-white min-h-screen font-bold">
+            <div class="flex justify-between items-center mb-8">
+                <div>
+                    <h4 class="text-3xl text-red-500 font-bold">💸 บันทึกรายจ่าย (OUTGOING)</h4>
+                    <p class="text-slate-400 text-[11px] mt-2 font-bold uppercase">ลงบันทึกค่าใช้จ่ายรายวัน (หักลบจากยอดขาย)</p>
+                </div>
+                <div class="flex gap-4">
+                    <div class="w-44 text-left">
+                        <label class="text-[10px] text-slate-400 uppercase font-bold">วันที่บันทึก</label>
+                        <input type="date" id="expenseDate" class="w-full bg-slate-50 border border-red-100 rounded-xl p-3 text-sm outline-none font-bold">
+                    </div>
+                    <button onclick="loadPage(1, 'Dashboard ภาพรวม')" class="bg-red-50 text-red-500 px-6 py-2 rounded-2xl text-xs hover:bg-red-500 hover:text-white transition-all font-bold">✕ ย้อนกลับ</button>
+                </div>
+            </div>
+
+            <div class="bg-red-50/40 rounded-[2.5rem] p-8 mb-8 border-2 border-dashed border-red-200">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-end">
+                    <div class="lg:col-span-5 space-y-2 text-left">
+                        <label class="text-sm text-red-500 font-bold ml-1">ชื่อรายการรายจ่าย</label>
+                        <input type="text" id="expenseName" placeholder="เช่น ค่าน้ำยาทำความสะอาด, ค่าอุปกรณ์..." 
+                            class="w-full bg-white border border-red-100 rounded-2xl p-4 text-sm text-slate-700 outline-none shadow-sm font-bold">
+                    </div>
+                    <div class="lg:col-span-3 space-y-2 text-left">
+    <label class="text-sm text-red-500 font-bold ml-1">หักจากบัญชี</label>
+    <select id="expenseAccount" class="w-full bg-white border border-red-100 rounded-2xl p-4 text-sm text-slate-600 outline-none font-bold cursor-pointer">
+        <option value="เงินสด">💵 หักจาก: เงินสด</option>
+        <option value="โอน (QR)">📱 หักจาก: โอน (QR)</option>
+        <option value="โอนบริษัท">🏢 หักจาก: โอนบริษัท</option>
+        <option value="รูดบัตรเครดิต">💳 หักจาก: รูดบัตรเครดิต</option>
+        <option value="Shopee">🛍️ หักจาก: Shopee</option>
+        <option value="Gowabi">🎟️ หักจาก: Gowabi</option>
+    </select>
+</div>
+                    <div class="lg:col-span-2 space-y-2 text-left">
+                        <label class="text-sm text-red-500 font-bold ml-1">จำนวนเงิน (฿)</label>
+                        <input type="number" id="expenseAmount" placeholder="0.00" 
+                            class="w-full bg-white border border-red-100 rounded-2xl p-4 text-sm text-red-600 outline-none shadow-sm font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none">
+                    </div>
+                    <div class="lg:col-span-2">
+                        <button onclick="alert('✅ บันทึกรายจ่ายสำเร็จ!')" class="w-full bg-red-500 text-white py-4 rounded-2xl text-[11px] hover:bg-red-600 transition-all shadow-lg font-bold uppercase tracking-wider">
+                            บันทึกรายจ่าย
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-20 text-center text-slate-300 font-bold border-2 border-dashed border-slate-50 rounded-[2.5rem]">
+                กำลังรอรายการรายจ่ายจากคุณอรอุมา...
+            </div>
+        </div>
+    `;
+    document.getElementById('expenseDate').valueAsDate = new Date(); // ตั้งค่าวันที่วันนี้อัตโนมัติ
 };
 
     </script>
-
 </body>
-
 </html>

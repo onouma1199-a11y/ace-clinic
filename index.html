@@ -18,6 +18,52 @@
     
 
     <style>
+/* 🖨️ ตั้งค่าสำหรับการพิมพ์ OPD Card ครึ่งหน้า A4 */
+@media print {
+    /* ซ่อนทุกอย่างบนหน้าจอที่ไม่เกี่ยวข้อง */
+    body * {
+        visibility: hidden;
+    }
+    
+    /* ให้แสดงเฉพาะพื้นที่ OPD Card เท่านั้น */
+    #opd-card-printable, #opd-card-printable * {
+        visibility: visible;
+    }
+    
+    /* ปรับตำแหน่งและขนาดให้เป็นครึ่งหน้า A4 */
+    #opd-card-printable {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        max-height: 14.8cm; /* 🎯 ความสูงประมาณครึ่งหนึ่งของ A4 แนวตั้ง */
+        margin: 0;
+        padding: 15px;
+        border: 1px solid #eee !important; /* ใส่ขอบบางๆ เวลาปลิ้น */
+        box-shadow: none !important;
+        overflow: hidden;
+    }
+
+    /* ซ่อนปุ่มกดและแถบเมนูข้างทั้งหมด */
+    .no-print {
+        display: none !important;
+    }
+
+    /* ตั้งค่าขนาดหน้ากระดาษ */
+    @page {
+        size: A4 portrait; /* ใช้กระดาษ A4 แนวตั้ง */
+        margin: 0.5cm;     /* ระยะขอบกระดาษ */
+    }
+}
+/* ปรับแต่งรายการคอร์สในตารางให้เป็นสีดำ เรียบหรู ไม่เอาพื้นหลัง */
+.course-tag {
+    background: transparent !important; /* เอาพื้นหลังสีชมพูออก */
+    color: #1a1a1a !important; /* เปลี่ยนตัวหนังสือเป็นสีดำ */
+    padding: 2px 0;
+    font-weight: 500;
+    display: block; /* ให้เรียงลงมาเป็นบรรทัด */
+    font-size: 13px;
+}
 
 /* ปรับแต่งหัวตารางให้ชิดขอบและดู Luxury */
 .course-container {
@@ -415,36 +461,36 @@ class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
 
 
 
-
-
-    <div id="loginPage" class="min-h-screen flex items-center justify-center p-4 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
-
-        <div class="bg-white/90 backdrop-blur-md p-12 rounded-[3rem] shadow-2xl w-full max-w-md border border-[#E4C580]/30 text-center animate-in fade-in zoom-in duration-500">
-
-            <img src="ace-logo.jpg" alt="ACE CLINIC" class="w-32 mx-auto mb-3">
-
-            <h1 class="text-2xl font-black ace-pink tracking-tight uppercase italic font-bold">ACE Clinic - เอซ ลินิก</h1>
-
-            <p class="text-[#C5A059] font-bold tracking-[0.2em] text-[10px] mb-8 uppercase">Management System</p>
-
+   <div id="loginPage" class="min-h-screen flex items-center justify-center p-4 bg-[#FDF7F8] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
+        <div class="bg-white p-10 rounded-[3rem] shadow-2xl w-full max-w-md border border-[#E4C580]/30 text-center animate-in fade-in zoom-in duration-500">
+            <img src="ace-logo.jpg" alt="ACE CLINIC" class="w-32 mx-auto mb-4">
+            <h1 class="text-2xl font-bold tracking-tighter uppercase text-[#D48197] mb-1">ACE CLINIC - เอซ คลินิก</h1>
+            <p class="text-[#C5A059] font-bold tracking-[0.2em] text-[10px] mb-10 uppercase">Management System</p>
             
+            <div class="space-y-6 text-left">
+                <div class="space-y-1">
+                    <label class="text-[11px] font-bold text-[#D48197] ml-2 uppercase tracking-wider">อีเมล / ชื่อผู้ใช้</label>
+                    <input type="text" id="uIn" placeholder="ระบุอีเมลผู้ใช้งาน" 
+                        class="w-full px-5 py-4 rounded-2xl border border-pink-100 outline-none focus:ring-2 focus:ring-[#D48197] font-normal text-slate-600 transition-all">
+                </div>
 
-            <div class="space-y-4 text-left font-bold">
+                <div class="space-y-1">
+                    <label class="text-[11px] font-bold text-[#D48197] ml-2 uppercase tracking-wider">รหัสผ่าน</label>
+                    <input type="password" id="pIn" placeholder="ระบุรหัสผ่าน" 
+                        class="w-full px-5 py-4 rounded-2xl border border-pink-100 outline-none focus:ring-2 focus:ring-[#D48197] font-normal text-slate-600 transition-all">
+                </div>
 
-                <input type="text" id="uIn" placeholder="ชื่อผู้ใช้ / Email" class="w-full px-5 py-4 rounded-2xl border border-pink-100 outline-none focus:ring-2 focus:ring-[#D48197]">
+                <button onclick="doLogin()" 
+                    class="w-full gold-bg text-white font-bold py-4 rounded-2xl shadow-lg mt-4 hover:brightness-110 active:scale-[0.98] transition-all text-lg uppercase tracking-widest">
+                    เข้าสู่ระบบ
+                </button>
 
-                <input type="password" id="pIn" placeholder="รหัสผ่าน" class="w-full px-5 py-4 rounded-2xl border border-pink-100 outline-none focus:ring-2 focus:ring-[#D48197]">
-
-                <button onclick="doLogin()" class="w-full gold-bg text-white font-black py-4 rounded-2xl shadow-lg mt-6 hover:brightness-110 transform active:scale-95 transition-all text-lg uppercase italic font-black">เข้าสู่ระบบ</button>
-
-                <p class="text-center text-xs text-gray-400 mt-4 italic font-bold">พนักงานใหม่? <span class="ace-pink cursor-pointer font-black hover:underline" onclick="alert('กรุณาติดต่อแอดมินเพื่อลงทะเบียน')">ลงทะเบียนที่นี่</span></p>
-
+                <p class="text-center text-[10px] text-gray-400 mt-6 font-normal">พนักงานใหม่? 
+                    <span class="text-[#D48197] cursor-pointer font-bold hover:underline" onclick="alert('กรุณาติดต่อแอดมินเพื่อลงทะเบียน')">ลงทะเบียนที่นี่</span>
+                </p>
             </div>
-
         </div>
-
     </div>
-
 
 
    <div id="mainDashboard" class="hidden min-h-screen flex flex-col md:flex-row">
@@ -743,9 +789,10 @@ function renderBillItems() {
                     <td class="p-4 text-center text-slate-600">${item.qty}</td>
                     <td class="p-4 text-right text-slate-600">฿${item.price.toLocaleString()}</td>
                     <td class="p-4 text-right ace-pink">฿${item.total.toLocaleString()}</td>
-                    <td class="p-4 text-center">
-                        <button onclick="removeItemFromBill(${index})" class="text-red-300 hover:text-red-500 transition-all">✕</button>
-                    </td>
+                   <td class="p-4 text-center">
+    <button onclick='viewReceiptDetail(${JSON.stringify(b)})' 
+            class="bg-slate-100 p-2 rounded-lg hover:bg-pink-100 transition-all">👁️</button>
+</td>
                 </tr>
             `;
         }).join('');
@@ -760,6 +807,14 @@ function renderBillItems() {
 window.removeItemFromBill = function(index) {
     currentBillItems.splice(index, 1);
     renderBillItems();
+};
+
+window.viewReceiptDetail = function(billData) {
+    if (typeof showReceiptPreview === 'function') {
+        showReceiptPreview(billData);
+    } else {
+        alert("รายละเอียดบิล: " + billData.customer + "\nยอดรวม: " + billData.total);
+    }
 };
 
 
@@ -796,46 +851,29 @@ window.removeItemFromBill = function(index) {
 ];
 
 
-        let customerDB = [
-
+        // 🎯 ดึงข้อมูลลูกค้าจากหน่วยความจำ ถ้าไม่มีให้ใช้ข้อมูลเริ่มต้น
+let customerDB = JSON.parse(localStorage.getItem('customerDB')) || [
     {
-
         hn: "HN0001",
-
         fullname: "อัครพล พลับพลา",
-
         nickname: "ต้น",
-
         phone: "0971375498",
-
         branch: "สาขาบางพลี",
-
         photo: "",
-
+        courses: [], // เพิ่มรองรับคอร์ส
         createdAt: "11/06/2024"
-
     },
-
     {
-
         hn: "HN0002",
-
         fullname: "ธนโชติ หลักเพชร",
-
         nickname: "โชติ",
-
         phone: "0952826296",
-
         branch: "สาขาชลบุรี",
-
         photo: "",
-
+        courses: [], // เพิ่มรองรับคอร์ส
         createdAt: "11/06/2024"
-
     }
-
 ];
-
 
 
  let editingIndex = null;
@@ -1284,7 +1322,7 @@ function renderCustomerList(target) {
 
     <div class="glass-card shadow-2xl">
         <table class="w-full text-left text-xs">
-            <thead class="bg-pink-50 border-b text-[#D48197]">
+            <thead class="bg-pink-50 border-b text-[#D48197]"><th class="p-1 text-center font-normal w-[40px]">ยืนยัน</th>
                 <tr>
                     <th class="p-3">ลำดับ</th><th class="p-3">รูป</th><th class="p-3">สร้างเมื่อ</th>
                     <th class="p-3">HN</th><th class="p-3">ชื่อ-นามสกุล</th><th class="p-3">ชื่อเล่น</th>
@@ -1857,6 +1895,12 @@ function loadPage(id, title) {
     else if(id === 3) {
         renderSalesPage(); // 💸 หน้าบันทึกรายรับ (สีชมพูทอง)
     } 
+	else if(id === 4) {
+    renderAppointmentPage(); // เรียกหน้าตารางนัดหมาย
+	}
+	else if(id === 6) {
+    renderAccountingReport(); // 📈 เรียกหน้าสรุปรายงานตัวใหม่ค่ะ
+	}
     else if(id === 9) {
         renderExpensePage(); // 💸 หน้าบันทึกรายจ่าย (สีแดง Luxury)
     }
@@ -1899,20 +1943,22 @@ window.toggleActionMenu = function(event, index) {
     if(currentMenu) currentMenu.classList.toggle('hidden');
 };
 
-/* --- [หน้าโปรไฟล์ลูกค้าฉบับ LUXURY ตามรูปภาพ] --- */
+/* --- [หน้าโปรไฟล์ลูกค้าฉบับ LUXURY - แก้ไขให้ดึงข้อมูลบิลได้จริง] --- */
 window.viewCustomerDetail = function(index) {
     const c = customerDB[index];
+    window.activeCustomer = c; 
+    
     const target = document.getElementById('dynamicContent');
+    let billHistoryDB = JSON.parse(localStorage.getItem('billHistoryDB')) || [];
     
     target.innerHTML = `
         <div class="bg-white rounded-[3rem] shadow-2xl p-10 animate-in zoom-in duration-300 border border-pink-50">
             <div class="flex justify-between items-center mb-10">
                 <div class="flex items-center gap-4">
                     <h2 class="text-4xl font-black ace-pink italic">👤 โปรไฟล์ลูกค้า</h2>
-                    <span class="bg-purple-100 text-purple-600 px-4 py-1 rounded-full text-[10px] font-black italic">OPD / แผนกผู้ป่วยนอก</span>
-                    <button 
-    onclick="openBillingTab('${c.fullname}')" 
-    class="bg-slate-600 text-white px-5 py-2 rounded-xl text-[11px] font-black shadow-lg hover:bg-slate-700 transition-all">ต่อใบเสร็จ / ตีบิล</button>
+                    <span class="bg-purple-100 text-purple-600 px-4 py-1 rounded-full text-[10px] font-black italic uppercase">HN: ${c.hn}</span>
+                    <button onclick="openBillingTab('${c.fullname}')" 
+                        class="bg-slate-600 text-white px-5 py-2 rounded-xl text-[11px] font-black shadow-lg hover:bg-slate-700 transition-all uppercase">ต่อใบเสร็จ / ตีบิล</button>
                 </div>
                 <button onclick="loadPage(2, 'จัดการลูกค้า/ประวัติ')" class="text-3xl text-gray-300 hover:text-red-400">✕</button>
             </div>
@@ -1920,7 +1966,7 @@ window.viewCustomerDetail = function(index) {
             <div class="flex flex-col lg:flex-row gap-10">
                 <div class="w-full lg:w-80 space-y-6">
                     <div class="bg-white border border-pink-50 rounded-[2.5rem] p-8 shadow-sm text-center">
-                        <div class="w-40 h-52 bg-pink-50 border-2 border-dashed border-pink-200 rounded-3xl mx-auto mb-6 flex items-center justify-center">
+                        <div class="w-40 h-52 bg-pink-50 border-2 border-dashed border-pink-200 rounded-3xl mx-auto mb-6 flex items-center justify-center font-bold">
                             <span class="text-gray-300 font-black italic text-xs">ID PHOTO</span>
                         </div>
                         <h3 class="text-2xl font-black text-gray-700 italic">${c.fullname}</h3>
@@ -1928,7 +1974,7 @@ window.viewCustomerDetail = function(index) {
                         <div class="mt-8 space-y-3 text-left text-[11px] font-black italic">
                             <div class="flex justify-between border-b pb-2"><span>วันเกิด:</span><span class="text-gray-700">19/08/1999</span></div>
                             <div class="flex justify-between border-b pb-2"><span>เบอร์โทร:</span><span class="ace-pink">${c.phone}</span></div>
-                            <div class="flex justify-between border-b pb-2"><span>กลุ่มสินค้า:</span><span class="text-green-500">${c.branch}</span></div>
+                            <div class="flex justify-between border-b pb-2"><span>สาขา:</span><span class="text-green-500">${c.branch}</span></div>
                             <div class="flex justify-between text-red-500"><span>ค้างชำระ:</span><span>฿0.00</span></div>
                         </div>
                     </div>
@@ -1941,91 +1987,285 @@ window.viewCustomerDetail = function(index) {
                         <button onclick="switchProfileTab(3, ${index})" id="tab-3" class="profile-tab bg-slate-50 text-slate-400 px-6 py-2 rounded-2xl font-black italic text-xs transition-all">ใบเสร็จ/การเงิน</button>
                         <button onclick="switchProfileTab(4, ${index})" id="tab-4" class="profile-tab bg-slate-50 text-slate-400 px-6 py-2 rounded-2xl font-black italic text-xs transition-all">เอกสารแนบ</button>
                     </div>
-
-                    
-		<div id="profileTabBody" class="bg-white border border-pink-50 rounded-[3rem] p-0 		min-h-[500px] shadow-sm relative overflow-hidden">
-   		 </div>
+                    <div id="profileTabBody" class="bg-white border border-pink-50 rounded-[3rem] p-0 min-h-[500px] shadow-sm relative overflow-hidden"></div>
                 </div>
             </div>
         </div>`;
-    
-    // เรียกแสดงแท็บที่ 1 ทันทีเมื่อโหลดหน้า
     switchProfileTab(1, index);
 };
 
-/* --- ฟังก์ชันสลับแท็บฉบับ Luxury (วางทับเพื่อลบปุ่มแก้ไขคอร์สและปรับสไตล์) --- */
+/* --- ฟังก์ชันสลับแท็บฉบับสมบูรณ์ (รวม Tab 1, 3, 4 ไว้ในที่เดียว) --- */
 window.switchProfileTab = function(tabId, customerIndex) {
     const body = document.getElementById('profileTabBody');
+    const customer = customerDB[customerIndex]; 
     
-    // 1. จัดการปุ่มแท็บ (ให้สอดคล้องกับ CSS ใหม่ที่ไม่มีพื้นหลังสีชมพูทับ)
     document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
-    document.getElementById(`tab-${tabId}`).classList.add('active');
+    document.getElementById(`tab-${tabId}`)?.classList.add('active');
 
-    // 2. แสดงเนื้อหาตามแท็บที่เลือก (ลบปุ่มแก้ไขคอร์สออกเรียบร้อยแล้วค่ะ)
-if (tabId === 1) {
-    body.innerHTML = `
-        <div class="animate-in fade-in duration-500">
-            <div class="course-container overflow-hidden border-none shadow-2xl">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr class="course-header-row">
-                            <th style="width: 12%;">รหัสบิล</th>
-                            <th style="width: 18%;">วันที่/เวลา</th>
-                            <th style="width: 40%;">ชื่อรายการคอร์ส</th>
-                            <th style="width: 10%;">ใช้</th>
-                            <th style="width: 10%;">เหลือ</th>
-                            <th style="width: 110px; text-align: center;">จัดการ</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white">
-                        <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all">
-                            <td class="p-6 text-center font-bold text-slate-400">0167</td>
-                            <td class="p-6 text-slate-400 text-[11px]">17/01/2026<br>15:48</td>
-                            <td class="p-6 course-name-cell font-medium text-slate-700 italic">กลิตเตอร์ 2 ซีซี</td>
-                            <td class="p-6 text-center text-slate-300">0</td>
-                            <td class="p-6 text-center text-green-500 text-3xl font-black">2</td>
-                            <td class="p-6 text-center">
-                                <button 
-                                    onclick="loadPage(4, 'ใช้คอร์สบริการ')" 
-                                    class="bg-[#60A5FA] text-white px-3 py-2 rounded-full text-[10px] font-black shadow-lg hover:scale-95 transition-all whitespace-nowrap">
-                                    ใช้บริการ
-                                </button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>`;
-}
-                   
-    else if (tabId === 2) { // แท็บตารางนัดหมาย
-        body.innerHTML = `<div class="p-20 text-center animate-in fade-in"><p class="text-slate-400 italic">📅 ขณะนี้ยังไม่มีรายการนัดหมายในระบบ</p></div>`;
+    // 📊 แท็บ 1: แสดงรายการคอร์สที่ซื้อจริง
+    if (tabId === 1) { 
+        const courses = customer.courses || [];
+        if (courses.length === 0) {
+            body.innerHTML = `<div class="p-20 text-center animate-in fade-in"><p class="text-slate-300 font-normal">📊 ยังไม่มีรายการคอร์สคงเหลือ</p></div>`;
+        } else {
+            body.innerHTML = `
+                <div class="p-4 animate-in fade-in space-y-3">
+                    <div class="grid grid-cols-1 gap-2">
+                        ${courses.map(c => `
+                            <div class="bg-white border border-pink-100 p-1 rounded-2xl flex justify-between items-center shadow-sm">
+                                <div>
+                                    <p class="text-[8px] text-pink-400 font-normal uppercase mb-0.5">SERVICE COURSE</p>
+                                    <p class="text-slate-700 font-normal text-base">${c.name}</p>
+                                    <p class="text-[8px] text-slate-300 font-normal uppercase mt-0.5">วันที่ซื้อ: ${c.date}</p>
+                                </div>
+                                <div class="text-right bg-pink-50 px-4 py-1 rounded-xl border border-pink-50">
+                                    <p class="text-[8px] text-pink-400 font-normal uppercase mb-0.5">คงเหลือ</p>
+                                    <p class="text-xl font-normal ace-pink">${c.amount} <span class="text-[10px]">ครั้ง</span></p>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>`;
+        }
     }
-    else if (tabId === 3) { // แท็บใบเสร็จ
-        body.innerHTML = `<div class="p-20 text-center animate-in fade-in"><p class="text-slate-400 italic">🧾 ไม่พบประวัติการออกใบเสร็จชำระเงิน</p></div>`;
+    // 🧾 แท็บ 3: ใบเสร็จและการเงิน (มีปุ่มดวงตา 👁️)
+    else if (tabId === 3) {
+        const allBills = JSON.parse(localStorage.getItem('billHistoryDB')) || [];
+        const myBills = allBills.filter(b => b.hn === customer.hn);
+        
+        if (myBills.length === 0) {
+            body.innerHTML = `<div class="p-10 text-center text-slate-400 font-normal italic">🧾 ไม่พบประวัติการออกใบเสร็จ</div>`;
+        } else {
+            body.innerHTML = `
+                <div class="p-1 animate-in fade-in">
+                    <table class="w-full text-left font-normal text-[12px]">
+                        <thead class="bg-pink-50/50 text-[#FF4B91] uppercase text-[11px] font-bold">
+                            <tr>
+                                <th class="p-1 pl-4 font-bold">วันที่</th>
+                                <th class="p-1 font-bold">ยอดรวม</th>
+                                <th class="p-1 font-bold">ช่องทาง</th>
+                                <th class="p-1 text-center w-[40px] font-bold">ดู</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-slate-600">
+                            ${myBills.map((b, bIdx) => `
+                                <tr class="border-b border-pink-50/30 hover:bg-pink-50/10 transition-all">
+                                    <td class="p-0.5 pl-4 font-normal">${b.date}</td>
+                                    <td class="p-0.5 font-normal">฿${parseFloat(b.total.replace(/[^0-9.-]+/g,"")).toLocaleString()}</td>
+                                    <td class="p-0.5 text-[11px] font-normal">${b.payment}</td>
+                                    <td class="p-0.5 text-center">
+                                        <button onclick="openOldReceipt(${bIdx}, '${customer.hn}')" 
+                                            class="bg-slate-50 p-0.5 rounded shadow-sm hover:bg-pink-100 transition-all scale-100">
+                                            <span style="font-size: 10px;">👁️</span>
+                                        </button>
+                                    </td>
+                                </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+        }
     }
-    else if (tabId === 4) { // แท็บเอกสารแนบ
-        body.innerHTML = `<div class="p-20 text-center animate-in fade-in"><p class="text-slate-400 italic">📁 ยังไม่มีการอัปโหลดเอกสารแนบ</p></div>`;
+    // 📂 แท็บ 4: เอกสารแนบ (ประวัติรักษาที่ส่งมาจาก OPD)
+    else if (tabId === 4) {
+        const treatments = customer.treatments || []; 
+        if (treatments.length === 0) {
+            body.innerHTML = `<div class="p-20 text-center italic text-slate-300">📂 ยังไม่มีประวัติการรักษาหรือเอกสารแนบ</div>`;
+        } else {
+            body.innerHTML = `
+                <div class="p-6 space-y-4">
+                    <h4 class="text-sm font-bold text-slate-500 mb-4 uppercase tracking-widest">📜 ประวัติบันทึกการรักษา</h4>
+                    <div class="grid grid-cols-1 gap-3">
+                        ${treatments.slice().reverse().map((t, idx) => `
+                            <div class="bg-white border border-pink-100 p-4 rounded-2xl shadow-sm hover:border-[#FF4B91]/30 transition-all">
+                                <span class="bg-pink-50 text-[#FF4B91] text-[10px] px-3 py-1 rounded-full font-bold uppercase">📅 ${t.date} | 🕒 ${t.time}</span>
+                                <div class="bg-slate-50 p-4 rounded-xl mt-3 text-slate-700 text-sm whitespace-pre-line">${t.detail}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>`;
+        }
+    }
+    // กรณีแท็บอื่นๆ
+    else {
+        body.innerHTML = `<div class="p-20 text-center text-slate-300 font-bold italic uppercase">เมนูนี้กำลังพัฒนา...</div>`;
     }
 };
 
 window.printOPD = function(index) {
     const c = customerDB[index];
     const target = document.getElementById('dynamicContent');
+    
+    window.autoFillCourse = function(courseName, amount, totalPrice) {
+        const typeSelect = document.getElementById('opdTypeSelector');
+        if (typeSelect.value !== 'skin_injection') {
+            alert('กรุณาเลือกประเภท OPD เป็น "คอร์สฉีดผิว" ก่อนนะคะ');
+            return;
+        }
+        const tables = document.querySelectorAll('#opd-dynamic-layout table');
+        let allCells = []; 
+        tables.forEach(table => {
+            const rows = table.querySelectorAll('tbody tr');
+            rows.forEach(row => allCells.push(row.cells[2]));
+        });
+        let startIndex = allCells.findIndex(cell => cell.innerText === "");
+        if (startIndex === -1) return;
+        for (let i = 0; i < amount; i++) {
+            if (allCells[startIndex + i]) {
+                allCells[startIndex + i].innerText = `${courseName} ${i+1}/${amount}`;
+            }
+        }
+    };
+
+    const getAge = (dateString) => {
+        if (!dateString) return "-";
+        const today = new Date();
+        const birth = new Date(dateString.split('/').reverse().join('-'));
+        let age = today.getFullYear() - birth.getFullYear();
+        if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age--;
+        return age;
+    };
+
+    window.renderOPDByType = function(type) {
+        const printableArea = document.getElementById('opd-dynamic-layout');
+        let layoutHtml = '';
+
+        if (type === 'skin_injection') {
+            const row = (i) => `<tr class="border-b border-slate-300 h-7">
+                <td class="p-1 text-center border-r font-bold bg-slate-50">${i}</td>
+                <td class="p-1 border-r w-20"></td>
+                <td class="p-1 border-r font-normal text-[9px] text-slate-700 text-left pl-2"></td>
+                <td class="p-1 w-24"></td>
+            </tr>`;
+            layoutHtml = `
+                <div class="mt-[1cm] animate-in fade-in">
+                    <div class="text-center mb-1"><p class="text-[11px] font-bold ace-pink uppercase tracking-widest underline">ประวัติการรักษา (คอร์สฉีดผิว)</p></div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <table class="w-full border border-slate-400 text-center">
+                            <thead class="bg-slate-100 text-[9px]"><tr><th class="p-1 border-r w-8 font-bold">ครั้งที่</th><th class="p-1 border-r font-bold w-20">วันที่</th><th class="p-1 border-r font-bold">รายการคอร์ส</th><th class="p-1 font-bold w-24">ผู้ทำ / เซ็น</th></tr></thead>
+                            <tbody>${[1,2,3,4,5,6,7].map(i => row(i)).join('')}</tbody>
+                        </table>
+                        <table class="w-full border border-slate-400 text-center">
+                            <thead class="bg-slate-100 text-[9px]"><tr><th class="p-1 border-r w-8 font-bold">ครั้งที่</th><th class="p-1 border-r font-bold w-20">วันที่</th><th class="p-1 border-r font-bold">รายการคอร์ส</th><th class="p-1 font-bold w-24">ผู้ทำ / เซ็น</th></tr></thead>
+                            <tbody>${[8,9,10,11,12,13,14].map(i => row(i)).join('')}</tbody>
+                        </table>
+                    </div>
+                    <div class="mt-2 no-print">
+                        <textarea id="treatmentNotesSkin" class="w-full h-12 border border-dotted border-slate-300 p-2 text-xs outline-none" placeholder="พิมพ์บันทึกเพิ่มเติมสำหรับคอร์สนี้..."></textarea>
+                    </div>
+                    <div class="hidden print:block text-[10px] mt-2 italic border-t border-slate-100 pt-1" id="printNotesSkin"></div>
+                </div>`;
+        } else if (type === 'botox_filler' || type === 'varicose_veins') {
+            layoutHtml = `
+                <div class="mt-4 border border-slate-300 p-4 h-[440px] bg-white animate-in fade-in text-left">
+                    <p class="text-[11px] font-bold ace-pink text-center mb-4 uppercase tracking-widest underline">ประวัติการรักษา (${type === 'botox_filler' ? 'Botox/Filler' : 'เส้นเลือดขอด'})</p>
+                    <div class="flex h-full">
+                        <div class="w-1/2 border-r border-dashed border-slate-300 pr-4"></div>
+                        <div class="w-1/2 pl-4 text-[11px] space-y-3 font-normal">
+                            <p><b>รายการ:</b> .....................................................</p>
+                            <p><b>ยี่ห้อ/Lot:</b> .....................................................</p>
+                            <p><b>ปริมาณ (Unit/CC):</b> .....................................</p>
+                            <div class="mt-4">
+                                <p class="mb-1 font-bold">บันทึกเพิ่มเติม:</p>
+                                <textarea id="treatmentNotesSpec" class="w-full h-40 border border-dotted border-slate-300 p-2 text-sm outline-none no-print" placeholder="พิมพ์ข้อมูลที่นี่..."></textarea>
+                                <div class="hidden print:block whitespace-pre-line text-sm border border-slate-50 p-2 min-h-[100px]" id="printNotesSpec"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+        } else {
+            layoutHtml = `
+                <div class="mt-4 border border-slate-300 h-[440px] bg-slate-50/10 p-4 animate-in fade-in text-left">
+                    <p class="text-[11px] font-bold ace-pink text-center mb-4 uppercase tracking-widest underline">ประวัติการรักษาทั่วไป</p>
+                    <textarea id="treatmentNotesGeneral" class="w-full h-80 bg-transparent border-none outline-none no-print text-sm" placeholder="พิมพ์ประวัติการรักษาที่นี่..."></textarea>
+                    <div class="hidden print:block whitespace-pre-line text-sm" id="printNotesGeneral"></div>
+                </div>`;
+        }
+        printableArea.innerHTML = layoutHtml;
+    };
+
     target.innerHTML = `
-        <div class="bg-white p-12 border-4 border-double border-gray-200 max-w-3xl mx-auto shadow-2xl animate-in fade-in font-black italic">
-            <h2 class="text-3xl ace-pink border-b-2 pb-4 mb-6">ACE CLINIC - OPD CARD</h2>
-            <p class="text-lg">ชื่อคนไข้: ${c.fullname} | HN: ${c.hn}</p>
-            <div class="mt-8 h-80 border-2 border-dashed border-gray-100 p-6 rounded-3xl">
-                <p class="text-gray-300">Doctor's Record...</p>
+        <div class="max-w-4xl mx-auto p-4 font-normal text-slate-800 bg-slate-100 min-h-screen">
+            <div class="no-print mb-4 space-y-2 text-left">
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-pink-100">
+                    <p class="text-[10px] font-bold text-pink-500 mb-2 uppercase tracking-widest">🛒 เลือกคอร์สเพื่อลงตาราง :</p>
+                    <div class="flex flex-wrap gap-2">
+                        ${(c.courses || []).map(course => {
+                            const p = parseFloat(String(course.price).replace(/[^0-9.-]+/g,"")) || 0;
+                            return `<button onclick="autoFillCourse('${course.name}', ${course.amount}, ${p})" class="bg-pink-50 hover:bg-pink-500 hover:text-white border border-pink-200 px-4 py-2 rounded-xl text-[11px] font-bold transition-all shadow-sm">➕ ${course.name}</button>`;
+                        }).join('')}
+                    </div>
+                </div>
+                <div class="bg-[#337373] p-3 rounded-2xl shadow-sm flex items-center justify-between text-white">
+                    <div class="flex items-center gap-4">
+                        <label class="text-xs font-bold uppercase">ประเภท OPD :</label>
+                        <select id="opdTypeSelector" onchange="renderOPDByType(this.value)" class="bg-white text-[#337373] px-5 py-2 rounded-xl text-xs font-bold outline-none">
+                            <option value="general">📝 บันทึกทั่วไป</option>
+                            <option value="botox_filler">💉 Botox / Filler</option>
+                            <option value="skin_injection">✨ คอร์สฉีดผิว (ลงตารางออโต้)</option>
+                            <option value="varicose_veins">🦵 รักษาเส้นเลือดขอด</option>
+                        </select>
+                    </div>
+                    <button onclick="renderOPDByType(document.getElementById('opdTypeSelector').value)" class="text-[10px] bg-[#2a5e5e] hover:bg-[#1f4747] px-4 py-2 rounded-xl transition-all font-bold">🔄 ล้างตาราง / ข้อมูล</button>
+                </div>
             </div>
-            <div class="mt-10 flex justify-between no-print">
-                <button onclick="window.print()" class="gold-bg text-white px-8 py-3 rounded-2xl">🖨️ พิมพ์เอกสาร</button>
-                <button onclick="loadPage(2, 'จัดการลูกค้า/ประวัติ')" class="text-gray-400">ย้อนกลับ</button>
+
+            <div id="opd-card-printable" class="bg-white p-6 shadow-sm border border-slate-200 mx-auto" style="width: 21cm; height: 14.8cm; line-height: 1.1; overflow: hidden;">
+                <div class="flex justify-between items-start mb-2 text-left">
+                    <div class="flex gap-2">
+                        <img src="ace-logo.jpg" class="w-12 h-12 object-contain" onerror="this.src='https://via.placeholder.com/50?text=ACE'">
+                        <div class="text-[10px] font-normal">
+                            <h2 class="text-sm font-bold text-slate-900">เอซ คลินิกเวชกรรม สาขาบางพลี</h2>
+                            <p>เลขที่ใบอนุญาต : ๑๑๑๐๑๐๐๕๑๖๖ | โทร : 097-0942875</p>
+                            <p>456/7 หมู่ 10 ต.บางปลา อ.บางพลี จ.สมุทรปราการ 10540</p>
+                        </div>
+                    </div>
+                    <div class="text-right text-[10px] font-normal">
+                        <p class="text-sm font-bold">HN : <span class="ace-pink">${c.hn}</span></p>
+                        <p class="text-red-600 font-bold uppercase">แพ้ยา : <span class="font-normal underline text-slate-900">${c.allergy || 'ไม่มี'}</span></p>
+                        <p>โรคประจำตัว : <span class="font-normal">${c.chronicDisease || '-'}</span></p>
+                        <p>ยาที่ทานประจำ : <span class="font-normal">${c.currentMedication || '-'}</span></p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-4 gap-y-0.5 text-[10px] mb-2 pb-2 border-y border-slate-200 pt-1 font-normal text-left">
+                    <div class="col-span-2"><b>ชื่อ-นามสกุล :</b> ${c.fullname}</div>
+                    <div><b>ชื่อเล่น :</b> ${c.nickname || '-'}</div>
+                    <div><b>วันเดือนปีเกิด :</b> ${c.birthDate || '-'}</div>
+                    <div><b>อายุ :</b> ${getAge(c.birthDate)} ปี</div>
+                    <div class="col-span-3"><b>เบอร์โทร :</b> ${c.phone}</div>
+                    <div class="col-span-2"><b>ติดต่อญาติฉุกเฉิน :</b> ${c.emergencyContact || '-'}</div>
+                    <div class="col-span-2"><b>ที่อยู่ :</b> ${c.address || '-'}</div>
+                </div>
+
+                <div id="opd-dynamic-layout"></div>
             </div>
-        </div>`;
+
+            <div class="flex justify-between items-center no-print mt-6 px-4">
+                <button onclick="loadPage(2, 'จัดการลูกค้า')" class="text-slate-400 font-bold text-xs uppercase">🔙 กลับ</button>
+                <div class="flex gap-3">
+                    <button onclick="saveTreatmentHistory(${index})" class="bg-slate-700 text-white px-8 py-3 rounded-2xl font-bold text-xs shadow-md">💾 บันทึก</button>
+                    <button onclick="handleOPDPrint()" class="bg-[#D4AF37] text-white px-10 py-3 rounded-2xl font-bold text-xs shadow-xl">🖨️ พิมพ์เอกสาร</button>
+                </div>
+            </div>
+        </div>
+    `;
+    renderOPDByType('general'); 
 };
 
+window.handleOPDPrint = function() {
+    const type = document.getElementById('opdTypeSelector').value;
+    if (type === 'general') {
+        const notes = document.getElementById('treatmentNotesGeneral');
+        document.getElementById('printNotesGeneral').innerText = notes ? notes.value : '';
+    } else if (type === 'botox_filler' || type === 'varicose_veins') {
+        const notes = document.getElementById('treatmentNotesSpec');
+        document.getElementById('printNotesSpec').innerText = notes ? notes.value : '';
+    } else if (type === 'skin_injection') {
+        const notes = document.getElementById('treatmentNotesSkin');
+        document.getElementById('printNotesSkin').innerText = notes ? notes.value : '';
+    }
+    window.print();
+};
 document.addEventListener('click', () => {
     document.querySelectorAll("[id^='action-menu-']").forEach(m => m.classList.add('hidden'));
 });
@@ -2121,14 +2361,20 @@ window.renderSalesPage = function() {
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-pink-50 pt-8">
                 <div class="space-y-4 text-left">
                     <p class="text-xs text-slate-400 font-bold uppercase ml-1">เลือกช่องทางการชำระเงิน</p>
-                    <div class="grid grid-cols-3 gap-3" id="paymentMethods">
-                        ${['เงินสด', 'โอน (QR)', 'โอนบริษัท', 'รูดบัตรเครดิต', 'Shopee', 'Gowabi'].map(type => `
-                            <button onclick="selectPaymentType(this, '${type}')" 
-                                class="bg-white border border-slate-100 py-3 rounded-xl text-[11px] text-slate-600 hover:border-[#FF4B91] transition-all shadow-sm font-bold">
-                                ${type}
-                            </button>
-                        `).join('')}
-                    </div>
+                    
+<div class="space-y-4 text-left">
+    <select id="billPaymentMethod" 
+        onchange="window.selectedPaymentMethod = this.value"
+        class="w-full bg-[#FFF0F5] border border-pink-100 rounded-2xl p-4 text-sm text-slate-700 outline-none font-bold focus:border-[#FF4B91] appearance-none cursor-pointer">
+        <option value="">-- กรุณาเลือกช่องทาง --</option>
+        <option value="เงินสด">💵 เงินสด</option>
+        <option value="โอน (QR)">📱 โอน (QR)</option>
+        <option value="โอนบริษัท">🏢 โอนบริษัท</option>
+        <option value="รูดบัตรเครดิต">💳 รูดบัตรเครดิต</option>
+        <option value="Shopee">🛍️ Shopee</option>
+        <option value="Gowabi">🎟️ GOWABI</option>
+    </select>
+</div>
                 </div>
                 
                 <div class="text-right flex flex-col justify-end items-end">
@@ -2237,43 +2483,57 @@ window.selectPaymentType = function(btn, type) {
 
 /* --- ส่วนที่ 2: ฟังก์ชันยืนยัน เพื่อสรุปยอดและเตรียมปลิ้นใบเสร็จ --- */
 window.confirmFinalPayment = function() {
-    // 1. ดึงค่าช่องทางการชำระเงินจาก Select ID: billPaymentMethod
-    const paymentSelect = document.getElementById('billPaymentMethod');
-    const paymentValue = paymentSelect ? paymentSelect.value : "";
-    
-    // 2. ดึงค่าวันที่จากช่อง Date ID: billDate
-    const billDate = document.getElementById('billDate') ? document.getElementById('billDate').value : "ไม่ได้ระบุวันที่";
+    try {
+        const paymentSelect = document.getElementById('billPaymentMethod');
+        const paymentValue = paymentSelect ? paymentSelect.value : "";
+        const dateInput = document.getElementById('billDate');
+        const billDate = dateInput ? dateInput.value : new Date().toLocaleDateString('th-TH');
+        const total = document.getElementById('grandTotalDisplay').innerText;
 
-    if (currentBillItems.length === 0) {
-        alert('❌ คุณอรอุมาคะ ยังไม่มีรายการในบิลเลยค่ะ');
-        return;
-    }
+        let customerHN = (window.activeCustomer) ? window.activeCustomer.hn : "HN-GENERAL";
+        let customerName = (window.activeCustomer) ? (window.activeCustomer.fullname || window.activeCustomer.name) : (document.getElementById('customerSearchInput')?.value || "ลูกค้าทั่วไป");
 
-    // 🎯 แก้ไขจุดนี้: เช็คค่าจากตัวเลือกที่เรากดจริงบนหน้าจอ
-    if (!paymentValue) {
-        alert('⚠️ กรุณาเลือกช่องทางการชำระเงิน (เช่น เงินสด หรือ โอน) ก่อนค่ะ');
-        return;
-    }
+        if (currentBillItems.length === 0 || !paymentValue) {
+            alert('⚠️ กรุณาเลือกรายการและช่องทางชำระเงินก่อนค่ะ');
+            return;
+        }
 
-    const total = document.getElementById('grandTotalDisplay').innerText;
-    
-    // ดึงชื่อลูกค้า (กรณีเปิดบิลในหน้าประวัติ จะดึงจาก activeCustomer)
-    const customer = (typeof activeCustomer !== 'undefined' && activeCustomer.name) 
-                     ? activeCustomer.name 
-                     : (document.getElementById('customerSearchInput') ? document.getElementById('customerSearchInput').value : "ไม่ได้ระบุชื่อ");
+        // 🎯 หัวใจสำคัญ: บันทึกคอร์สเข้าประวัติลูกค้า
+        if (window.activeCustomer) {
+            if (!window.activeCustomer.courses) window.activeCustomer.courses = [];
+            currentBillItems.forEach(item => {
+                window.activeCustomer.courses.push({
+                    name: item.name,
+                    amount: item.qty || 1,
+                    date: billDate
+                });
+            });
+      	     const idx = customerDB.findIndex(c => c.hn === window.activeCustomer.hn);
+		if (idx !== -1) {
+   		 customerDB[idx] = window.activeCustomer;
+  		  // 🎯 หัวใจสำคัญ: บรรทัดนี้จะทำให้คอร์สไม่หายตอนรีเฟรชหน้าจอค่ะ
+   		 localStorage.setItem('customerDB', JSON.stringify(customerDB)); 
+		}
+      	  }
 
-    // 🧾 สรุปยอดโชว์ให้เห็นชัดเจน (ปรับให้ตัวหนังสือตั้งตรงสวยงาม)
-    alert(`✅ บันทึกยอดขายสำเร็จ!
----------------------------
-วันที่: ${billDate}
-ลูกค้า: ${customer}
-ยอดรวมสุทธิ: ${total}
-ชำระโดย: ${paymentValue}
----------------------------
-ระบบกำลังส่งข้อมูลไปที่หน้า "พิมพ์ใบเสร็จ"...`);
+        const newBill = {
+            hn: customerHN,
+            date: billDate,
+            customer: customerName,
+            items: [...currentBillItems],
+            total: total,
+            payment: paymentValue,
+            timestamp: new Date().getTime()
+        };
 
-    // กลับไปหน้า Dashboard
-    loadPage(1, 'Dashboard ภาพรวม'); 
+        let billHistoryDB = JSON.parse(localStorage.getItem('billHistoryDB')) || [];
+        billHistoryDB.push(newBill);
+        localStorage.setItem('billHistoryDB', JSON.stringify(billHistoryDB));
+        window.billHistoryDB = billHistoryDB;
+
+        alert(`✅ บันทึกสำเร็จ!\nคอร์สถูกเพิ่มลงในประวัติแล้วค่ะ`);
+        showReceiptPreview(newBill);
+    } catch (e) { alert("เกิดข้อผิดพลาด: " + e.message); }
 };
 
 /* --- ✅ ฟังก์ชันสร้างหน้าบันทึกรายจ่าย (สีแดง Luxury) --- */
@@ -2334,6 +2594,671 @@ window.renderExpensePage = function() {
     document.getElementById('expenseDate').valueAsDate = new Date(); // ตั้งค่าวันที่วันนี้อัตโนมัติ
 };
 
-    </script>
+/* =======================================================
+   💎 ส่วนเสริมพิเศษ: ใบเสร็จ / ตารางรายจ่าย / รายงานสรุป
+   ======================================================= */
+
+// 1. ฟังก์ชันแสดงหน้าพรีวิวใบเสร็จก่อนพิมพ์
+window.showReceiptPreview = function(billData) {
+    const target = document.getElementById('dynamicContent');
+    target.innerHTML = `
+        <div class="animate-in zoom-in duration-300 flex flex-col items-center p-10 bg-slate-50 min-h-screen font-bold">
+            <div id="printableReceipt" class="bg-white w-[500px] p-10 shadow-2xl border border-pink-100 rounded-sm text-slate-800">
+                <div class="text-center border-b-2 border-[#FF4B91] pb-6 mb-6">
+                    <h2 class="text-2xl text-[#FF4B91] font-black uppercase tracking-tighter">ACE CLINIC RECEIPT</h2>
+                    <p class="text-[10px] text-slate-400 mt-1 uppercase font-bold">ใบเสร็จรับเงินอย่างย่อ (INCOMING)</p>
+                </div>
+                <div class="flex justify-between text-[11px] mb-6">
+                    <div><p>ลูกค้า: ${billData.customer}</p><p>วันที่: ${billData.date}</p></div>
+                    <div class="text-right uppercase"><p>INV-${Date.now().toString().slice(-6)}</p><p>สาขา: บางพลี</p></div>
+                </div>
+                <table class="w-full text-[11px] mb-8">
+                    <thead class="border-b border-slate-100"><tr><th class="py-2 text-left">รายการ</th><th class="py-2 text-right">รวม (฿)</th></tr></thead>
+                    <tbody>
+                        ${currentBillItems.map(item => `
+                            <tr class="border-b border-slate-50">
+                                <td class="py-3">${item.name} x ${item.qty}</td>
+                                <td class="py-3 text-right">${item.total.toLocaleString()}</td>
+                            </tr>`).join('')}
+                    </tbody>
+                </table>
+                <div class="text-right space-y-1 mb-10">
+                    <p class="text-lg">ยอดสุทธิ: <span class="text-[#FF4B91] text-2xl font-black">฿${billData.total}</span></p>
+                    <p class="text-[10px] text-slate-400 font-bold">ช่องทาง: ${billData.payment}</p>
+                </div>
+            </div>
+            <div class="flex gap-4 mt-10 no-print">
+    <button onclick="window.print()" class="bg-[#FF4B91] text-white px-10 py-3 rounded-2xl font-bold shadow-xl">🖨️ พิมพ์ใบเสร็จ</button>
+    
+    <button onclick="backToCustomerProfile()" 
+        class="bg-white border border-slate-200 px-10 py-3 rounded-2xl font-bold text-slate-400 hover:bg-slate-50 transition-all">
+        🔙 กลับหน้าประวัติลูกค้า
+    </button>
+</div>
+        </div>`;
+};
+
+// 2. ตารางสรุปรายจ่ายด้านล่าง (ใส่ไว้โชว์ในหน้าสีแดง)
+window.renderExpenseTable = function() {
+    const listArea = document.getElementById('expenseListTable');
+    if (!listArea) return;
+    listArea.innerHTML = `
+        <div class="overflow-hidden rounded-[1.5rem] border border-red-50 shadow-sm mt-8 animate-in fade-in">
+            <table class="w-full text-left font-bold">
+                <thead class="bg-red-50 text-[11px] text-red-500 uppercase">
+                    <tr><th class="p-4">วันที่</th><th class="p-4">รายการ</th><th class="p-4 text-center">หักจากบัญชี</th><th class="p-4 text-right">จำนวนเงิน (฿)</th></tr>
+                </thead>
+                <tbody class="text-[13px] text-slate-600 font-bold" id="expenseDataBody">
+                    <tr><td colspan="4" class="p-10 text-center text-slate-300">ยังไม่มีประวัติการจ่ายเงินของวันนี้...</td></tr>
+                </tbody>
+            </table>
+        </div>`;
+};
+
+// 3. หน้ารายงานสรุปยอดขายแยกประเภท
+window.renderAccountingReport = function() {
+    const target = document.getElementById('dynamicContent');
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 p-8 bg-white min-h-screen font-bold">
+            <h4 class="text-3xl text-[#FF4B91] font-bold mb-8">📊 รายงานสรุปบัญชี (ACCOUNTING)</h4>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                ${['เงินสด', 'โอน (QR)', 'โอนบริษัท', 'รูดบัตรเครดิต', 'Shopee', 'Gowabi'].map(acc => `
+                    <div class="bg-[#FFF0F5] p-6 rounded-[2rem] border border-pink-100 shadow-sm">
+                        <p class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">${acc}</p>
+                        <p class="text-3xl text-slate-700 font-black mt-2">฿0.00</p>
+                    </div>`).join('')}
+            </div>
+            <div class="mt-8 p-10 bg-[#FF4B91] rounded-[2.5rem] text-white flex justify-between items-center shadow-2xl">
+                <div><p class="text-sm opacity-80 font-bold uppercase">ยอดขายรวมวันนี้</p><h2 class="text-6xl font-black italic tracking-tighter font-bold">฿45,200</h2></div>
+                <button onclick="window.print()" class="bg-white text-[#FF4B91] px-10 py-4 rounded-2xl font-bold text-sm uppercase">พิมพ์รายงานประจำวัน</button>
+            </div>
+        </div>`;
+};
+
+window.viewReceiptDetail = function(billData) {
+    if (typeof showReceiptPreview === 'function') {
+        showReceiptPreview(billData);
+    } else {
+        alert("รายละเอียดบิล: " + billData.customer + "\nยอดรวม: " + billData.total);
+    }
+};
+/* --- 🔙 ฟังก์ชันพากลับหน้าประวัติลูกค้าคนปัจจุบัน --- */
+window.backToCustomerProfile = function() {
+    if (window.activeCustomer) {
+        // 🎯 ดึงข้อมูลล่าสุดจาก DB ก่อนแสดงผล
+        const idx = customerDB.findIndex(c => c.hn === window.activeCustomer.hn);
+        if (idx !== -1) {
+            viewCustomerDetail(idx);
+            document.getElementById('pageTitle').innerText = "จัดการลูกค้า/ประวัติ";
+        } else {
+            loadPage(2, 'จัดการลูกค้า/ประวัติ');
+        }
+    } else {
+        loadPage(2, 'จัดการลูกค้า/ประวัติ');
+    }
+};
+
+/* --- 👁️ ฟังก์ชันสำหรับดึงบิลเก่าจากฐานข้อมูลมาโชว์ (ฉบับแก้ปุ่มค้าง) --- */
+window.openOldReceipt = function(index, hn) {
+    try {
+        // 1. ดึงข้อมูลบิลทั้งหมดจากหน่วยความจำ
+        const allBills = JSON.parse(localStorage.getItem('billHistoryDB')) || [];
+        
+        // 2. กรองหาบิลของคนไข้ HN นี้
+        const myBills = allBills.filter(b => b.hn === hn);
+        
+        // 3. เลือกบิลตามลำดับที่กด (Index)
+        const selectedBill = myBills[index];
+        
+        if (selectedBill) {
+            // 🎯 จุดสำคัญ: ต้องเอาค่ารายการสินค้าเก่า (selectedBill.items) 
+            // ไปใส่ในตัวแปรแสดงผลปัจจุบัน เพื่อให้หน้าใบเสร็จมีรายการยา/คอร์สโชว์ค่ะ
+            window.currentBillItems = selectedBill.items || [];
+            
+            // 4. สั่งเปิดหน้าพรีวิวใบเสร็จ
+            showReceiptPreview(selectedBill);
+            
+            // 5. เปลี่ยนหัวข้อหน้าให้ดู Luxury
+            document.getElementById('pageTitle').innerText = "รายละเอียดใบเสร็จย้อนหลัง";
+        } else {
+            alert("ขออภัยค่ะ ไม่พบข้อมูลใบเสร็จใบนี้ในระบบ");
+        }
+    } catch (e) {
+        console.error("Error opening old receipt:", e);
+        alert("เกิดข้อผิดพลาดในการโหลดข้อมูลบิลค่ะ");
+    }
+};
+
+/* =======================================================
+    🎯 ระบบนัดหมาย (APPOINTMENT SYSTEM LUXURY) - [ชุดสมบูรณ์ที่สุด]
+   ======================================================= */
+
+let selectedCoursesForApp = []; 
+let currentAppPage = 1; 
+let appRowsPerPage = 10; 
+
+window.renderAppointmentPage = function() {
+    const target = document.getElementById('dynamicContent');
+    if (!target) return;
+    const appointments = JSON.parse(localStorage.getItem('appointmentDB')) || [];
+    
+    // ตั้งค่าตัวแปรเบื้องต้น
+    const today = new Date().toISOString().split('T')[0];
+    const dateFilter = document.getElementById('filterDate')?.value || today;
+    const currentSearch = document.getElementById('appSearchInput')?.value || "";
+    const statusFilter = document.getElementById('statusFilter')?.value || "ทั้งหมด";
+    const doctorFilter = document.getElementById('doctorFilter')?.value || "ทั้งหมด";
+    appRowsPerPage = parseInt(document.getElementById('appPageSize')?.value) || 10;
+
+    const formatDateTH = (dateStr) => {
+        if (!dateStr) return "-";
+        const [y, m, d] = dateStr.split("-");
+        return `${d}-${m}-${y}`;
+    };
+
+    // 1. กรองข้อมูล
+    let filteredData = appointments.filter(ap => {
+        const matchSearch = ap.customerName.toLowerCase().includes(currentSearch.toLowerCase()) || 
+                           (ap.hn && ap.hn.toLowerCase().includes(currentSearch.toLowerCase()));
+        const matchStatus = statusFilter === "ทั้งหมด" || ap.status === statusFilter;
+        const matchDate = !dateFilter || ap.date === dateFilter;
+        return matchSearch && matchStatus && matchDate;
+    });
+
+    filteredData.sort((a, b) => a.time.localeCompare(b.time));
+
+    const totalPages = Math.ceil(filteredData.length / appRowsPerPage) || 1;
+    const startIndex = (currentAppPage - 1) * appRowsPerPage;
+    const paginatedData = filteredData.slice(startIndex, startIndex + appRowsPerPage);
+
+target.innerHTML = `
+    <div class="animate-in fade-in duration-500 font-normal uppercase">
+        <div class="glass-card mb-8 border border-pink-200 shadow-sm p-4 rounded-3xl font-normal">
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div class="flex flex-wrap gap-2 items-center flex-1">
+                    <select id="appPageSize" onchange="currentAppPage=1; renderAppointmentPage()" class="border border-pink-200 px-3 py-2 rounded-xl text-[10px] outline-none bg-white font-normal">
+                        <option value="10" ${appRowsPerPage==10?'selected':''}>10 รายการ</option>
+                        <option value="30" ${appRowsPerPage==30?'selected':''}>30 รายการ</option>
+                    </select>
+                    <select id="statusFilter" onchange="currentAppPage=1; renderAppointmentPage()" class="border border-pink-200 px-3 py-2 rounded-xl text-[10px] outline-none bg-white font-normal">
+                        <option value="ทั้งหมด" ${statusFilter === 'ทั้งหมด' ? 'selected' : ''}>สถานะ: ทั้งหมด</option>
+                        <option value="รอดำเนินการ" ${statusFilter === 'รอดำเนินการ' ? 'selected' : ''}>🟡 รอดำเนินการ</option>
+                        <option value="เสร็จสิ้น" ${statusFilter === 'เสร็จสิ้น' ? 'selected' : ''}>🟢 เสร็จสิ้น</option>
+                        <option value="ยกเลิก" ${statusFilter === 'ยกเลิก' ? 'selected' : ''}>🔴 ยกเลิก</option>
+                        <option value="ไม่มาตามนัด" ${statusFilter === 'ไม่มาตามนัด' ? 'selected' : ''}>🔵 ไม่มาตามนัด</option>
+                    </select>
+                    <input type="date" id="filterDate" onchange="currentAppPage=1; renderAppointmentPage()" value="${dateFilter}" class="border border-pink-200 px-3 py-2 rounded-xl text-[10px] outline-none bg-white font-normal">
+                    
+                    <div class="relative flex items-center min-w-[200px]">
+                        <input id="appSearchInput" type="text" placeholder="🔍 ค้นชื่อ / HN" value="${currentSearch}" 
+                            onkeyup="if(event.key === 'Enter') { currentAppPage=1; renderAppointmentPage(); }"
+                            class="w-full border border-pink-200 px-4 py-2 rounded-xl text-[10px] outline-none bg-white pr-14 font-normal">
+                        <button onclick="currentAppPage=1; renderAppointmentPage()" class="absolute right-1 top-1 bottom-1 bg-black text-white px-3 rounded-lg hover:brightness-125 transition-all text-[9px] font-normal">ค้นหา</button>
+                    </div>
+                </div>
+                
+                <div class="flex gap-2">
+                    <button onclick="printDailyReport()" class="w-28 bg-slate-100 text-slate-500 px-4 py-2 rounded-xl text-[9px] uppercase tracking-tighter font-normal">📊 รายงานนัด</button>
+                    <button onclick="openAppointmentModal()" class="w-28 bg-black text-white px-4 py-2 rounded-xl text-[9px] uppercase tracking-tighter font-normal">+ เพิ่มนัดหมาย</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-[3rem] shadow-2xl border border-pink-200 overflow-hidden font-normal">
+            <table class="w-full text-center text-xs border-collapse font-normal">
+                <thead class="bg-[#D48197] text-white">
+                    <tr>
+                        <th class="p-2 font-normal w-[40px]">ยืนยัน</th>
+                        <th class="p-2 font-normal w-[40px]">ลำดับ</th>
+                        <th class="p-2 font-normal">วันที่ / เวลา</th>
+                        <th class="p-2 font-normal">HN</th>
+                        <th class="p-2 font-normal text-left">ชื่อ-นามสกุล</th>
+                        <th class="p-2 font-normal">โดยแพทย์</th>
+                        <th class="p-2 font-normal w-[60px]">พนักงาน</th>
+                        <th class="p-2 font-normal">รายการคอร์ส</th>
+                        <th class="p-2 font-normal">สถานะ</th>
+                        <th class="p-2 font-normal">จัดการ</th>
+                    </tr>
+                </thead>
+                <tbody class="text-slate-600 font-normal">
+                    ${paginatedData.length > 0 ? paginatedData.map((ap, i) => `
+                        <tr class="border-b border-pink-50 hover:bg-pink-50/20 font-normal">
+                            <td class="p-1 font-normal">
+                                <button onclick="toggleConfirmApp(${startIndex + i})" 
+                                    class="w-5 h-5 rounded-full border transition-all flex items-center justify-center mx-auto
+                                    ${ap.isConfirm ? 'bg-[#D48197] border-[#D48197] text-white' : 'border-slate-300 text-slate-300'}">
+                                    <span style="font-size: 8px;">✔️</span>
+                                </button>
+                            </td>
+                            <td class="p-1 text-[10px] font-normal text-center">${startIndex + i + 1}</td>
+                            <td class="p-1 text-[10px] font-normal text-center">${formatDateTH(ap.date)}<br><span class="text-[#FF4B91] font-normal">${ap.time} น.</span></td>
+                            <td class="p-1 text-slate-800 font-normal text-center">${ap.hn}</td>
+                            <td class="p-1 text-slate-700 text-sm text-left font-normal">${ap.customerName}</td>
+                            <td class="p-1 text-slate-500 font-normal text-center">พญ.${ap.doctor}</td>
+                            <td class="p-1 text-[10px] text-slate-400 font-normal text-center">${ap.staff || '-'}</td>
+                            <td class="p-1 text-slate-800 text-[11px] text-left font-normal">
+                                <div class="flex flex-col gap-0 font-normal">
+                                    ${ap.course ? ap.course.split(', ').map(c => `<span>• ${c}</span>`).join('') : '-'}
+                                </div>
+                            </td>
+                            <td class="p-1 font-normal text-center">
+                                <span class="text-[10px] font-normal uppercase ${
+                                    ap.status === 'รอดำเนินการ' ? 'text-yellow-500' : 
+                                    ap.status === 'เสร็จสิ้น' ? 'text-green-600' : 
+                                    ap.status === 'ยกเลิก' ? 'text-red-500' : 
+                                    ap.status === 'ไม่มาตามนัด' ? 'text-blue-500' : 'text-slate-400'
+                                }">${ap.status}</span>
+                            </td>
+                            <td class="p-1 relative font-normal text-center">
+                                <div class="inline-flex items-center bg-[#D48197] text-white rounded-full p-1 shadow-md font-normal">
+                                    <button onclick="editAppointment(${startIndex + i})" class="px-4 py-1 text-[10px] border-r border-white/30 hover:bg-white/10 rounded-l-full uppercase font-normal">แก้ไข</button>
+                                    <button onclick="toggleAppActionMenu(event, ${startIndex + i})" class="px-2 py-1 text-[10px] hover:bg-white/10 rounded-r-full transition-all font-normal">▼</button>
+                                    
+<div id="app-action-menu-${startIndex + i}" class="hidden absolute right-0 top-12 w-52 bg-white border border-pink-200 rounded-2xl shadow-2xl z-[999] overflow-hidden text-left text-slate-600 font-normal">
+    <button onclick="alert('🔄 จัดการคิว')" class="w-full p-4 text-[10px] text-green-600 hover:bg-green-50 border-b flex items-center gap-2 font-normal uppercase">🔄 จัดการคิว</button>
+    
+    <button onclick="alert('🗓️ ดูวันนัดทั้งหมด')" class="w-full p-4 text-[10px] hover:bg-pink-50 border-b flex items-center gap-2 uppercase font-normal">🗓️ ดูวันนัดทั้งหมด</button>
+    
+    <button onclick="printAppointmentTicket(${startIndex + i})" class="w-full p-4 text-[10px] text-blue-600 hover:bg-blue-50 border-b flex items-center gap-2 font-normal uppercase">📄 พิมพ์บัตรนัด</button>
+    <button onclick="deleteAppointment(${startIndex + i})" class="w-full p-4 text-[10px] text-red-500 hover:bg-red-50 flex items-center gap-2 font-normal uppercase">🗑️ ลบนัดหมาย</button>
+</div>
+                                </div>
+                            </td>
+                        </tr>`).join('') : `<tr><td colspan="10" class="p-20 text-center text-slate-300 italic font-normal">ไม่พบข้อมูลนัดหมาย...</td></tr>`}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="flex justify-center items-center gap-4 mt-8 mb-10 font-normal">
+            <button onclick="changeAppPage(-1)" ${currentAppPage === 1 ? 'disabled' : ''} class="px-6 py-2 bg-white border border-pink-200 rounded-2xl disabled:opacity-30 text-[10px] hover:bg-pink-50 font-normal">ก่อนหน้า</button>
+            <span class="text-[11px] text-[#D48197] font-normal">หน้า ${currentAppPage} / ${totalPages}</span>
+            <button onclick="changeAppPage(1)" ${currentAppPage === totalPages ? 'disabled' : ''} class="px-6 py-2 bg-white border border-pink-200 rounded-2xl disabled:opacity-30 text-[10px] hover:bg-pink-50 font-normal">ถัดไป</button>
+        </div>
+    </div>`;
+};
+window.printAppointmentTicket = function(index) {
+    // ดึงฐานข้อมูลล่าสุดมาใช้งาน
+    const db = JSON.parse(localStorage.getItem('appointmentDB')) || [];
+    const ap = db[index];
+    if(!ap) return;
+
+    // แปลงวันที่ ว-ด-ป สำหรับพิมพ์
+    const d = ap.date.split("-");
+    const formattedDate = `${d[2]}-${d[1]}-${d[0]}`;
+
+    const p = window.open('', '_blank');
+    p.document.write(`
+        <html>
+            <body style="font-family:Sarabun,sans-serif;text-align:center;padding:40px;">
+                <div style="border:2px dashed #FF4B91;padding:30px;border-radius:30px;display:inline-block;text-align:left;width:300px;">
+                    <h2 style="color:#FF4B91;text-align:center;">ACE CLINIC</h2>
+                    <hr style="border:0.5px solid #eee;">
+                    <b>ลูกค้า:</b> ${ap.customerName}<br>
+                    <b>HN:</b> ${ap.hn}<br>
+                    <b>นัดวันที่:</b> ${formattedDate} ${ap.time} น.<br>
+                    <b>รายการคอร์ส:</b> ${ap.course || '-'}<br>
+                    <hr style="border:0.5px solid #eee;">
+                    <center><small>กรุณามาก่อนเวลานัด 10 นาที ขอบคุณค่ะ</small></center>
+                </div>
+                <script>window.print();window.close();<\/script>
+            </body>
+        </html>
+    `);
+    p.document.close();
+};
+
+
+// 2. ฟังก์ชันหน้าฟอร์ม (ปุ่มยืนยันเล็กลงอยู่ขวา + สวิตช์ Google + ช่องหมายเหตุ)
+window.openAppointmentModal = function(editIndex = null) {
+    const appointments = JSON.parse(localStorage.getItem('appointmentDB')) || [];
+    const editData = editIndex !== null ? appointments[editIndex] : null;
+    selectedCoursesForApp = editData ? editData.course.split(', ') : [];
+
+    const modalWrap = document.createElement('div');
+    modalWrap.id = "appModal";
+    modalWrap.className = "fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] animate-in fade-in duration-300 font-normal";
+    
+    modalWrap.innerHTML = `
+        <div class="bg-white w-full max-w-2xl rounded-[3rem] p-12 shadow-2xl border border-pink-200 animate-in zoom-in duration-300 overflow-y-auto max-h-[95vh] font-normal">
+            <div class="flex justify-between items-center mb-10 font-normal">
+                <h3 class="text-3xl font-black text-slate-800 uppercase tracking-tighter font-normal">${editData ? '📝 แก้ไขนัดหมาย' : '✨ ลงนัดหมายลูกค้า'}</h3>
+                <button onclick="closeAppModal()" class="text-slate-300 hover:text-pink-50 transition-all text-3xl font-light font-normal">✕</button>
+            </div>
+            <div class="space-y-5 text-left font-bold uppercase font-normal">
+                <div class="relative font-normal">
+                    <label class="text-[11px] text-[#FF4B91] ml-2 block font-normal">ค้นหาชื่อลูกค้า / HN</label>
+                    <input type="text" id="appCustSearch" value="${editData ? editData.customerName : ''}" oninput="searchCustomerForApp(this.value)" placeholder="พิมพ์ชื่อหรือเลข HN..." class="w-full border border-pink-200 p-4 rounded-2xl outline-none focus:border-[#FF4B91] text-sm bg-white font-normal">
+                    <div id="appCustResults" class="absolute left-0 right-0 bg-white shadow-2xl rounded-2xl mt-1 hidden border border-pink-100 max-h-48 overflow-y-auto z-[10001] font-normal"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-6 font-normal">
+                    <div class="font-normal">
+                        <label class="text-[11px] text-[#FF4B91] ml-2 block font-normal">วันที่นัดหมาย</label>
+                        <input type="date" id="appDate" value="${editData ? editData.date : ''}" class="w-full border border-pink-200 p-4 rounded-2xl outline-none text-sm bg-white font-normal">
+                    </div>
+
+                    <div class="font-normal">
+                        <label class="text-[11px] text-[#FF4B91] ml-2 block font-normal">เวลานัด</label>
+                        <div class="flex gap-1 font-normal">
+                            <select id="appHour" class="w-1/2 border border-pink-200 p-4 rounded-2xl text-sm font-normal">
+                                ${Array.from({length: 24}, (_, i) => `<option value="${String(i).padStart(2,'0')}" ${editData && editData.time.split(':')[0] == i ? 'selected' : ''}>${String(i).padStart(2,'0')}</option>`).join('')}
+                            </select>
+                            <select id="appMin" class="w-1/2 border border-pink-200 p-4 rounded-2xl text-sm font-normal">
+                                <option value="00" ${editData && editData.time.split(':')[1] == '00' ? 'selected' : ''}>00</option>
+                                <option value="10" ${editData && editData.time.split(':')[1] == '10' ? 'selected' : ''}>10</option>
+                                <option value="20" ${editData && editData.time.split(':')[1] == '20' ? 'selected' : ''}>20</option>
+                                <option value="30" ${editData && editData.time.split(':')[1] == '30' ? 'selected' : ''}>30</option>
+                                <option value="40" ${editData && editData.time.split(':')[1] == '40' ? 'selected' : ''}>40</option>
+                                <option value="50" ${editData && editData.time.split(':')[1] == '50' ? 'selected' : ''}>50</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-6 font-normal">
+                    <div class="font-normal">
+                        <label class="text-[11px] text-[#FF4B91] ml-2 block font-normal">แพทย์ผู้ดูแล</label>
+                        <select id="appDoc" class="w-full border border-pink-200 p-4 rounded-2xl text-sm font-normal bg-white font-normal">
+                            <option value="หมอแก้ว" ${editData && editData.doctor === 'หมอแก้ว' ? 'selected' : ''}>พญ.แก้ว</option>
+                            <option value="หมอปลา" ${editData && editData.doctor === 'หมอปลา' ? 'selected' : ''}>พญ.ปลา</option>
+                        </select>
+                    </div>
+                    <div class="font-normal">
+                        <label class="text-[11px] text-[#FF4B91] ml-2 block font-normal">สถานะการจอง</label>
+                        <select id="appStatus" class="w-full border border-pink-200 p-4 rounded-2xl text-sm font-normal bg-white font-normal">
+                            <option value="รอดำเนินการ" ${editData && editData.status === 'รอดำเนินการ' ? 'selected' : ''}>🟡 รอดำเนินการ</option>
+                            <option value="เสร็จสิ้น" ${editData && editData.status === 'เสร็จสิ้น' ? 'selected' : ''}>🟢 เสร็จสิ้น</option>
+                            <option value="ยกเลิก" ${editData && editData.status === 'ยกเลิก' ? 'selected' : ''}>🔴 ยกเลิก</option>
+                            <option value="ไม่มาตามนัด" ${editData && editData.status === 'ไม่มาตามนัด' ? 'selected' : ''}>🔵 ไม่มาตามนัด</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="font-normal">
+                    <label class="text-[11px] text-[#FF4B91] ml-2 block font-normal">พนักงานทำ</label>
+                    <input type="text" id="appStaff" value="${editData ? editData.staff : ''}" placeholder="ระบุชื่อพนักงาน" class="w-full border border-pink-200 p-4 rounded-2xl text-sm font-normal mb-2 bg-white font-normal">
+                    <div class="relative font-normal">
+    <label class="text-[11px] text-[#FF4B91] ml-2 block font-normal">รายการคอร์ส</label>
+    <input type="text" id="appCourse" onfocus="searchCourseForApp()" oninput="searchCourseForApp()" placeholder="จิ้มเพื่อเลือกคอร์ส..." class="w-full border border-pink-200 p-4 rounded-2xl outline-none text-sm bg-white font-normal">
+    <div id="appCourseResults" class="absolute left-0 right-0 bg-white shadow-2xl rounded-2xl mt-1 hidden border border-pink-100 max-h-48 overflow-y-auto z-[10001] font-normal"></div>
+    <div id="selectedCoursesContainer" class="mt-3 flex flex-wrap gap-2 pr-2 font-normal"></div>
+</div>
+
+
+<div class="font-normal">
+    <label class="text-[11px] text-[#FF4B91] ml-2 block font-normal">หมายเหตุ</label>
+    <textarea id="appNote" placeholder="รายละเอียดหรือบันทึกเพิ่มเติม..." class="w-full border border-pink-200 p-4 rounded-2xl text-sm font-normal h-24 resize-none bg-white font-normal">${editData ? editData.note : ''}</textarea>
+</div>
+                </div>
+                <div class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl font-normal">
+                    <span class="text-[10px] text-slate-500 font-bold font-normal tracking-wider">🗓️ ดึงข้อมูลนัดไปแสดงที่ปฏิทิน Google ในมือถือ</span>
+                    <label class="relative inline-flex items-center cursor-pointer font-normal">
+                        <input type="checkbox" id="syncGoogle" class="sr-only peer font-normal">
+                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-[#FF4B91] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all font-normal"></div>
+                    </label>
+                </div>
+                <div class="flex justify-end mt-4 font-normal font-normal">
+                    <button onclick="saveNewAppointment(${editIndex})" class="bg-black text-white px-8 py-3 rounded-2xl font-black shadow-xl hover:scale-[1.02] transition-all text-[11px] font-normal uppercase tracking-widest font-normal">ยืนยันการนัดหมาย</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modalWrap);
+    if(!editData) {
+        document.getElementById('appDate').valueAsDate = new Date();
+    } else {
+        renderSelectedCourses();
+    }
+};
+
+// 3. ฟังก์ชันควบคุมทั้งหมด (แบ่งหน้า/พิมพ์/ลบ/บันทึก/ค้นหา)
+window.changeAppPage = function(step) { currentAppPage += step; renderAppointmentPage(); };
+
+window.printAppointmentTicket = function(index) {
+    // ดึงฐานข้อมูลล่าสุดมาใช้งาน
+    const db = JSON.parse(localStorage.getItem('appointmentDB')) || [];
+    const ap = db[index];
+    if(!ap) return;
+
+    // แปลงวันที่ ว-ด-ป สำหรับพิมพ์
+    const d = ap.date.split("-");
+    const formattedDate = `${d[2]}-${d[1]}-${d[0]}`;
+
+    const p = window.open('', '_blank');
+    p.document.write(`
+        <html>
+            <body style="font-family:Sarabun,sans-serif;text-align:center;padding:40px;">
+                <div style="border:2px dashed #FF4B91;padding:30px;border-radius:30px;display:inline-block;text-align:left;width:300px;">
+                    <h2 style="color:#FF4B91;text-align:center;">ACE CLINIC</h2>
+                    <hr style="border:0.5px solid #eee;">
+                    <b>ลูกค้า:</b> ${ap.customerName}<br>
+                    <b>HN:</b> ${ap.hn}<br>
+                    <b>นัดวันที่:</b> ${formattedDate} ${ap.time} น.<br>
+                    <b>รายการคอร์ส:</b> ${ap.course || '-'}<br>
+                    <hr style="border:0.5px solid #eee;">
+                    <center><small>กรุณามาก่อนเวลานัด 10 นาที ขอบคุณค่ะ</small></center>
+                </div>
+                <script>window.print();window.close();<\/script>
+            </body>
+        </html>
+    `);
+    p.document.close();
+};
+
+window.searchCustomerForApp = function(val) {
+    const resDiv = document.getElementById('appCustResults');
+    if (!val) { resDiv.classList.add('hidden'); return; }
+    const db = JSON.parse(localStorage.getItem('customerDB')) || [];
+    const matches = db.filter(c => c.fullname.toLowerCase().includes(val.toLowerCase()) || c.hn.toLowerCase().includes(val.toLowerCase()));
+    if (matches.length > 0) {
+        resDiv.innerHTML = matches.map(c => `<div onclick="selectCustForApp('${c.fullname}', '${c.hn}')" class="p-4 hover:bg-pink-50 cursor-pointer border-b border-pink-50 flex justify-between font-normal"><span class="text-sm font-bold">${c.fullname}</span><span class="text-[10px] bg-slate-100 px-2 py-1 rounded-full uppercase font-bold">${c.hn}</span></div>`).join('');
+        resDiv.classList.remove('hidden');
+    } else { resDiv.classList.add('hidden'); }
+};
+
+window.selectCustForApp = function(name, hn) {
+    const inp = document.getElementById('appCustSearch');
+    inp.value = name; inp.dataset.hn = hn;
+    document.getElementById('appCustResults').classList.add('hidden');
+    selectedCoursesForApp = []; renderSelectedCourses();
+};
+
+window.searchCourseForApp = function() {
+    const resDiv = document.getElementById('appCourseResults');
+    const hn = document.getElementById('appCustSearch').dataset.hn;
+    if (!hn) { alert("⚠️ กรุณาเลือกชื่อลูกค้าก่อนค่ะ"); return; }
+    const db = JSON.parse(localStorage.getItem('customerDB')) || [];
+    const customer = db.find(c => c.hn === hn);
+    const courses = customer ? customer.courses || [] : [];
+    if (courses.length > 0) {
+        resDiv.innerHTML = courses.map(c => {
+            const total = c.totalAmount || 10;
+            const currentRound = (total - c.amount) + 1;
+            return `<div onclick="selectCourseForApp('${c.name}', ${currentRound}, ${total})" class="p-4 hover:bg-pink-50 cursor-pointer border-b border-pink-50 flex justify-between font-normal"><span class="text-sm font-bold">${c.name}</span><span class="text-[10px] text-pink-400 font-bold">ครั้งที่ ${currentRound}/${total}</span></div>`;
+        }).join('');
+        resDiv.classList.remove('hidden');
+    } else { resDiv.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs font-normal">ไม่มีคอร์สสะสม</div>`; resDiv.classList.remove('hidden'); }
+};
+
+window.selectCourseForApp = function(name, round, total) {
+    const courseText = `${name} (${round}/${total})`;
+    if (!selectedCoursesForApp.includes(courseText)) {
+        selectedCoursesForApp.push(courseText); renderSelectedCourses();
+    }
+    document.getElementById('appCourseResults').classList.add('hidden');
+    document.getElementById('appCourse').value = "";
+};
+
+window.renderSelectedCourses = function() {
+    const container = document.getElementById('selectedCoursesContainer');
+    if (container) {
+        container.innerHTML = selectedCoursesForApp.map((c, i) => `<div class="bg-pink-50 text-[#FF4B91] border border-pink-200 px-3 py-1.5 rounded-xl text-[10px] font-bold flex items-center gap-2 font-normal animate-in slide-in-from-left"><span>✨ ${c}</span><button onclick="removeCourseFromApp(${i})" class="hover:text-red-500 font-normal">✕</button></div>`).join('');
+    }
+};
+
+window.removeCourseFromApp = function(i) {
+    selectedCoursesForApp.splice(i, 1); renderSelectedCourses();
+};
+
+window.saveNewAppointment = function(editIndex = null) {
+    const hnInput = document.getElementById('appCustSearch');
+    const name = hnInput.value;
+    if (!name || selectedCoursesForApp.length === 0) { alert("⚠️ กรุณากรอกข้อมูลและเลือกคอร์สค่ะ"); return; }
+    const newApp = {
+        hn: hnInput.dataset.hn || "ทั่วไป", customerName: name, date: document.getElementById('appDate').value,
+        time: document.getElementById('appHour').value + ":" + document.getElementById('appMin').value,
+        doctor: document.getElementById('appDoc').value, staff: document.getElementById('appStaff').value || "-",
+        course: selectedCoursesForApp.join(', '), status: document.getElementById('appStatus').value,
+        note: document.getElementById('appNote').value, createdAt: new Date().getTime()
+    };
+    let db = JSON.parse(localStorage.getItem('appointmentDB')) || [];
+    if (editIndex !== null && editIndex !== undefined && editIndex !== "") db[editIndex] = newApp; 
+    else db.push(newApp);
+    localStorage.setItem('appointmentDB', JSON.stringify(db));
+    alert("✅ บันทึกนัดหมายสำเร็จ!"); closeAppModal(); renderAppointmentPage();
+};
+
+window.deleteAppointment = function(index) {
+    if(confirm("คุณต้องการลบนัดหมายนี้ใช่หรือไม่?")) {
+        let db = JSON.parse(localStorage.getItem('appointmentDB')) || [];
+        db.splice(index, 1); localStorage.setItem('appointmentDB', JSON.stringify(db));
+        renderAppointmentPage();
+    }
+};
+
+window.toggleAppActionMenu = function(event, index) {
+    event.stopPropagation();
+    const menuId = `app-action-menu-${index}`;
+    document.querySelectorAll("[id^='app-action-menu-']").forEach(m => { if(m.id !== menuId) m.classList.add('hidden'); });
+    const currentMenu = document.getElementById(menuId);
+    if(currentMenu) currentMenu.classList.toggle('hidden');
+};
+
+window.editAppointment = function(index) { openAppointmentModal(index); };
+window.closeAppModal = function() { const m = document.getElementById('appModal'); if (m) m.remove(); };
+document.addEventListener('click', () => { document.querySelectorAll("[id^='app-action-menu-']").forEach(m => m.classList.add('hidden')); });
+
+window.printDailyReport = function() {
+    const appointments = JSON.parse(localStorage.getItem('appointmentDB')) || [];
+    const dateFilter = document.getElementById('filterDate')?.value;
+    
+    if (!dateFilter) {
+        alert("⚠️ กรุณาเลือกวันที่ต้องการพิมพ์รายงานก่อนค่ะ");
+        return;
+    }
+
+    const dailyList = appointments.filter(ap => ap.date === dateFilter);
+    if (dailyList.length === 0) { alert("❌ ไม่พบข้อมูลนัดหมายในวันที่เลือก"); return; }
+    dailyList.sort((a, b) => a.time.localeCompare(b.time));
+
+    const p = window.open('', '_blank');
+    p.document.write(`
+        <html>
+            <head><style>
+                body { font-family:Sarabun,sans-serif; padding:20px; }
+                table { width:100%; border-collapse:collapse; margin-top:20px; }
+                th, td { border:1px solid #ddd; padding:10px; text-align:center; font-size:14px; }
+                th { background:#FFF0F5; color:#D48197; }
+            </style></head>
+            <body>
+                <h1 style="text-align:center;color:#FF4B91;">ACE CLINIC</h1>
+                <h3 style="text-align:center;">ใบบันทึกนัดหมายประจำวันที่: ${dateFilter.split('-').reverse().join('-')}</h3>
+                <table>
+                    <thead><tr><th>ลำดับ</th><th>เวลา</th><th>ชื่อ-นามสกุล</th><th>รายการคอร์ส</th><th>แพทย์</th><th>ลายเซ็นลูกค้า</th></tr></thead>
+                    <tbody>
+                        ${dailyList.map((ap, i) => `
+                            <tr>
+                                <td>${i + 1}</td>
+                                <td><b>${ap.time}</b></td>
+                                <td style="text-align:left;">${ap.customerName}</td>
+                                <td style="text-align:left;font-size:12px;">${ap.course || '-'}</td>
+                                <td>${ap.doctor}</td>
+                                <td style="width:120px;"></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                <script>window.print();window.close();<\/script>
+            </body>
+        </html>
+    `);
+    p.document.close();
+};
+
+window.toggleConfirmApp = function(index) {
+    let db = JSON.parse(localStorage.getItem('appointmentDB')) || [];
+    if (db[index]) {
+        // สลับสถานะคอนเฟิร์ม (จริง/เท็จ)
+        db[index].isConfirm = !db[index].isConfirm; 
+        localStorage.setItem('appointmentDB', JSON.stringify(db));
+        // วาดตารางใหม่ทันทีเพื่อแสดงสีเขียว
+        renderAppointmentPage(); 
+    }
+};
+
+/* --- ✨ ฟังก์ชันบันทึก OPD ฉบับสมบูรณ์ (รองรับทุกประเภทฟอร์ม) --- */
+window.saveTreatmentHistory = function(index) {
+    const typeSelect = document.getElementById('opdTypeSelector');
+    const selectedType = typeSelect ? typeSelect.value : 'general';
+    let detailToSave = "";
+
+    // 1. ถ้าเป็น "คอร์สฉีดผิว" ให้ดึงข้อมูลจากตาราง 14 ช่อง
+    if (selectedType === 'skin_injection') {
+        const tables = document.querySelectorAll('#opd-dynamic-layout table');
+        let records = [];
+        tables.forEach(table => {
+            const rows = table.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const courseText = row.cells[2].innerText.trim();
+                if (courseText) {
+                    records.push(`ครั้งที่ ${row.cells[0].innerText}: ${courseText}`);
+                }
+            });
+        });
+        detailToSave = records.length > 0 ? "💉 บันทึกฉีดผิว:\n" + records.join("\n") : "";
+    } 
+    // 2. ถ้าเป็น Botox หรือ เส้นเลือดขอด หรือ ทั่วไป
+    else {
+        // ดึงข้อความจากส่วนบันทึก (ถ้ามี)
+        const notes = document.getElementById('treatmentNotes');
+        detailToSave = notes ? notes.value.trim() : "บันทึกหัตถการ (วาดตำแหน่งลงในใบ OPD)";
+    }
+
+    if (!detailToSave) {
+        alert("⚠️ ยังไม่มีข้อมูลรายการคอร์สหรือบันทึกเพื่อจัดเก็บค่ะ");
+        return;
+    }
+
+    // สร้างก้อนข้อมูลสำหรับเก็บเข้าประวัติลูกค้า
+    const record = {
+        date: new Date().toLocaleDateString('th-TH'),
+        time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+        detail: detailToSave,
+        fileName: `OPD_${selectedType.toUpperCase()}_${Date.now()}`
+    };
+
+    // บันทึกลงใน Array treatments ของลูกค้าคนนั้นๆ
+    if (!customerDB[index].treatments) customerDB[index].treatments = [];
+    customerDB[index].treatments.push(record);
+
+    // เซฟลงฐานข้อมูลหลัก (localStorage)
+    localStorage.setItem('customerDB', JSON.stringify(customerDB));
+    
+    alert("✅ บันทึกประวัติการรักษาลงหน้า 'เอกสารแนบ' เรียบร้อยแล้วค่ะ!");
+};
+/* --- ฟังก์ชันเตรียมเอกสารก่อนสั่งพิมพ์ --- */
+window.prepareAndPrintOPD = function() {
+    const notes = document.getElementById('treatmentNotes').value;
+    document.getElementById('printableNotesDisplay').innerText = notes;
+    window.print();
+};
+/* --- ฟังก์ชันเสริม: ลบประวัติบันทึกการรักษา --- */
+window.deleteTreatmentRecord = function(customerIndex, recordIndex) {
+    if(confirm("คุณต้องการลบบันทึกการรักษานี้ใช่หรือไม่?")) {
+        customerDB[customerIndex].treatments.splice(recordIndex, 1);
+        localStorage.setItem('customerDB', JSON.stringify(customerDB));
+        // สั่งวาดหน้าจอแท็บเอกสารแนบใหม่ทันที
+        switchProfileTab(4, customerIndex);
+    }
+};
+
+</script>
 </body>
 </html>

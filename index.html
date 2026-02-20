@@ -107,6 +107,7 @@
     white-space: nowrap; /* ป้องกันตัวหนังสือตัดบรรทัด */
 }
 
+
 /* --- ปรับปรุงรูปโปรไฟล์และตาราง (Responsive) --- */
 .customer-photo {
     width: 45px !important;
@@ -336,130 +337,111 @@ position: relative;
 
 <body>
 
-<div id="customerModal" 
+<div id="customerModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-[10000] animate-in fade-in duration-300">
+    <div class="bg-white w-full max-w-6xl rounded-[2rem] shadow-2xl overflow-hidden border-2 border-pink-200 font-normal">
+        
+        <div class="bg-white p-6 flex justify-between items-center border-b-2 border-pink-100">
+            <h2 id="modalTitle" class="text-2xl font-bold text-slate-800 uppercase tracking-tight">เพิ่มลูกค้าใหม่</h2>
+            <div class="flex gap-2">
+                <button onclick="alert('อ่านข้อมูลบัตร...')" class="bg-[#D48197] text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:brightness-110 transition-all uppercase shadow-md">อ่านข้อมูลบัตร</button>
+                <button onclick="saveCustomer()" class="bg-[#D48197] text-white px-8 py-2.5 rounded-xl text-xs font-bold hover:brightness-110 transition-all uppercase shadow-md">บันทึกข้อมูล</button>
+                <button onclick="closeModal()" class="bg-[#888] text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:bg-slate-700 transition-all uppercase shadow-md">ยกเลิก</button>
+            </div>
+        </div>
 
-class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
-
-  <div class="bg-white w-full max-w-3xl rounded-3xl p-8 max-h-[90vh] overflow-y-auto">
-
-
-
-    <h2 class="text-2xl font-bold mb-6 text-purple-700">
-
-      <span id="modalTitle">+ เพิ่มลูกค้าใหม่</span>
-
-    </h2>
-
-
-
-    <div class="space-y-4">
-
-
-
-      <input id="modalHN" placeholder="HN (ไม่กรอกจะสร้างอัตโนมัติ)"
-
-        class="w-full border px-4 py-3 rounded-xl">
-
-
-
-      <div class="grid grid-cols-2 gap-4">
-
-        <input id="modalFirstName" placeholder="ชื่อจริง *"
-
-          class="border px-4 py-3 rounded-xl">
-
-        <input id="modalLastName" placeholder="นามสกุล *"
-
-          class="border px-4 py-3 rounded-xl">
-
-      </div>
-
-
-
-      <input id="modalNickname" placeholder="ชื่อเล่น"
-
-        class="w-full border px-4 py-3 rounded-xl">
-
-
-
-      <input id="modalPhone" placeholder="เบอร์โทร *"
-
-        class="w-full border px-4 py-3 rounded-xl">
-
-
-
-      <input id="modalCitizenId" placeholder="เลขบัตรประชาชน"
-
-        class="w-full border px-4 py-3 rounded-xl">
-
-
-
-      <textarea id="modalAddress" placeholder="ที่อยู่"
-
-        class="w-full border px-4 py-3 rounded-xl"></textarea>
-
-
-
-      <input id="modalLine" placeholder="Line UID"
-
-        class="w-full border px-4 py-3 rounded-xl">
-
-
-
-      <div class="grid grid-cols-2 gap-4">
-
-        <select id="modalBranch" class="border px-4 py-3 rounded-xl">
-
-          <option value="">-- เลือกสาขา --</option>
-
-          <option value="สาขาบางพลี">สาขาบางพลี</option>
-
-          <option value="สาขาชลบุรี">สาขาชลบุรี</option>
-
-          <option value="สาขาอุดมสุข">สาขาอุดมสุข</option>
-
-        </select>
-
-
-
-        <select id="modalStatus" class="border px-4 py-3 rounded-xl">
-
-          <option value="ใช้งาน">ใช้งาน</option>
-
-          <option value="ปิดใช้งาน">ปิดใช้งาน</option>
-
-        </select>
-
-      </div>
-
-
-
+        <div class="p-8 max-h-[80vh] overflow-y-auto bg-[#FDF7F8] text-left">
+            <div class="flex flex-col lg:flex-row gap-10">
+                
+                <div class="w-full lg:w-[300px] space-y-4">
+                    <div class="bg-white p-6 rounded-2xl border-2 border-pink-200 shadow-sm text-center">
+                        <div class="w-48 h-48 bg-[#FFF0F5] border-2 border-dashed border-[#E4C580] rounded-2xl mx-auto flex flex-col items-center justify-center text-[#D48197] relative overflow-hidden group">
+    <img id="photoPreview" class="absolute inset-0 w-full h-full object-cover hidden">
+    <div id="uploadPlaceholder" class="flex flex-col items-center">
+        <span class="text-4xl">📸</span>
+        <span class="text-[10px] font-bold uppercase mt-2">ID PHOTO</span>
     </div>
-
-
-    <div class="flex justify-end gap-4 mt-6">
-
-      <button type="button" class="btn-cancel" onclick="closeModal()">
-
-  ยกเลิก
-
-</button>
-
-
-
-      <button onclick="saveCustomer()"
-
-        class="px-6 py-3 bg-pink-600 text-white rounded-xl">บันทึก</button>
-
-    </div>
-
-
-
-  </div>
-
+    <input type="file" id="modalPhotoInput" onchange="handlePhotoUpload(event)" class="absolute inset-0 opacity-0 cursor-pointer">
 </div>
+                        <div class="mt-8 space-y-4 text-left font-bold">
+                            <div class="space-y-1">
+                                <label class="text-[11px] text-[#D48197] uppercase ml-1">สถานะสมาชิก</label>
+                                <select id="modalStatus" class="w-full border-2 border-pink-200 p-3 rounded-xl text-sm bg-white outline-none focus:border-[#D48197] text-slate-800">
+                                    <option value="ปกติ">🟢 ปกติ (General)</option>
+                                    <option value="VIP">⭐ VIP Member</option>
+                                    <option value="Blacklist">🚫 ระงับการใช้งาน</option>
+                                </select>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[11px] text-[#D48197] uppercase ml-1">เลือกสาขาประจำ</label>
+                                <select id="modalBranch" class="w-full border-2 border-pink-200 p-3 rounded-xl text-sm bg-white outline-none focus:border-[#D48197] text-slate-800">
+                                    <option value="สาขาบางพลี">📍 สาขาบางพลี</option>
+                                    <option value="สาขาชลบุรี">📍 สาขาชลบุรี</option>
+                                    <option value="สาขาอุดมสุข">📍 สาขาอุดมสุข</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
+                <div class="flex-1 space-y-6">
+                    <div class="bg-white p-8 rounded-2xl border-2 border-pink-200 shadow-sm grid grid-cols-2 md:grid-cols-4 gap-6">
+                        
+                        <div class="col-span-2 space-y-1">
+                            <label class="text-[11px] font-bold text-[#D48197] uppercase">รหัสลูกค้า (HN)</label>
+                            <input id="modalHN" type="text" class="w-full bg-slate-50 border-2 border-slate-200 p-3 rounded-xl text-base font-black text-[#D48197]" readonly>
+                        </div>
+                      <div class="col-span-2 space-y-1">
+    <label class="text-[11px] font-bold text-[#D48197] uppercase">👤 เซลล์ผู้ดูแล (พิมพ์ชื่อเพื่อล็อกคอมมิชชั่น)</label>
+    <input type="text" id="modalSeller" 
+        placeholder="ระบุชื่อพนักงานที่ดูแล..." 
+        class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900 bg-white outline-none focus:border-[#D48197] disabled:bg-slate-100 disabled:text-slate-400 transition-all">
+</div>
+                        
+                        <div class="space-y-1">
+                            <label class="text-[11px] font-bold text-[#D48197] uppercase">ชื่อจริง *</label>
+                            <input id="modalFirstName" type="text" class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900 focus:bg-pink-50 outline-none transition-all">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[11px] font-bold text-[#D48197] uppercase">นามสกุล *</label>
+                            <input id="modalLastName" type="text" class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900 focus:bg-pink-50 outline-none transition-all">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[11px] font-bold text-[#D48197] uppercase">ชื่อเล่น</label>
+                            <input id="modalNickname" type="text" class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900 outline-none">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[11px] font-bold text-[#D48197] uppercase">วันเดือนปีเกิด *</label>
+                            <input id="modalBirthDate" type="date" class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900 outline-none">
+                        </div>
 
+                        <div class="col-span-2 space-y-1">
+                            <label class="text-[11px] font-bold text-[#D48197] uppercase">เบอร์โทรศัพท์มือถือ *</label>
+                            <input id="modalPhone" type="text" class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900">
+                        </div>
+                        <div class="col-span-2 space-y-1">
+                            <label class="text-[11px] font-bold text-[#D48197] uppercase">อีเมล (E-mail)</label>
+                            <input id="modalEmail" type="email" class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900 placeholder:text-slate-300" placeholder="customer@email.com">
+                        </div>
+
+                        <div class="col-span-2 space-y-1">
+                            <label class="text-[11px] font-bold text-[#D48197] uppercase">Line ID / UID</label>
+                            <input id="modalLine" type="text" class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900">
+                        </div>
+                        <div class="col-span-2 space-y-1">
+                            <label class="text-[11px] font-bold text-red-500 uppercase">🚨 ประวัติการแพ้ยา (ระบุชื่อยา)</label>
+                            <input id="modalAllergy" type="text" class="w-full border-2 border-red-300 p-3 rounded-xl text-base font-bold text-red-600 bg-red-50" placeholder="หากไม่มีใส่ 'ไม่มี'">
+                        </div>
+
+                        <div class="col-span-4 space-y-1">
+                            <label class="text-[11px] font-bold text-[#D48197] uppercase">ที่อยู่จัดส่งเอกสาร / ที่อยู่ปัจจุบัน</label>
+                            <textarea id="modalAddress" class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900 h-24 outline-none focus:bg-pink-50 transition-all"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
    <div id="loginPage" class="min-h-screen flex items-center justify-center p-4 bg-[#FDF7F8] bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
         <div class="bg-white p-10 rounded-[3rem] shadow-2xl w-full max-w-md border border-[#E4C580]/30 text-center animate-in fade-in zoom-in duration-500">
@@ -1322,7 +1304,7 @@ function renderCustomerList(target) {
 
     <div class="glass-card shadow-2xl">
         <table class="w-full text-left text-xs">
-            <thead class="bg-pink-50 border-b text-[#D48197]"><th class="p-1 text-center font-normal w-[40px]">ยืนยัน</th>
+            <thead class="bg-pink-50 border-b text-[#D48197]">
                 <tr>
                     <th class="p-3">ลำดับ</th><th class="p-3">รูป</th><th class="p-3">สร้างเมื่อ</th>
                     <th class="p-3">HN</th><th class="p-3">ชื่อ-นามสกุล</th><th class="p-3">ชื่อเล่น</th>
@@ -1436,7 +1418,7 @@ function renderCustomerTable(data) {
                         </button>
                         <button onclick="toggleActionMenu(event, ${index})" 
                                 class="px-2 py-1 text-[11px] hover:bg-white/10 rounded-r-full transition-all">
-                            ▼
+                             ▼
                         </button>
                         
                         <div id="action-menu-${index}" 
@@ -1459,6 +1441,7 @@ function renderCustomerTable(data) {
             </tr>`;
     });
 }
+    
       
 
         /* --- [4.5 PROFILE: หน้าละเอียดลูกค้า] --- */
@@ -2737,9 +2720,14 @@ let selectedCoursesForApp = [];
 let currentAppPage = 1; 
 let appRowsPerPage = 10; 
 
+/* =======================================================
+    🎯 ระบบนัดหมาย (APPOINTMENT SYSTEM LUXURY) - [ฉบับแก้ไขปุ่มตรง 100%]
+   ======================================================= */
 window.renderAppointmentPage = function() {
     const target = document.getElementById('dynamicContent');
     if (!target) return;
+    
+    // ดึงฐานข้อมูลหลัก
     const appointments = JSON.parse(localStorage.getItem('appointmentDB')) || [];
     
     // ตั้งค่าตัวแปรเบื้องต้น
@@ -2747,7 +2735,6 @@ window.renderAppointmentPage = function() {
     const dateFilter = document.getElementById('filterDate')?.value || today;
     const currentSearch = document.getElementById('appSearchInput')?.value || "";
     const statusFilter = document.getElementById('statusFilter')?.value || "ทั้งหมด";
-    const doctorFilter = document.getElementById('doctorFilter')?.value || "ทั้งหมด";
     appRowsPerPage = parseInt(document.getElementById('appPageSize')?.value) || 10;
 
     const formatDateTH = (dateStr) => {
@@ -2756,7 +2743,7 @@ window.renderAppointmentPage = function() {
         return `${d}-${m}-${y}`;
     };
 
-    // 1. กรองข้อมูล
+    // กรองข้อมูลตามการค้นหา/วันที่
     let filteredData = appointments.filter(ap => {
         const matchSearch = ap.customerName.toLowerCase().includes(currentSearch.toLowerCase()) || 
                            (ap.hn && ap.hn.toLowerCase().includes(currentSearch.toLowerCase()));
@@ -2765,114 +2752,139 @@ window.renderAppointmentPage = function() {
         return matchSearch && matchStatus && matchDate;
     });
 
+    // เรียงลำดับตามเวลา
     filteredData.sort((a, b) => a.time.localeCompare(b.time));
 
+    // คำนวณหน้า
     const totalPages = Math.ceil(filteredData.length / appRowsPerPage) || 1;
     const startIndex = (currentAppPage - 1) * appRowsPerPage;
     const paginatedData = filteredData.slice(startIndex, startIndex + appRowsPerPage);
 
-target.innerHTML = `
-    <div class="animate-in fade-in duration-500 font-normal uppercase">
-        <div class="glass-card mb-8 border border-pink-200 shadow-sm p-4 rounded-3xl font-normal">
+    target.innerHTML = `
+    <div class="animate-in fade-in duration-500 font-extralight uppercase">
+        <div class="glass-card mb-8 border border-pink-200 shadow-sm p-4 rounded-3xl">
             <div class="flex flex-col md:flex-row justify-between items-center gap-4">
                 <div class="flex flex-wrap gap-2 items-center flex-1">
-                    <select id="appPageSize" onchange="currentAppPage=1; renderAppointmentPage()" class="border border-pink-200 px-3 py-2 rounded-xl text-[10px] outline-none bg-white font-normal">
+                    <select id="appPageSize" onchange="currentAppPage=1; renderAppointmentPage()" class="border border-pink-200 px-3 py-2 rounded-xl text-[10px] outline-none bg-white font-extralight">
                         <option value="10" ${appRowsPerPage==10?'selected':''}>10 รายการ</option>
                         <option value="30" ${appRowsPerPage==30?'selected':''}>30 รายการ</option>
                     </select>
-                    <select id="statusFilter" onchange="currentAppPage=1; renderAppointmentPage()" class="border border-pink-200 px-3 py-2 rounded-xl text-[10px] outline-none bg-white font-normal">
+                    <select id="statusFilter" onchange="currentAppPage=1; renderAppointmentPage()" class="border border-pink-200 px-3 py-2 rounded-xl text-[10px] outline-none bg-white font-extralight">
                         <option value="ทั้งหมด" ${statusFilter === 'ทั้งหมด' ? 'selected' : ''}>สถานะ: ทั้งหมด</option>
                         <option value="รอดำเนินการ" ${statusFilter === 'รอดำเนินการ' ? 'selected' : ''}>🟡 รอดำเนินการ</option>
                         <option value="เสร็จสิ้น" ${statusFilter === 'เสร็จสิ้น' ? 'selected' : ''}>🟢 เสร็จสิ้น</option>
                         <option value="ยกเลิก" ${statusFilter === 'ยกเลิก' ? 'selected' : ''}>🔴 ยกเลิก</option>
                         <option value="ไม่มาตามนัด" ${statusFilter === 'ไม่มาตามนัด' ? 'selected' : ''}>🔵 ไม่มาตามนัด</option>
                     </select>
-                    <input type="date" id="filterDate" onchange="currentAppPage=1; renderAppointmentPage()" value="${dateFilter}" class="border border-pink-200 px-3 py-2 rounded-xl text-[10px] outline-none bg-white font-normal">
+                    <input type="date" id="filterDate" onchange="currentAppPage=1; renderAppointmentPage()" value="${dateFilter}" class="border border-pink-200 px-3 py-2 rounded-xl text-[10px] outline-none bg-white font-extralight">
                     
                     <div class="relative flex items-center min-w-[200px]">
                         <input id="appSearchInput" type="text" placeholder="🔍 ค้นชื่อ / HN" value="${currentSearch}" 
                             onkeyup="if(event.key === 'Enter') { currentAppPage=1; renderAppointmentPage(); }"
-                            class="w-full border border-pink-200 px-4 py-2 rounded-xl text-[10px] outline-none bg-white pr-14 font-normal">
-                        <button onclick="currentAppPage=1; renderAppointmentPage()" class="absolute right-1 top-1 bottom-1 bg-black text-white px-3 rounded-lg hover:brightness-125 transition-all text-[9px] font-normal">ค้นหา</button>
+                            class="w-full border border-pink-200 px-4 py-2 rounded-xl text-[10px] outline-none bg-white pr-14 font-extralight">
+                        <button onclick="currentAppPage=1; renderAppointmentPage()" class="absolute right-1 top-1 bottom-1 bg-black text-white px-3 rounded-lg hover:brightness-125 transition-all text-[9px] font-extralight">ค้นหา</button>
                     </div>
                 </div>
-                
                 <div class="flex gap-2">
-                    <button onclick="printDailyReport()" class="w-28 bg-slate-100 text-slate-500 px-4 py-2 rounded-xl text-[9px] uppercase tracking-tighter font-normal">📊 รายงานนัด</button>
-                    <button onclick="openAppointmentModal()" class="w-28 bg-black text-white px-4 py-2 rounded-xl text-[9px] uppercase tracking-tighter font-normal">+ เพิ่มนัดหมาย</button>
+                    <button onclick="printDailyReport()" class="w-28 bg-slate-100 text-slate-500 px-4 py-2 rounded-xl text-[9px] uppercase tracking-tighter font-extralight">📊 รายงานนัด</button>
+                    <button onclick="openAppointmentModal()" class="w-28 bg-black text-white px-4 py-2 rounded-xl text-[9px] uppercase tracking-tighter font-extralight">+ เพิ่มนัดหมาย</button>
                 </div>
             </div>
         </div>
 
-        <div class="bg-white rounded-[3rem] shadow-2xl border border-pink-200 overflow-hidden font-normal">
-            <table class="w-full text-center text-xs border-collapse font-normal">
-                <thead class="bg-[#D48197] text-white">
+       <div class="bg-white rounded-[2rem] shadow-2xl border border-pink-200 overflow-visible font-extralight mt-4 p-8">
+        <table class="w-full text-center text-[12px] border-collapse overflow-visible">
+                <thead class="bg-[#D48197] text-white font-light">
                     <tr>
-                        <th class="p-2 font-normal w-[40px]">ยืนยัน</th>
-                        <th class="p-2 font-normal w-[40px]">ลำดับ</th>
-                        <th class="p-2 font-normal">วันที่ / เวลา</th>
-                        <th class="p-2 font-normal">HN</th>
-                        <th class="p-2 font-normal text-left">ชื่อ-นามสกุล</th>
-                        <th class="p-2 font-normal">โดยแพทย์</th>
-                        <th class="p-2 font-normal w-[60px]">พนักงาน</th>
-                        <th class="p-2 font-normal">รายการคอร์ส</th>
-                        <th class="p-2 font-normal">สถานะ</th>
-                        <th class="p-2 font-normal">จัดการ</th>
+                        <th class="p-2 w-[80px] text-white font-extralight">เฟิร์มคิว</th>
+                        <th class="p-2 w-[20px]">ลำดับ</th>
+                        <th class="p-2 w-[80px]">วันที่/เวลา</th>
+                        <th class="p-2 w-[70px]">HN</th>
+                        <th class="p-2 text-left w-[140px]">ชื่อ-นามสกุล</th>
+                        <th class="p-2 w-[40px]">เซลล์</th> 
+                        <th class="p-2 w-[60px]">แพทย์</th>
+                        <th class="p-2 w-[60px]">พนักงาน</th>
+                        <th class="p-2 text-left w-[400px]">รายการคอร์ส</th> 
+                        <th class="p-2 w-[60px]">สถานะ</th>
+                        <th class="p-2 w-[80px]">จัดการ</th>
                     </tr>
                 </thead>
-                <tbody class="text-slate-600 font-normal">
-                    ${paginatedData.length > 0 ? paginatedData.map((ap, i) => `
-                        <tr class="border-b border-pink-50 hover:bg-pink-50/20 font-normal">
-                            <td class="p-1 font-normal">
-                                <button onclick="toggleConfirmApp(${startIndex + i})" 
-                                    class="w-5 h-5 rounded-full border transition-all flex items-center justify-center mx-auto
-                                    ${ap.isConfirm ? 'bg-[#D48197] border-[#D48197] text-white' : 'border-slate-300 text-slate-300'}">
-                                    <span style="font-size: 8px;">✔️</span>
+                <tbody class="text-slate-500 font-extralight">
+                    ${paginatedData.length > 0 ? paginatedData.map((ap, i) => {
+                        // 🎯 ค้นหา Index ที่แท้จริงในฐานข้อมูลหลักโดยอ้างอิงจาก createdAt
+                        const realIndex = appointments.findIndex(item => item.createdAt === ap.createdAt);
+                        
+                        const customers = JSON.parse(localStorage.getItem('customerDB')) || [];
+                        const customerInfo = customers.find(c => c.hn === ap.hn);
+                        const sellerName = customerInfo ? (customerInfo.sellerName || '-') : '-';
+
+                        return `
+                        <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all font-extralight text-slate-600">
+                            <td class="p-1">
+                                <button onclick="toggleConfirmApp(${realIndex})" 
+                                    class="w-4 h-4 rounded-full border transition-all flex items-center justify-center mx-auto
+                                    ${ap.isConfirm ? 'bg-[#D48197] border-[#D48197] text-white' : 'border-slate-200 text-slate-200'}">
+                                    <span style="font-size: 7px;">✔️</span>
                                 </button>
                             </td>
-                            <td class="p-1 text-[10px] font-normal text-center">${startIndex + i + 1}</td>
-                            <td class="p-1 text-[10px] font-normal text-center">${formatDateTH(ap.date)}<br><span class="text-[#FF4B91] font-normal">${ap.time} น.</span></td>
-                            <td class="p-1 text-slate-800 font-normal text-center">${ap.hn}</td>
-                            <td class="p-1 text-slate-700 text-sm text-left font-normal">${ap.customerName}</td>
-                            <td class="p-1 text-slate-500 font-normal text-center">พญ.${ap.doctor}</td>
-                            <td class="p-1 text-[10px] text-slate-400 font-normal text-center">${ap.staff || '-'}</td>
-                            <td class="p-1 text-slate-800 text-[11px] text-left font-normal">
-                                <div class="flex flex-col gap-0 font-normal">
-                                    ${ap.course ? ap.course.split(', ').map(c => `<span>• ${c}</span>`).join('') : '-'}
-                                </div>
+                            <td class="p-1 text-center">${startIndex + i + 1}</td>
+                            <td class="p-1 text-[9px] leading-tight text-center">${formatDateTH(ap.date)}<br><span class="text-[#D48197] font-light">${ap.time}</span></td>
+                            <td class="p-1 text-center">${ap.hn || '-'}</td>
+                            <td class="p-1 text-left truncate font-light text-slate-700">${ap.customerName}</td>
+                            <td class="p-1 text-[#D48197] truncate italic text-center font-medium">${sellerName}</td> 
+                            <td class="p-1 truncate text-center">พญ.${ap.doctor}</td>
+                            <td class="p-1 truncate text-center">${ap.staff || '-'}</td>
+                            <td class="p-1 text-left leading-tight font-extralight">
+                                <div class="break-words line-clamp-2 w-full">${ap.course || '-'}</div>
                             </td>
-                            <td class="p-1 font-normal text-center">
-                                <span class="text-[10px] font-normal uppercase ${
-                                    ap.status === 'รอดำเนินการ' ? 'text-yellow-500' : 
-                                    ap.status === 'เสร็จสิ้น' ? 'text-green-600' : 
-                                    ap.status === 'ยกเลิก' ? 'text-red-500' : 
-                                    ap.status === 'ไม่มาตามนัด' ? 'text-blue-500' : 'text-slate-400'
-                                }">${ap.status}</span>
+                            <td class="p-1 text-center">
+                                <span class="text-[8px] uppercase ${ap.status === 'เสร็จสิ้น' ? 'text-green-500' : 'text-yellow-500'}">${ap.status}</span>
                             </td>
-                            <td class="p-1 relative font-normal text-center">
-                                <div class="inline-flex items-center bg-[#D48197] text-white rounded-full p-1 shadow-md font-normal">
-                                    <button onclick="editAppointment(${startIndex + i})" class="px-4 py-1 text-[10px] border-r border-white/30 hover:bg-white/10 rounded-l-full uppercase font-normal">แก้ไข</button>
-                                    <button onclick="toggleAppActionMenu(event, ${startIndex + i})" class="px-2 py-1 text-[10px] hover:bg-white/10 rounded-r-full transition-all font-normal">▼</button>
+                            
+                          <td class="p-1 text-center" style="position: relative; overflow: visible !important;">
+                            <div class="relative flex items-center justify-center" style="overflow: visible !important;">
+                                <div class="inline-flex items-center bg-[#D48197] text-white rounded-full shadow-sm scale-90 relative">
+                                    <button type="button" onclick="editAppointment(${realIndex})" 
+                                        class="pl-4 pr-3 py-2 border-r border-white/20 hover:bg-black/10 text-[12px] uppercase font-extralight">แก้ไข</button>
                                     
-<div id="app-action-menu-${startIndex + i}" class="hidden absolute right-0 top-12 w-52 bg-white border border-pink-200 rounded-2xl shadow-2xl z-[999] overflow-hidden text-left text-slate-600 font-normal">
-    <button onclick="alert('🔄 จัดการคิว')" class="w-full p-4 text-[10px] text-green-600 hover:bg-green-50 border-b flex items-center gap-2 font-normal uppercase">🔄 จัดการคิว</button>
-    
-    <button onclick="alert('🗓️ ดูวันนัดทั้งหมด')" class="w-full p-4 text-[10px] hover:bg-pink-50 border-b flex items-center gap-2 uppercase font-normal">🗓️ ดูวันนัดทั้งหมด</button>
-    
-    <button onclick="printAppointmentTicket(${startIndex + i})" class="w-full p-4 text-[10px] text-blue-600 hover:bg-blue-50 border-b flex items-center gap-2 font-normal uppercase">📄 พิมพ์บัตรนัด</button>
-    <button onclick="deleteAppointment(${startIndex + i})" class="w-full p-4 text-[10px] text-red-500 hover:bg-red-50 flex items-center gap-2 font-normal uppercase">🗑️ ลบนัดหมาย</button>
-</div>
+                                    <button type="button" 
+                                            onclick="event.preventDefault(); event.stopPropagation(); window.toggleAppActionMenu(event, ${realIndex})" 
+                                            class="px-2.5 py-2 hover:bg-black/10 flex items-center justify-center cursor-pointer">
+                                        <span style="font-size: 9px; pointer-events: none;">▼</span>
+                                    </button>
                                 </div>
-                            </td>
-                        </tr>`).join('') : `<tr><td colspan="10" class="p-20 text-center text-slate-300 italic font-normal">ไม่พบข้อมูลนัดหมาย...</td></tr>`}
+
+                                <div id="app-action-menu-${realIndex}" 
+                                     class="hidden absolute right-0 bg-white border border-pink-100 rounded-2xl shadow-2xl text-left text-slate-600 font-normal w-48"
+                                     style="top: 40px; z-index: 10000 !important; min-width: 190px;">
+                                    
+                                    <div class="flex flex-col">
+                                        <button onclick="alert('🔄 จัดการคิว')" class="w-full px-5 py-3 text-[11px] text-green-600 hover:bg-green-50 border-b border-gray-50 flex items-center gap-3 transition-colors">
+                                            <span class="text-sm">🔄</span> <span>จัดการคิว</span>
+                                        </button>
+                                        <button onclick="alert('🗓️ ดูวันนัดทั้งหมด')" class="w-full px-5 py-3 text-[11px] text-gray-500 hover:bg-gray-50 border-b border-gray-50 flex items-center gap-3 transition-colors">
+                                            <span class="text-sm">🗓️</span> <span>ดูวันนัดทั้งหมด</span>
+                                        </button>
+                                        <button onclick="printAppointmentTicket(${realIndex})" class="w-full px-5 py-3 text-[11px] text-blue-600 hover:bg-blue-50 border-b border-gray-50 flex items-center gap-3 transition-colors">
+                                            <span class="text-sm">📄</span> <span>พิมพ์บัตรนัด</span>
+                                        </button>
+                                        <button onclick="deleteAppointment(${realIndex})" class="w-full px-5 py-3 text-[11px] text-red-500 hover:bg-red-50 flex items-center gap-3 font-bold transition-colors">
+                                            <span class="text-sm">🗑️</span> <span>ลบนัดหมาย</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        </tr>`;
+                    }).join('') : `<tr><td colspan="11" class="p-20 text-center text-slate-300 italic font-extralight">ไม่พบข้อมูลนัดหมาย...</td></tr>`}
                 </tbody>
             </table>
         </div>
-        
-        <div class="flex justify-center items-center gap-4 mt-8 mb-10 font-normal">
-            <button onclick="changeAppPage(-1)" ${currentAppPage === 1 ? 'disabled' : ''} class="px-6 py-2 bg-white border border-pink-200 rounded-2xl disabled:opacity-30 text-[10px] hover:bg-pink-50 font-normal">ก่อนหน้า</button>
-            <span class="text-[11px] text-[#D48197] font-normal">หน้า ${currentAppPage} / ${totalPages}</span>
-            <button onclick="changeAppPage(1)" ${currentAppPage === totalPages ? 'disabled' : ''} class="px-6 py-2 bg-white border border-pink-200 rounded-2xl disabled:opacity-30 text-[10px] hover:bg-pink-50 font-normal">ถัดไป</button>
+
+        <div class="flex justify-center items-center gap-4 mt-8 mb-10 font-extralight">
+            <button onclick="changeAppPage(-1)" ${currentAppPage === 1 ? 'disabled' : ''} class="px-6 py-2 bg-white border border-pink-200 rounded-2xl disabled:opacity-30 text-[10px] hover:bg-pink-50 transition-all">ก่อนหน้า</button>
+            <span class="text-[11px] text-[#D48197]">หน้า ${currentAppPage} / ${totalPages}</span>
+            <button onclick="changeAppPage(1)" ${currentAppPage === totalPages ? 'disabled' : ''} class="px-6 py-2 bg-white border border-pink-200 rounded-2xl disabled:opacity-30 text-[10px] hover:bg-pink-50 transition-all">ถัดไป</button>
         </div>
     </div>`;
 };
@@ -3140,48 +3152,186 @@ window.printDailyReport = function() {
     const dateFilter = document.getElementById('filterDate')?.value;
     
     if (!dateFilter) {
-        alert("⚠️ กรุณาเลือกวันที่ต้องการพิมพ์รายงานก่อนค่ะ");
+        alert("⚠️ กรุณาเลือกวันที่ต้องการดูรายงานก่อนค่ะ");
         return;
     }
 
     const dailyList = appointments.filter(ap => ap.date === dateFilter);
     if (dailyList.length === 0) { alert("❌ ไม่พบข้อมูลนัดหมายในวันที่เลือก"); return; }
+    
     dailyList.sort((a, b) => a.time.localeCompare(b.time));
 
     const p = window.open('', '_blank');
     p.document.write(`
         <html>
-            <head><style>
-                body { font-family:Sarabun,sans-serif; padding:20px; }
-                table { width:100%; border-collapse:collapse; margin-top:20px; }
-                th, td { border:1px solid #ddd; padding:10px; text-align:center; font-size:14px; }
-                th { background:#FFF0F5; color:#D48197; }
-            </style></head>
+            <head>
+                <title>รายงานนัดหมาย - ACE Clinic</title>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600&display=swap');
+                    
+                    @page {
+                        size: A4 landscape;
+                        margin: 0.5cm; /* 🎯 ลดขอบกระดาษจริงเพื่อให้พิมพ์ได้กว้างขึ้น */
+                    }
+
+                    body { 
+                        font-family: 'Sarabun', sans-serif; 
+                        padding: 20px; 
+                        margin: 0; 
+                        background: #f4f4f4; 
+                        display: flex;
+                        justify-content: center;
+                    }
+
+                    .no-print-btn { 
+                        position: fixed; 
+                        top: 20px; 
+                        right: 20px; 
+                        background: #D48197; 
+                        color: white; 
+                        border: none; 
+                        padding: 12px 25px; 
+                        border-radius: 30px; 
+                        font-weight: bold; 
+                        cursor: pointer; 
+                        box-shadow: 0 4px 15px rgba(212,129,151,0.4); 
+                        z-index: 1000; 
+                    }
+
+                    /* 🎯 ปรับ container ให้ยืดหยุ่น ไม่ล็อกค่าซม. ที่ตายตัวจนล้น */
+                    .report-container { 
+                        background: white; 
+                        padding: 25px; 
+                        width: 95vw; /* ใช้ความกว้างตามหน้าจอแต่ไม่ให้เต็ม 100% */
+                        max-width: 1100px; 
+                        min-height: 100%;
+                        box-sizing: border-box;
+                        border-radius: 15px;
+                        box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+                    }
+
+                    .header { 
+                        text-align: center; 
+                        margin-bottom: 15px; 
+                        border-bottom: 2px solid #D48197; 
+                        padding-bottom: 10px; 
+                    }
+
+                    .header h1 { color: #D48197; margin: 0; font-size: 24px; }
+                    .header p { margin: 5px 0 0; font-size: 13px; font-weight: bold; color: #555; }
+
+                    table { 
+                        width: 100%; 
+                        border-collapse: collapse; 
+                        table-layout: fixed; /* 🎯 ล็อกช่องให้แบ่งตามสัดส่วน % ไม่ให้ดันจนล้น */
+                    }
+
+                    th { 
+                        background: #FFF0F5; 
+                        color: #D48197; 
+                        padding: 10px 2px; 
+                        font-size: 12px; 
+                        border: 1px solid #eee; 
+                    }
+
+                    td { 
+                        border: 1px solid #eee; 
+                        padding: 6px 4px; 
+                        font-size: 11px; 
+                        word-wrap: break-word; 
+                        vertical-align: top;
+                        outline: none;
+                        color: #444;
+                    }
+
+                    /* 🎯 กำหนดสัดส่วนคอลัมน์เป็น % เพื่อให้พอดีหน้ากระดาษแนวนอน */
+                    .col-num { width: 3%; }
+                    .col-hn { width: 7%; }
+                    .col-time { width: 5%; }
+                    .col-phone { width: 10%; }
+                    .col-name { width: 15%; }
+                    .col-cell { width: 7%; }
+                    .col-doc { width: 13%; }
+                    .col-course { width: 30%; }
+                    .col-sign { width: 10%; }
+
+                    .signature-line {
+                        border-bottom: 1px solid #ddd;
+                        width: 90%;
+                        display: inline-block;
+                        height: 20px;
+                        margin-top: 5px;
+                    }
+
+                    @media print { 
+                        body { background: white; padding: 0; }
+                        .no-print-btn { display: none; } 
+                        .report-container { 
+                            width: 100% !important; 
+                            max-width: 100% !important; 
+                            padding: 0; 
+                            box-shadow: none; 
+                        }
+                    }
+                </style>
+            </head>
             <body>
-                <h1 style="text-align:center;color:#FF4B91;">ACE CLINIC</h1>
-                <h3 style="text-align:center;">ใบบันทึกนัดหมายประจำวันที่: ${dateFilter.split('-').reverse().join('-')}</h3>
-                <table>
-                    <thead><tr><th>ลำดับ</th><th>เวลา</th><th>ชื่อ-นามสกุล</th><th>รายการคอร์ส</th><th>แพทย์</th><th>ลายเซ็นลูกค้า</th></tr></thead>
-                    <tbody>
-                        ${dailyList.map((ap, i) => `
+                <button class="no-print-btn" onclick="window.print()">🖨️ สั่งพิมพ์รายงาน (แนวนอน)</button>
+                
+                <div class="report-container">
+                    <div class="header">
+                        <h1>ACE CLINIC</h1>
+                        <p>ตารางนัดหมายลูกค้า ประจำวันที่: ${dateFilter.split('-').reverse().join('-')}</p>
+                    </div>
+
+                    <table>
+                        <thead>
                             <tr>
-                                <td>${i + 1}</td>
-                                <td><b>${ap.time}</b></td>
-                                <td style="text-align:left;">${ap.customerName}</td>
-                                <td style="text-align:left;font-size:12px;">${ap.course || '-'}</td>
-                                <td>${ap.doctor}</td>
-                                <td style="width:120px;"></td>
+                                <th class="col-num">#</th>
+                                <th class="col-hn">HN</th>
+                                <th class="col-time">เวลา</th>
+                                <th class="col-phone">เบอร์โทรศัพท์</th>
+                                <th class="col-name">ชื่อ-นามสกุล</th>
+                                <th class="col-cell">เซลล์</th>
+                                <th class="col-doc">แพทย์/พนักงาน</th>
+                                <th class="col-course">รายการคอร์ส</th>
+                                <th class="col-sign">ลายเซ็น</th>
                             </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-                <script>window.print();window.close();<\/script>
+                        </thead>
+                        <tbody>
+                            ${dailyList.map((ap, i) => {
+                                const customers = JSON.parse(localStorage.getItem('customerDB')) || [];
+                                const cInfo = customers.find(c => c.hn === ap.hn);
+                                const seller = cInfo?.sellerName || "-";
+                                const phone = cInfo?.phone || ap.phone || "-";
+                                return `
+                                <tr>
+                                    <td align="center">${i + 1}</td>
+                                    <td align="center" contenteditable="true"><b>${ap.hn || '-'}</b></td>
+                                    <td align="center" contenteditable="true">${ap.time}</td>
+                                    <td align="center" contenteditable="true">${phone}</td>
+                                    <td contenteditable="true" style="padding-left: 5px;">${ap.customerName}</td>
+                                    <td align="center" contenteditable="true" style="color:#D48197; font-weight:600;">${seller}</td>
+                                    <td contenteditable="true" style="padding-left: 5px;">
+                                        <b>พญ.${ap.doctor}</b><br>
+                                        <small style="color:#999;">พนักงาน: ${ap.staff || '-'}</small>
+                                    </td>
+                                    <td contenteditable="true" style="padding-left: 5px; font-size: 10px; line-height: 1.2;">${ap.course || '-'}</td>
+                                    <td align="center"><div class="signature-line"></div></td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                    
+                    <div style="margin-top: 15px; text-align: right; font-size: 9px; color: #aaa;">
+                        พิมพ์เมื่อ: ${new Date().toLocaleString('th-TH')}
+                    </div>
+                </div>
             </body>
         </html>
     `);
     p.document.close();
 };
-
 window.toggleConfirmApp = function(index) {
     let db = JSON.parse(localStorage.getItem('appointmentDB')) || [];
     if (db[index]) {
@@ -3258,6 +3408,219 @@ window.deleteTreatmentRecord = function(customerIndex, recordIndex) {
         switchProfileTab(4, customerIndex);
     }
 };
+/* --- ✨ ฟังก์ชันสร้างเลข HN อัตโนมัติ (HN + ปีพุทธศักราช + รันนิ่ง) --- */
+function generateHN() {
+    // ดึงตัวนับล่าสุดจากหน่วยความจำ
+    let hnRunning = localStorage.getItem("hnRunning") ? parseInt(localStorage.getItem("hnRunning")) : 1;
+    
+    // ดึงปีพุทธศักราช 2 หลักท้าย (เช่น 2569 -> 69)- */
+    const thaiYear = (new Date().getFullYear() + 543).toString().slice(-2);
+    
+    // รันเลข 4 หลัก (เช่น 0001)- */
+    const runningNumber = String(hnRunning).padStart(4, "0");
+
+    // รวมเป็น HN690001- */
+    const hn = "HN" + thaiYear + runningNumber;
+
+    document.getElementById("modalHN").value = hn;
+}
+
+/* =======================================================
+   💎 ระบบจัดการข้อมูลลูกค้า (ฉบับแก้ไขการแสดงผล + รูปภาพ)
+   ======================================================= */
+
+let currentPhotoData = ""; // ตัวแปรเก็บข้อมูลรูปภาพ Base64
+
+// 📸 ฟังก์ชันจัดการรูปภาพ
+window.handlePhotoUpload = function(event) {
+    const file = event.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            currentPhotoData = e.target.result;
+            const preview = document.getElementById("photoPreview");
+            const placeholder = document.getElementById("uploadPlaceholder");
+            if(preview) preview.src = currentPhotoData;
+            if(preview) preview.classList.remove("hidden");
+            if(placeholder) placeholder.classList.add("hidden");
+        };
+        reader.readAsDataURL(file);
+    }
+};
+
+// ✨ 1. ฟังก์ชันเปิดหน้าต่างสำหรับ "เพิ่มใหม่"
+window.openModalForAdd = function() {
+    editingIndex = null;
+    currentPhotoData = ""; 
+    
+    // ล้างข้อมูลในช่องกรอกให้สะอาด
+    const fields = [
+        "modalFirstName", "modalLastName", "modalNickname", 
+        "modalBirthDate", "modalPhone", "modalEmail", 
+        "modalLine", "modalAllergy", "modalSeller", "modalAddress"
+    ];
+    fields.forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.value = "";
+    });
+
+    // รีเซ็ตรูปตัวอย่าง
+    const preview = document.getElementById("photoPreview");
+    const placeholder = document.getElementById("uploadPlaceholder");
+    if(preview) preview.classList.add("hidden");
+    if(placeholder) placeholder.classList.remove("hidden");
+
+    // 🎯 รันเลข HN ใหม่ทันที
+    generateHN(); 
+
+    const modal = document.getElementById("customerModal");
+    if(modal) {
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+    }
+};
+// 📝 2. ฟังก์ชันเปิดหน้าต่างสำหรับ "แก้ไข" (กู้คืนข้อมูล + ล็อกชื่อเซลล์ + ตัวบาง)
+window.openModalForEdit = function(index) {
+    editingIndex = index;
+    const c = customerDB[index];
+
+    // ปรับหัวข้อให้หนาขึ้นนิดหน่วยตามสั่ง ส่วนข้อมูลอื่นจะใช้ตัวบางค่ะ
+    document.getElementById("modalTitle").innerText = "📝 แก้ไขข้อมูลลูกค้า";
+    document.getElementById("modalTitle").className = "text-2xl font-bold text-slate-800 uppercase tracking-tight"; 
+
+    document.getElementById("modalHN").value = c.hn || "";
+    
+    // แยกชื่อ-นามสกุลมาใส่ช่อง
+    const nameParts = c.fullname ? c.fullname.split(' ') : ["", ""];
+    document.getElementById("modalFirstName").value = nameParts[0] || "";
+    document.getElementById("modalLastName").value = nameParts[1] || "";
+    
+    document.getElementById("modalNickname").value = c.nickname || "";
+    document.getElementById("modalBirthDate").value = c.birthDate || "";
+    document.getElementById("modalPhone").value = c.phone || "";
+    document.getElementById("modalEmail").value = c.email || "";
+    document.getElementById("modalLine").value = c.line || "";
+    document.getElementById("modalAllergy").value = c.allergy || "";
+    document.getElementById("modalAddress").value = c.address || "";
+    
+    // จัดการส่วนชื่อเซลล์: ดึงค่ามาแสดงและตรวจสอบการล็อก
+    const sellerField = document.getElementById("modalSeller");
+    if (sellerField) {
+        sellerField.value = c.sellerName || "";
+        
+        // 🔒 ถ้าเคยมีชื่อเซลล์บันทึกไว้แล้ว ให้ล็อกช่องทันที (แก้ไม่ได้)
+        if (c.sellerName && c.sellerName.trim() !== "") {
+            sellerField.disabled = true;
+            sellerField.classList.add("bg-slate-100", "text-slate-400"); // ทำให้เป็นสีเทาดูหรู
+        } else {
+            sellerField.disabled = false;
+            sellerField.classList.remove("bg-slate-100", "text-slate-400");
+        }
+    }
+
+    if(document.getElementById("modalBranch")) document.getElementById("modalBranch").value = c.branch || "สาขาบางพลี";
+    if(document.getElementById("modalStatus")) document.getElementById("modalStatus").value = c.status || "ปกติ";
+
+    // 🖼️ แสดงรูปเดิม
+    const preview = document.getElementById("photoPreview");
+    const placeholder = document.getElementById("uploadPlaceholder");
+    if (c.photo) {
+        currentPhotoData = c.photo;
+        if(preview) {
+            preview.src = c.photo;
+            preview.classList.remove("hidden");
+        }
+        if(placeholder) placeholder.classList.add("hidden");
+    } else {
+        currentPhotoData = "";
+        if(preview) preview.classList.add("hidden");
+        if(placeholder) placeholder.classList.remove("hidden");
+    }
+
+    // แสดง Modal
+    const modal = document.getElementById("customerModal");
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+
+    // ✨ แถม: บังคับให้ช่อง Input ทุกช่องใน Modal ใช้ตัวหนังสือบาง
+    const allInputs = modal.querySelectorAll('input, textarea, select');
+    allInputs.forEach(input => {
+        input.classList.remove('font-bold', 'font-black');
+        input.classList.add('font-light', 'text-slate-700'); 
+    });
+};
+
+// ✨ 3. ฟังก์ชันสร้างเลข HN
+function generateHN() {
+    let rn = localStorage.getItem("hnRunning") ? parseInt(localStorage.getItem("hnRunning")) : 1;
+    const thaiYear = (new Date().getFullYear() + 543).toString().slice(-2);
+    const formattedNumber = String(rn).padStart(4, "0");
+    const hn = "HN" + thaiYear + formattedNumber;
+    const hnField = document.getElementById("modalHN");
+    if(hnField) hnField.value = hn;
+}
+
+// ✨ 4. ฟังก์ชันบันทึกข้อมูล
+window.saveCustomer = function() {
+    const fName = document.getElementById("modalFirstName").value.trim();
+    const lName = document.getElementById("modalLastName").value.trim();
+    const phone = document.getElementById("modalPhone").value.trim();
+
+    if(!fName || !lName || !phone) {
+        alert("⚠️ กรุณากรอก ชื่อ, นามสกุล และ เบอร์โทรศัพท์ ให้ครบถ้วนนะคะ");
+        return;
+    }
+
+    const data = {
+        hn: document.getElementById("modalHN").value,
+        fullname: fName + " " + lName,
+        nickname: document.getElementById("modalNickname").value,
+        birthDate: document.getElementById("modalBirthDate").value,
+        phone: phone,
+        email: document.getElementById("modalEmail").value,
+        line: document.getElementById("modalLine").value,
+        allergy: document.getElementById("modalAllergy").value || 'ไม่มี',
+        address: document.getElementById("modalAddress").value,
+        sellerName: document.getElementById("modalSeller").value,
+        branch: document.getElementById("modalBranch").value,
+        status: document.getElementById("modalStatus").value,
+        photo: currentPhotoData, // บันทึกรูป
+        createdAt: new Date().toLocaleDateString("th-TH")
+    };
+
+    if(editingIndex !== null) {
+        customerDB[editingIndex] = {...customerDB[editingIndex], ...data};
+    } else {
+        customerDB.push(data);
+        let currentRn = localStorage.getItem("hnRunning") ? parseInt(localStorage.getItem("hnRunning")) : 1;
+        localStorage.setItem("hnRunning", currentRn + 1);
+    }
+
+    localStorage.setItem("customerDB", JSON.stringify(customerDB));
+    renderCustomerTable(customerDB);
+    closeModal();
+    alert("✅ บันทึกข้อมูลเรียบร้อยแล้วค่ะ!");
+};
+
+/* --- 💎 ฟังก์ชันสั่งเปิด/ปิดเมนูในหน้านัดหมาย --- */
+window.toggleAppActionMenu = function(event, index) {
+    event.stopPropagation();
+    const menuId = `app-action-menu-${index}`;
+    
+    // ปิดเมนูอันอื่นก่อน
+    document.querySelectorAll("[id^='app-action-menu-']").forEach(m => {
+        if(m.id !== menuId) m.classList.add('hidden');
+    });
+    
+    // สลับสถานะเปิด/ปิดอันที่กด
+    const currentMenu = document.getElementById(menuId);
+    if(currentMenu) currentMenu.classList.toggle('hidden');
+};
+
+// สั่งปิดเมนูเมื่อคลิกที่อื่นของหน้าจอ
+document.addEventListener('click', () => {
+    document.querySelectorAll("[id^='app-action-menu-']").forEach(m => m.classList.add('hidden'));
+});
 
 </script>
 </body>

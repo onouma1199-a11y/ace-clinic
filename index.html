@@ -1075,18 +1075,13 @@ function generateHN() {
             }
 
         }
-
-
-
-       function renderMenuByRole(role) {
+function renderMenuByRole(role) {
     const container = document.getElementById('menuContainer');
-    // ดึงเฉพาะเมนูที่อนุญาตตามสิทธิ (role)
     const allowedMenu = menuConfig.filter(m => m.roles.includes(role));
-    
     let menuHtml = '';
     
     allowedMenu.forEach(m => {
-        // ถ้าเป็นหัวข้อหลัก "ระบบบัญชี / ใบเสร็จ" ให้สร้างกลุ่มเมนูแบบคลิก
+        // --- 1. กลุ่มเมนู บัญชี/ใบเสร็จ (ID: header) ---
         if (m.id === 'header') {
             menuHtml += `
                 <div class="menu-group">
@@ -1094,20 +1089,44 @@ function generateHN() {
                         <div class="flex items-center">
                             <span class="mr-3 text-xl">${m.i}</span><span class="text-sm font-bold uppercase">${m.n}</span>
                         </div>
-                        <span id="billingArrow" class="arrow-icon text-[10px]">▼</span>
+                        <span id="billingArrow" class="arrow-icon text-[10px] transition-transform duration-300">▼</span>
                     </div>
-                    <div id="billingSubmenu" class="submenu">`;
+                    <div id="billingSubmenu" class="submenu overflow-hidden transition-all duration-500 max-h-0 opacity-0 pl-4">`;
         } 
-        // ถ้าเป็นเมนูย่อย (เลข 3 และ 9) ให้เอามาใส่ในกลุ่ม
+        // --- 2. เมนูย่อยของบัญชี (ID: 3 และ 9) ---
         else if (m.id === 3 || m.id === 9) {
             menuHtml += `
                 <div class="sidebar-item mb-1 hover:translate-x-2 transition-transform" id="menu-${m.id}" onclick="loadPage(${m.id}, '${m.n}')">
                     <span class="mr-3 text-lg">${m.i}</span><span class="text-[11px] font-bold uppercase">${m.n}</span>
                 </div>`;
-            // ถ้าเป็นเมนู 9 (อันสุดท้ายของกลุ่ม) ให้ปิด Tag div
-            if (m.id === 9) menuHtml += `</div></div>`;
+            if (m.id === 9) menuHtml += `</div></div>`; // ปิดกลุ่มบัญชี
         } 
-        // เมนูทั่วไปอื่นๆ (1, 2, 4, 5, 6, 7, 8) ให้แสดงผลปกติ
+        // --- 3. กลุ่มเมนู ใช้คอร์สบริการ (ID: 5) - แก้ไขให้กางออกได้แล้ว ---
+        else if (m.id === 5) {
+            menuHtml += `
+                <div class="menu-group">
+                    <div class="sidebar-item bg-slate-50/80 cursor-pointer flex justify-between items-center transition-all" onclick="toggleServiceSubmenu()">
+                        <div class="flex items-center">
+                            <span class="mr-3 text-xl">${m.i}</span><span class="text-sm font-bold uppercase">${m.n}</span>
+                        </div>
+                        <span id="serviceArrow" class="arrow-icon text-[10px] transition-transform duration-300">▼</span>
+                    </div>
+                    <div id="serviceSubmenu" class="submenu overflow-hidden transition-all duration-500 max-h-0 opacity-0 pl-4">
+    <div class="sidebar-item mb-1 py-2 hover:bg-pink-50 rounded-xl" onclick="loadPage(52, 'ห้องจัดการคิว')">
+        <span class="mr-2 text-sm"></span><span class="text-[11px] font-bold">ห้องจัดการคิว</span>
+    </div>
+
+    <div class="sidebar-item mb-1 py-2 hover:bg-pink-50 rounded-xl" onclick="loadPage(51, 'รายการคอร์สมาตรฐาน')">
+        <span class="mr-2 text-sm"></span><span class="text-[11px] font-bold">รายการคอร์ส</span>
+    </div>
+
+    <div class="sidebar-item mb-1 py-2 hover:bg-pink-50 rounded-xl" onclick="loadPage(53, 'สต๊อกยาฉีด')">
+        <span class="mr-2 text-sm"></span><span class="text-[11px] font-bold">สต๊อกยาฉีด</span>
+    </div>
+</div>
+                </div>`;
+        }
+        // --- 4. เมนูอื่นๆ ทั้งหมด (1, 2, 4, 6, 7, 8) ---
         else {
             menuHtml += `
                 <div class="sidebar-item" id="menu-${m.id}" onclick="loadPage(${m.id}, '${m.n}')">
@@ -1119,6 +1138,8 @@ function generateHN() {
     container.innerHTML = menuHtml;
 }
 
+
+      
 /* --- 🖱️ ฟังก์ชันคลิกเพื่อเปิด-ปิด (Accordion) --- */
 function toggleBillingMenu() {
     const submenu = document.getElementById('billingSubmenu');
@@ -1128,6 +1149,23 @@ function toggleBillingMenu() {
     submenu.classList.toggle('open');
     // หมุนลูกศร
     arrow.classList.toggle('rotate');
+}
+/* --- เพิ่มอันนี้ไว้ข้างๆ toggleBillingMenu ค่ะ --- */
+function toggleServiceSubmenu() {
+    const submenu = document.getElementById('serviceSubmenu');
+    const arrow = document.getElementById('serviceArrow');
+    
+    if (submenu.style.maxHeight === "0px" || submenu.style.maxHeight === "") {
+        submenu.style.maxHeight = "300px"; 
+        submenu.style.opacity = "1";
+        submenu.style.marginTop = "5px";
+        arrow.style.transform = "rotate(180deg)";
+    } else {
+        submenu.style.maxHeight = "0px";
+        submenu.style.opacity = "0";
+        submenu.style.marginTop = "0px";
+        arrow.style.transform = "rotate(0deg)";
+    }
 }
 
 
@@ -1665,27 +1703,6 @@ function switchTab(id) {
 
 
 
-
-/* ============================= */
-
-/* ตารางแสดงลูกค้า */
-
-/* ============================= */
-
-
-
-
-
-
-
-/* ============================= */
-
-/* Dropdown Control */
-
-/* ============================= */
-
-
-
 function toggleDropdown(index) {
 
 
@@ -1886,6 +1903,15 @@ function loadPage(id, title) {
 	}
     else if(id === 9) {
         renderExpensePage(); // 💸 หน้าบันทึกรายจ่าย (สีแดง Luxury)
+    }
+	else if(id === 51) {
+        renderCourseMasterPage(); // 💎 เรียกหน้ารายการคอร์ส
+    }
+    else if(id === 52) {
+        renderQueuePage(); // 🔄 เรียกหน้าห้องจัดการคิว
+    }
+    else if(id === 53) {
+        renderStockPage(); // 📦 เรียกหน้าสต๊อกยาฉีด
     }
     else {
         target.innerHTML = `<div class="glass-card text-center py-32 font-bold ace-pink uppercase text-2xl">เมนู ${title} <br> กำลังพัฒนา...</div>`;
@@ -3621,6 +3647,562 @@ window.toggleAppActionMenu = function(event, index) {
 document.addEventListener('click', () => {
     document.querySelectorAll("[id^='app-action-menu-']").forEach(m => m.classList.add('hidden'));
 });
+/* =======================================================
+    🖱️ ฟังก์ชันสั่งให้เมนู "ใช้คอร์สบริการ" กางออก/พับเก็บ
+   ======================================================= */
+window.toggleServiceSubmenu = function() {
+    const submenu = document.getElementById('serviceSubmenu');
+    const arrow = document.getElementById('serviceArrow');
+    
+    if (submenu.style.maxHeight === "0px" || submenu.style.maxHeight === "") {
+        submenu.style.maxHeight = "300px"; 
+        submenu.style.opacity = "1";
+        submenu.style.marginTop = "5px";
+        arrow.style.transform = "rotate(180deg)";
+    } else {
+        submenu.style.maxHeight = "0px";
+        submenu.style.opacity = "0";
+        submenu.style.marginTop = "0px";
+        arrow.style.transform = "rotate(0deg)";
+    }
+};
+
+/* =======================================================
+    💎 1. รายการคอร์สมาตรฐาน (ดันขึ้นชิดบน)
+   ======================================================= */
+window.renderCourseMasterPage = function() {
+    const target = document.getElementById('dynamicContent');
+    if(!target) return;
+
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 font-extralight uppercase p-4 -mt-6"> <div class="flex justify-between items-center mb-2 bg-white p-4 rounded-[2rem] shadow-sm border border-pink-100">
+                <div>
+                    <h2 class="text-xl font-black ace-pink italic leading-none"> รายการคอร์สมาตรฐาน</h2>
+                    <p class="text-[9px] text-slate-400 font-bold uppercase mt-0.5">จัดการราคาและค่ามือพนักงาน</p>
+                </div>
+                <button onclick="openAddCourseModal()" class="bg-black text-white px-6 py-2 rounded-2xl text-[12px] font-bold shadow-lg hover:bg-[#D48197] transition-all">
+                    + เพิ่มคอร์สใหม่
+                </button>
+            </div>
+
+            <div class="bg-white rounded-[2.5rem] shadow-2xl border border-pink-200 overflow-hidden">
+                <table class="w-full text-center text-[15px] border-collapse">
+                    <thead class="bg-[#D48197] text-white font-normal">
+                        <tr style="height: 45px;">
+                            <th class="w-24">รหัส</th>
+                            <th class="text-left pl-8">ชื่อรายการคอร์ส / บริการ</th>
+                            <th class="w-32">ราคา/หน่วย</th>
+                            <th class="w-32">ค่ามือพนักงาน</th>
+                            <th class="w-24">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="courseMasterTableBody" class="text-slate-500">
+                        <tr><td colspan="5" class="p-8 text-center italic text-slate-300 font-normal">🚦 ยังไม่มีข้อมูลคอร์สในระบบ...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>`;
+    
+    setTimeout(updateCourseMasterTable, 100); 
+};
+
+/* =======================================================
+    🔄 2. ห้องจัดการคิว (ดันขึ้นชิดบน)
+   ======================================================= */
+window.renderQueuePage = function() {
+    const target = document.getElementById('dynamicContent');
+    if(!target) return;
+
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 font-extralight uppercase p-4 -mt-6"> <div class="flex justify-between items-center mb-2 bg-white p-4 rounded-[2rem] shadow-sm border border-pink-100">
+                <div>
+                    <h2 class="text-xl font-black ace-pink italic leading-none"> ห้องจัดการคิวรับบริการ</h2>
+                    <p class="text-[9px] text-slate-400 font-bold uppercase mt-0.5">คิวรอพบแพทย์และทำหัตถการวันนี้</p>
+                </div>
+                <div class="flex gap-2">
+                    <input type="date" value="${new Date().toISOString().split('T')[0]}" 
+                        class="border border-pink-100 px-3 py-1.5 rounded-xl text-[10px] outline-none font-normal">
+                    <button class="bg-black text-white px-5 py-2 rounded-xl text-[9px] font-bold">🔄 รีเฟรชคิว</button>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-[2.5rem] shadow-2xl border border-pink-200 overflow-hidden min-h-[200px] flex flex-col items-center justify-center p-6">
+                <div class="text-center">
+                    <p class="italic text-slate-300 text-sm font-normal uppercase">⌛️ กำลังรอข้อมูลการ "ส่งคิว" จากหน้านัดหมาย...</p>
+                </div>
+            </div>
+        </div>`;
+};
+
+/* =======================================================
+    📦 3. สต๊อกยาฉีด (ดันขึ้นชิดบน)
+   ======================================================= */
+window.renderStockPage = function() {
+    const target = document.getElementById('dynamicContent');
+    if(!target) return;
+
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 font-extralight uppercase p-4 -mt-6"> <div class="flex justify-between items-center mb-2 bg-white p-4 rounded-[2rem] shadow-sm border border-pink-100">
+                <div>
+                    <h2 class="text-xl font-black ace-pink italic leading-none"> สต๊อกยาและอุปกรณ์</h2>
+                    <p class="text-[9px] text-slate-400 font-bold uppercase mt-0.5">คลังยาฉีดประจำคลินิก</p>
+                </div>
+                <div class="flex gap-2">
+    <button onclick="openDrugMasterSettings()" class="bg-white text-[#D48197] border border-[#D48197] px-5 py-2 rounded-xl text-[12px] font-bold hover:bg-pink-50 transition-all uppercase">⚙️ ตั้งค่าชื่อยา/สูตรฉลาก</button>
+    
+    <button onclick="openLabelModal()" class="bg-slate-100 text-slate-500 px-5 py-2 rounded-xl text-[12px] font-bold hover:bg-pink-50 transition-all uppercase">➕ เพิ่มฉลากยา</button>
+    <button onclick="openAddStockModal()" class="bg-[#D48197] text-white px-6 py-2.5 rounded-2xl text-[12px] font-bold shadow-xl">➕ รับยาเข้าสต๊อก</button>
+</div>
+            </div>
+
+            <div class="bg-white rounded-[3rem] shadow-xl border border-pink-100 overflow-hidden">
+    <table class="w-full text-left border-collapse">
+        <thead class="bg-[#D48197] text-white text-[10px] uppercase font-bold">
+            <tr>
+                <th class="p-4 text-center">วันที่รับ</th>
+                <th class="p-4">ชื่อยา / เวชภัณฑ์</th>
+                <th class="p-4 text-center">คงเหลือ</th>
+                <th class="p-4 text-center">จัดการ</th>
+            </tr>                    
+		</thead>
+
+
+                    <tbody class="text-slate-600">
+                        <tr><td colspan="4" class="p-8 text-center italic text-slate-300 font-normal">📦 ยังไม่มีข้อมูลสต๊อกในขณะนี้</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>`;
+};
+
+/* =======================================================
+    🛠️ 1. ฟังก์ชันเปิดหน้าต่างเพิ่มคอร์ส (Modal)
+   ======================================================= */
+window.openAddCourseModal = function() {
+    const modalWrap = document.createElement('div');
+    modalWrap.id = "courseModal";
+    modalWrap.className = "fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[10000] animate-in fade-in duration-300 font-normal";
+    
+    modalWrap.innerHTML = `
+        <div class="bg-white w-full max-w-xl rounded-[3rem] p-10 shadow-2xl border border-pink-200 animate-in zoom-in duration-300">
+            <div class="flex justify-between items-center mb-8">
+                <h3 class="text-2xl font-black ace-pink italic uppercase font-normal">✨ เพิ่มคอร์ส/บริการใหม่</h3>
+                <button onclick="closeCourseModal()" class="text-slate-300 hover:text-pink-500 transition-all text-2xl font-normal">✕</button>
+            </div>
+            
+            <div class="space-y-4 text-left font-normal">
+                <div>
+                    <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">หมวดหมู่บริการ</label>
+                    <select id="newCourseCat" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal bg-white">
+                        <option value="โบท็อก">💉 โบท็อก (Botox)</option>
+                        <option value="ฟิลเลอร์">💉 ฟิลเลอร์ (Filler)</option>
+                        <option value="ฉีดผิว">✨ ฉีดผิว/วิตามิน</option>
+                        <option value="ทรีทเม้นท์">💆 ทรีทเม้นท์หน้า</option>
+                        <option value="เลเซอร์">⚡ เลเซอร์ (Laser)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">ชื่อรายการคอร์ส *</label>
+                    <input type="text" id="newCourseName" placeholder="เช่น Glitter 2 CC, Meso Fat..." class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">ราคาปกติ (บาท)</label>
+                        <input type="number" id="newCoursePrice" placeholder="0.00" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">จำนวน (ครั้ง/Unit/Shot)</label>
+                        <input type="number" id="newCourseAmount" placeholder="10" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal">
+                    </div>
+                </div>
+                <div>
+                    <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">💰 ค่ามือพนักงาน (DF)</label>
+                    <input type="number" id="newCourseDF" placeholder="ระบุยอดเงินที่พนักงานได้รับ..." class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal">
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-10">
+                <button onclick="closeCourseModal()" class="px-8 py-3 rounded-2xl text-[11px] font-bold bg-slate-100 text-slate-400 font-normal">ยกเลิก</button>
+                <button onclick="saveNewMasterCourse()" class="px-10 py-3 rounded-2xl text-[11px] font-bold bg-black text-white shadow-xl hover:bg-[#D48197] transition-all font-normal uppercase">บันทึกคอร์ส</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modalWrap);
+};
+
+/* =======================================================
+    💾 2. ฟังก์ชันบันทึกข้อมูลลงฐานข้อมูล (LocalStorage)
+   ======================================================= */
+window.saveNewMasterCourse = function() {
+    const name = document.getElementById('newCourseName').value.trim();
+    const cat = document.getElementById('newCourseCat').value;
+    const price = document.getElementById('newCoursePrice').value || 0;
+    const amount = document.getElementById('newCourseAmount').value || 1;
+    const df = document.getElementById('newCourseDF').value || 0;
+
+    if (!name) { alert("⚠️ กรุณาระบุชื่อคอร์สด้วยนะคะ"); return; }
+
+    const newCourse = {
+        id: "C-" + Date.now().toString().slice(-4),
+        name: name,
+        category: cat,
+        price: parseFloat(price).toLocaleString(),
+        amount: amount,
+        df: parseFloat(df).toLocaleString(),
+        createdAt: new Date().toLocaleDateString('th-TH')
+    };
+
+    let masterDB = JSON.parse(localStorage.getItem('courseMasterDB')) || [];
+    masterDB.push(newCourse);
+    localStorage.setItem('courseMasterDB', JSON.stringify(masterDB));
+
+    alert("✅ บันทึกคอร์สเรียบร้อยแล้วค่ะ!");
+    closeCourseModal();
+    updateCourseMasterTable(); // สั่งวาดตารางใหม่
+};
+
+/* =======================================================
+    📊 3. ฟังก์ชันวาดตารางรายการคอร์สใหม่
+   ======================================================= */
+window.updateStockTable = function() {
+    const tbody = document.querySelector('#dynamicContent tbody');
+    if (!tbody) return;
+
+    // 🎯 หัวใจสำคัญ: ต้องล้างตารางให้ว่างเปล่าก่อนเริ่มวาดข้อมูลใหม่ทุกครั้ง
+    tbody.innerHTML = ''; 
+
+    const stockDB = JSON.parse(localStorage.getItem('clinicStockDB')) || [];
+    
+    if (stockDB.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="p-12 text-center italic text-slate-300 font-normal uppercase">📦 ยังไม่มีข้อมูลสต๊อกในขณะนี้</td></tr>`;
+        return;
+    }
+
+    // วาดแถวข้อมูลใหม่ลงในตารางที่ว่างแล้ว
+    tbody.innerHTML = stockDB.map((s, idx) => `
+        <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all font-normal text-slate-600">
+            <td class="p-4 text-center text-[10px] text-slate-400 font-normal">${s.date}</td>
+            <td class="p-4 text-left font-bold text-slate-700">
+                ${s.name}
+                <div class="text-[9px] text-red-400 font-normal italic uppercase">EXP: ${s.exp}</div>
+            </td>
+            <td class="p-4 text-center font-black ace-pink text-sm">
+                ${s.qty} <span class="text-[10px] font-normal text-slate-400">${s.unit || 'หน่วย'}</span>
+            </td>
+            <td class="p-4 text-center">
+                <button onclick="deleteStockItem(${idx})" class="text-slate-300 hover:text-red-500 transition-all text-[10px] uppercase font-bold">🗑️ ลบ</button>
+            </td>
+        </tr>
+    `).join('');
+};
+
+window.closeCourseModal = function() { const m = document.getElementById('courseModal'); if (m) m.remove(); };
+
+window.deleteMasterCourse = function(idx) {
+    if(confirm("ต้องการลบคอร์สนี้ใช่หรือไม่?")) {
+        let db = JSON.parse(localStorage.getItem('courseMasterDB')) || [];
+        db.splice(idx, 1);
+        localStorage.setItem('courseMasterDB', JSON.stringify(db));
+        updateCourseMasterTable();
+    }
+};
+
+/* =======================================================
+    🛠️ 1. ฟังก์ชันเปิดหน้าต่างเพิ่มฉลากยา (Label Modal)
+   ======================================================= */
+window.openLabelModal = function() {
+    const modalWrap = document.createElement('div');
+    modalWrap.id = "labelModal";
+    modalWrap.className = "fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[10000] animate-in fade-in duration-300 font-normal";
+    
+    // ดึงรายชื่อลูกค้ามาให้เลือกใน Dropdown
+    const customers = JSON.parse(localStorage.getItem('customerDB')) || [];
+    const customerOptions = customers.map(c => `<option value="${c.fullname}">${c.fullname} (${c.hn})</option>`).join('');
+
+    modalWrap.innerHTML = `
+        <div class="bg-white w-full max-w-2xl rounded-[3rem] p-10 shadow-2xl border border-pink-200 animate-in zoom-in duration-300 overflow-y-auto max-h-[90vh]">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-black ace-pink italic uppercase">➕ สร้างฉลากยา/อุปกรณ์</h3>
+                <button onclick="closeLabelModal()" class="text-slate-300 hover:text-pink-500 transition-all text-2xl">✕</button>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-6 text-left font-normal">
+                <div class="col-span-2">
+                    <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">เลือกชื่อลูกค้า</label>
+                    <select id="lblCustName" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm bg-white font-normal">
+                        <option value="">-- เลือกคนไข้ --</option>
+                        ${customerOptions}
+                    </select>
+                </div>
+                <div>
+                   <div>
+    <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">ชื่อยา/อุปกรณ์</label>
+    <input type="text" id="lblDrugName" 
+        oninput="autoFillDrugInfo(this.value)" 
+        list="drugSuggestions" 
+        placeholder="เช่น Nabota 100u" 
+        class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm">
+        
+    <datalist id="drugSuggestions">
+        ${(JSON.parse(localStorage.getItem('drugMasterDB')) || []).map(d => `<option value="${d.name}">`).join('')}
+    </datalist>
+</div>                    <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">วันที่</label>
+                    <input type="date" id="lblDate" value="${new Date().toISOString().split('T')[0]}" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm">
+                </div>
+                <div class="col-span-2">
+                    <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">วิธีใช้ยา</label>
+                    <textarea id="lblUsage" placeholder="ระบุการใช้งานอย่างละเอียด..." class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm h-20"></textarea>
+                </div>
+                <div class="col-span-2">
+                    <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">สรรพคุณ / ข้อบ่งชี้</label>
+                    <textarea id="lblDetail" placeholder="ระบุสรรพคุณยา..." class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm h-20"></textarea>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-8">
+                <button onclick="closeLabelModal()" class="px-8 py-3 rounded-2xl text-[10px] font-bold bg-slate-50 text-slate-400">ยกเลิก</button>
+                <button onclick="previewAndPrintLabel()" class="px-10 py-3 rounded-2xl text-[10px] font-bold bg-black text-white shadow-xl hover:bg-[#D48197] transition-all uppercase">👁️ ดูตัวอย่างและปริ้น</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modalWrap);
+};
+
+/* =======================================================
+    🖨️ 2. ฟังก์ชันพรีวิวและสั่งปริ้น (ขนาดนามบัตร 9 x 5.5 cm)
+   ======================================================= */
+window.previewAndPrintLabel = function() {
+    const data = {
+        customer: document.getElementById('lblCustName').value,
+        name: document.getElementById('lblDrugName').value,
+        date: document.getElementById('lblDate').value.split('-').reverse().join('/'),
+        usage: document.getElementById('lblUsage').value,
+        detail: document.getElementById('lblDetail').value
+    };
+
+    if (!data.customer || !data.name) { alert("⚠️ กรุณากรอกชื่อลูกค้าและชื่อยาด้วยค่ะ"); return; }
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html>
+            <head>
+                <title>ACE Clinic Drug Label</title>
+                <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600&display=swap" rel="stylesheet">
+                <style>
+                    body { font-family: 'Sarabun', sans-serif; display: flex; justify-content: center; padding-top: 20px; }
+                    /* 🎯 ขนาดนามบัตรมาตรฐาน 9 x 5.5 cm */
+                    .label-card { 
+                        width: 9cm; height: 5.5cm; 
+                        border: 2px solid #D48197; border-radius: 10px; 
+                        padding: 15px; box-sizing: border-box; 
+                        position: relative; overflow: hidden;
+                    }
+                    .logo { color: #D48197; font-weight: 800; font-size: 16px; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 8px; text-align: center; }
+                    .info { font-size: 11px; line-height: 1.4; color: #333; }
+                    .info b { color: #D48197; font-size: 9px; text-transform: uppercase; }
+                    .footer { position: absolute; bottom: 8px; right: 15px; font-size: 8px; color: #aaa; }
+                    @media print { .no-print { display: none; } body { padding: 0; } }
+                </style>
+            </head>
+            <body>
+                <div class="label-card">
+                    <div class="logo">ACE CLINIC</div>
+                    <div class="info">
+                        <div style="margin-bottom: 5px;"><b>คนไข้:</b> ${data.customer}</div>
+                        <div style="margin-bottom: 5px;"><b>ชื่อยา:</b> ${data.name} <span style="float:right;"><b>วันที่:</b> ${data.date}</span></div>
+                        <div style="border-top: 1px dashed #eee; padding-top: 5px;">
+                            <b>วิธีใช้:</b> ${data.usage}<br>
+                            <b>สรรพคุณ:</b> ${data.detail}
+                        </div>
+                    </div>
+                    <div class="footer">Luxury Clinic Management System</div>
+                </div>
+                <div class="no-print" style="position:fixed; bottom:20px;">
+                    <button onclick="window.print()" style="padding:10px 30px; background:#D48197; color:white; border:none; border-radius:20px; cursor:pointer;">🖨️ สั่งปริ้นฉลากยา</button>
+                </div>
+            </body>
+        </html>
+    `);
+    printWindow.document.close();
+};
+
+window.closeLabelModal = function() { const m = document.getElementById('labelModal'); if (m) m.remove(); };
+
+/* =======================================================
+    ⚙️ 1. ระบบตั้งค่าสูตรฉลากยามาตรฐาน (Master Data)
+   ======================================================= */
+window.openDrugMasterSettings = function() {
+    const modalWrap = document.createElement('div');
+    modalWrap.id = "drugMasterModal";
+    modalWrap.className = "fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[10002] animate-in fade-in duration-300 font-normal";
+    
+    // ดึงข้อมูลยาที่มีอยู่มาแสดงในตารางด้านล่าง
+    const drugDB = JSON.parse(localStorage.getItem('drugMasterDB')) || [];
+    const drugListHtml = drugDB.length > 0 ? drugDB.map((d, idx) => `
+        <tr class="border-b border-pink-50 text-[10px]">
+            <td class="p-2 font-bold text-slate-700">${d.name}</td>
+            <td class="p-2 text-center">
+                <button onclick="deleteDrugMaster(${idx})" class="text-red-400 hover:text-red-600 transition-all uppercase font-bold">[ลบ]</button>
+            </td>
+        </tr>
+    `).join('') : `<tr><td colspan="2" class="p-4 text-center text-slate-300 italic text-[10px]">ยังไม่มีข้อมูลที่บันทึกไว้</td></tr>`;
+
+    modalWrap.innerHTML = `
+        <div class="bg-white w-full max-w-lg rounded-[3rem] p-10 shadow-2xl border border-pink-200 animate-in zoom-in duration-300 overflow-y-auto max-h-[90vh]">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-black ace-pink italic uppercase">⚙️ ตั้งค่าข้อมูลยามาตรฐาน</h3>
+                <button onclick="this.closest('#drugMasterModal').remove()" class="text-slate-300 hover:text-red-500 transition-all text-2xl font-normal">✕</button>
+            </div>
+
+            <div class="space-y-4 text-left font-normal border-b border-pink-100 pb-6 mb-6">
+                <div>
+                    <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">ชื่อยา / อุปกรณ์ (ที่ใช้ดึงข้อมูล)</label>
+                    <input type="text" id="mDrugName" placeholder="เช่น Nabota 100u" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal">
+                </div>
+                <div>
+                    <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">วิธีใช้ยา (วันใช้ยา)</label>
+                    <textarea id="mDrugUsage" placeholder="ระบุวิธีใช้..." class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm h-16 font-normal"></textarea>
+                </div>
+                <div>
+                    <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">สรรพคุณ / ข้อบ่งชี้</label>
+                    <textarea id="mDrugDetail" placeholder="ระบุสรรพคุณ..." class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm h-16 font-normal"></textarea>
+                </div>
+                <button onclick="saveDrugMaster()" class="w-full py-3 rounded-2xl text-[11px] font-bold bg-black text-white shadow-xl hover:bg-[#D48197] transition-all uppercase">💾 บันทึกเป็นข้อมูลมาตรฐาน</button>
+            </div>
+
+            <div class="text-left font-normal">
+                <p class="text-[10px] text-slate-400 font-bold uppercase ml-2 mb-2 italic">รายการที่บันทึกไว้แล้ว (ลบเพื่อแก้ไข)</p>
+                <div class="bg-slate-50 rounded-2xl overflow-hidden border border-slate-100">
+                    <table class="w-full">
+                        <thead class="bg-slate-100 text-[9px] uppercase text-slate-500">
+                            <tr><th class="p-2 text-left">ชื่อยา</th><th class="p-2 w-16">จัดการ</th></tr>
+                        </thead>
+                        <tbody>${drugListHtml}</tbody>
+                    </table>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(modalWrap);
+};
+
+/* --- ฟังก์ชันลบข้อมูลยาที่ตั้งค่าไว้ --- */
+window.deleteDrugMaster = function(idx) {
+    if(confirm("ต้องการลบข้อมูลตั้งค่าของยานี้ใช่หรือไม่?")) {
+        let drugDB = JSON.parse(localStorage.getItem('drugMasterDB')) || [];
+        drugDB.splice(idx, 1);
+        localStorage.setItem('drugMasterDB', JSON.stringify(drugDB));
+        
+        // สั่งเปิด Modal ใหม่เพื่อรีเฟรชข้อมูลในตารางทันทีค่ะ
+        document.getElementById('drugMasterModal').remove();
+        openDrugMasterSettings();
+    }
+};
+
+/* =======================================================
+    📦 ฟังก์ชันเปิดหน้าต่าง: รับยาเข้าสต๊อก (Modal)
+   ======================================================= */
+window.openAddStockModal = function() {
+    const modalWrap = document.createElement('div');
+    modalWrap.id = "stockModal";
+    modalWrap.className = "fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[10000] animate-in fade-in duration-300 font-normal";
+    
+    const drugDB = JSON.parse(localStorage.getItem('drugMasterDB')) || [];
+    const drugSuggestions = drugDB.map(d => `<option value="${d.name}">`).join('');
+
+    modalWrap.innerHTML = `
+        <div class="bg-white w-full max-w-lg rounded-[3rem] p-10 shadow-2xl border border-pink-200 animate-in zoom-in duration-300">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-black ace-pink italic uppercase font-normal">📦 บันทึกรับยาเข้าคลัง</h3>
+                <button onclick="closeStockModal()" class="text-slate-300 hover:text-pink-500 transition-all text-2xl font-normal">✕</button>
+            </div>
+            
+            <div class="space-y-4 text-left font-normal">
+                <div>
+                    <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">วันที่นำเข้าสินค้า</label>
+                    <input type="date" id="stockDate" value="${new Date().toISOString().split('T')[0]}" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal">
+                </div>
+                
+                <div>
+                    <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">ชื่อยา หรือ อุปกรณ์ *</label>
+                    <input type="text" id="stockItemName" list="stockSuggestions" placeholder="เช่น โบท็อก Nabota..." class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal">
+                    <datalist id="stockSuggestions">${drugSuggestions}</datalist>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3"> <div>
+                        <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">จำนวนรับ</label>
+                        <input type="number" id="stockQty" placeholder="0" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">หน่วยเรียก</label>
+                        <input type="text" id="stockUnit" placeholder="กล่อง/ขวด" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">ราคาต้นทุน</label>
+                        <input type="number" id="stockCost" placeholder="0.00" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-red-400 font-bold uppercase ml-2">🚨 วันหมดอายุ</label>
+                    <input type="date" id="stockExp" class="w-full border border-red-100 p-3 rounded-2xl outline-none text-sm font-normal text-red-500">
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-10">
+                <button onclick="closeStockModal()" class="px-8 py-3 rounded-2xl text-[11px] font-bold bg-slate-100 text-slate-400">ยกเลิก</button>
+                <button onclick="saveStockItem()" class="px-10 py-3 rounded-2xl text-[11px] font-bold bg-black text-white shadow-xl hover:bg-[#D48197] transition-all uppercase">บันทึกเข้าคลัง</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modalWrap);
+};
+
+/* =======================================================
+    💾 ส่วนบันทึกข้อมูล และ วาดตารางสต๊อก (วางท้ายไฟล์)
+   ======================================================= */
+window.closeStockModal = function() {
+    const modal = document.getElementById('stockModal');
+    if (modal) {
+        modal.remove(); 
+    }
+};
+
+
+window.saveStockItem = function() {
+    const name = document.getElementById('stockItemName').value.trim();
+    const qty = document.getElementById('stockQty').value || 0;
+    const unit = document.getElementById('stockUnit').value.trim() || 'หน่วย'; 
+    const cost = document.getElementById('stockCost').value || 0;
+    const date = document.getElementById('stockDate').value;
+    const exp = document.getElementById('stockExp').value;
+
+    if (!name || qty <= 0) { 
+        alert("⚠️ กรุณาระบุชื่อยาและจำนวนรับเข้าด้วยนะคะ"); 
+        return; 
+    }
+
+    const newItem = {
+        name: name,
+        qty: qty,
+        unit: unit, 
+        cost: parseFloat(cost).toLocaleString(),
+        date: date.split('-').reverse().join('/'),
+        exp: exp ? exp.split('-').reverse().join('/') : 'ไม่ระบุ'
+    };
+
+    let stockDB = JSON.parse(localStorage.getItem('clinicStockDB')) || [];
+    stockDB.unshift(newItem);
+    localStorage.setItem('clinicStockDB', JSON.stringify(stockDB));
+
+    alert("✅ บันทึกสต๊อกเรียบร้อยแล้วค่ะ!");
+    
+    // 🎯 จุดสำคัญ: สั่งปิดหน้าต่างหลังจากบันทึกเสร็จ
+    closeStockModal(); 
+    
+    // 🎯 อัปเดตตารางให้โชว์ข้อมูลใหม่ทันที
+    if (typeof updateStockTable === "function") {
+        updateStockTable();
+    }
+};
 
 </script>
 </body>

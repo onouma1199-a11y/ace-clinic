@@ -872,7 +872,7 @@ window.viewReceiptDetail = function(billData) {
 
     { id: 4, n: 'ระบบนัดหมาย', i: '📅', roles: ['admin', 'staff'] },
     { id: 5, n: 'ใช้คอร์สบริการ', i: '✨', roles: ['admin', 'staff'] },
-    { id: 6, n: 'เมนูรายงาน/กราฟ', i: '📈', roles: ['admin', 'accounting'] },
+    { id: 6, n: 'เมนูรายงาน', i: '📈', roles: ['admin', 'accounting'] },
     { id: 7, n: 'จัดการพนักงาน', i: '🩺', roles: ['admin'] },
     { id: 8, n: 'ตั้งค่าระบบ', i: '⚙️', roles: ['admin'] }
 ];
@@ -1919,13 +1919,16 @@ function loadPage(id, title) {
         renderAppointmentPage();
     }
     else if(id === 6) {
-        renderAccountingReport();
+        renderReportPage();
     }
-    // 🎯 เพิ่มส่วนนี้เข้าไปค่ะ เพื่อให้หน้าจอรายงานค่ามือทำงาน
+    // --- 🎯 วางส่วนนี้เพิ่มเข้าไปค่ะ ---
+    else if(id === 7) {
+        renderStaffManagement(); 
+    }
+    // ----------------------------
     else if(id === 66) {
         renderDFReportPage(); 
-    }
-    else if(id === 9) {
+    }    else if(id === 9) {
         renderExpensePage();
     }
     else if(id === 51) {
@@ -2836,33 +2839,77 @@ window.renderExpenseTable = function() {
         </div>`;
 };
 
-// 3. หน้ารายงานสรุปยอดขายแยกประเภท
-window.renderAccountingReport = function() {
+/* =======================================================
+    📈 1. หน้ารวมรายงาน (ฉบับเพิ่มปุ่มกำไร-ขาดทุน)
+   ======================================================= */
+window.renderReportPage = function() {
     const target = document.getElementById('dynamicContent');
-    target.innerHTML = `
-        <div class="animate-in fade-in duration-500 p-8 bg-white min-h-screen font-bold">
-            <h4 class="text-3xl text-[#FF4B91] font-bold mb-8">📊 รายงานสรุปบัญชี (ACCOUNTING)</h4>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                ${['เงินสด', 'โอน (QR)', 'โอนบริษัท', 'รูดบัตรเครดิต', 'Shopee', 'Gowabi'].map(acc => `
-                    <div class="bg-[#FFF0F5] p-6 rounded-[2rem] border border-pink-100 shadow-sm">
-                        <p class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">${acc}</p>
-                        <p class="text-3xl text-slate-700 font-black mt-2">฿0.00</p>
-                    </div>`).join('')}
-            </div>
-            <div class="mt-8 p-10 bg-[#FF4B91] rounded-[2.5rem] text-white flex justify-between items-center shadow-2xl">
-                <div><p class="text-sm opacity-80 font-bold uppercase">ยอดขายรวมวันนี้</p><h2 class="text-6xl font-black italic tracking-tighter font-bold">฿45,200</h2></div>
-                <button onclick="window.print()" class="bg-white text-[#FF4B91] px-10 py-4 rounded-2xl font-bold text-sm uppercase">พิมพ์รายงานประจำวัน</button>
-            </div>
-        </div>`;
-};
+    if(!target) return;
 
-window.viewReceiptDetail = function(billData) {
-    if (typeof showReceiptPreview === 'function') {
-        showReceiptPreview(billData);
-    } else {
-        alert("รายละเอียดบิล: " + billData.customer + "\nยอดรวม: " + billData.total);
-    }
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 font-light p-4 -mt-6 text-left pb-20">
+            <div class="flex justify-between items-center mb-10 bg-white p-8 rounded-[3rem] shadow-sm border border-pink-100">
+                <div>
+                    <h2 class="text-2xl font-bold ace-pink italic leading-none text-left">ศูนย์รวมรายงานสรุปผล (ACE Reports)</h2>
+                    <p class="text-[10px] text-slate-400 font-bold uppercase mt-2 italic tracking-widest text-left">Online Real-time System</p>
+                </div>
+                <div class="bg-pink-50 px-6 py-3 rounded-2xl border border-pink-100 text-center">
+                    <p class="text-[9px] text-[#D48197] font-bold uppercase">สถานะระบบ</p>
+                    <p class="text-sm font-black text-slate-700 uppercase tracking-tighter italic">Status: Connected</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3 mb-4 ml-4"><span class="text-2xl">📦</span><h3 class="text-sm font-bold text-slate-500 uppercase italic">รายงานยา/เวชภัณฑ์</h3></div>
+                    <div class="flex flex-col gap-2">
+                        ${renderReportButton('รายงานสรุปสต๊อกคงเหลือ', 'reportInventory()')}
+                        ${renderReportButton('รายงานยาใกล้หมด/หมดอายุ', 'reportLowStock()')}
+                        ${renderReportButton('รายงานประวัติการใช้ยา', 'reportDrugUsage()')}
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3 mb-4 ml-4"><span class="text-2xl">👥</span><h3 class="text-sm font-bold text-slate-500 uppercase italic">รายงานข้อมูลลูกค้า</h3></div>
+                    <div class="flex flex-col gap-2">
+                        ${renderReportButton('รายงานลูกค้าใหม่/เดือน', 'reportNewCustomers()')}
+                        ${renderReportButton('รายงานยอดซื้อแยกประเภท', 'reportSalesByType()')}
+                        ${renderReportButton('รายงานครบกำหนดฉีด (3/6/12 ด.)', 'reportCRM()')}
+                        ${renderReportButton('รายงานคอร์สสะสมคงเหลือ', 'reportRemainingCourse()')}
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3 mb-4 ml-4"><span class="text-2xl">💰</span><h3 class="text-sm font-bold text-slate-500 uppercase italic">รายงานบัญชี/พนักงาน</h3></div>
+                    <div class="flex flex-col gap-2">
+                        ${renderReportButton('รายงานยอดขาย (เงินสด/โอน/บัตร)', 'reportRevenue()')}
+                        ${renderReportButton('รายงานสรุปค่ามือ DF/คอมมิชชั่น', 'reportStaffDF()')}
+                        ${renderReportButton('รายงานกำไร-ขาดทุน (เดือน/ปี)', 'reportProfitLoss()')}
+                        ${renderReportButton('รายงานการ ขาด/ลา/มาสาย', 'reportAttendance()')}
+                        ${renderReportButton('รายงานเงินเดือนพนักงาน', 'reportPayroll()')}
+                    </div>
+                </div>
+
+            </div>
+            
+            <div class="mt-20 border-t border-pink-100 pt-10 text-center opacity-30">
+                <p class="text-[9px] text-slate-300 font-bold uppercase tracking-[0.5em] italic">Luxury Management Intelligence</p>
+            </div>
+        </div>
+    `;
 };
+// ฟังก์ชันเสริมสำหรับสร้างปุ่มรายงาน
+function renderReportButton(title, action) {
+    return `
+        <button onclick="${action}" class="w-full text-left bg-white p-5 rounded-[1.5rem] border border-pink-50 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all group flex justify-between items-center outline-none">
+            <span class="text-[12px] font-bold text-slate-600 group-hover:text-[#D48197] transition-colors uppercase tracking-tighter">${title}</span>
+            <div class="w-6 h-6 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-pink-50 transition-all">
+                <span class="text-slate-200 group-hover:text-[#D48197] transition-all text-[8px]">❯</span>
+            </div>
+        </button>
+    `;
+}
 /* --- 🔙 ฟังก์ชันพากลับหน้าประวัติลูกค้าคนปัจจุบัน --- */
 window.backToCustomerProfile = function() {
     if (window.activeCustomer) {
@@ -5550,7 +5597,981 @@ window.saveEditStock = function(idx) {
 
 // เรียกใช้ขออนุญาตทันทีที่โหลดหน้าจัดการคิว
 setTimeout(window.requestNotificationPermission, 2000);
+/* =======================================================
+    📈 1. หน้ารวมรายงาน (ฉบับเพิ่มปุ่มกำไร-ขาดทุนสมบูรณ์)
+   ======================================================= */
+window.renderReportPage = function() {
+    const target = document.getElementById('dynamicContent');
+    if(!target) return;
 
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 font-light p-4 -mt-6 text-left pb-20">
+            <div class="flex justify-between items-center mb-10 bg-white p-8 rounded-[3rem] shadow-sm border border-pink-100">
+                <div>
+                    <h2 class="text-2xl font-bold ace-pink italic leading-none text-left">ศูนย์รวมรายงานสรุปผล (ACE Reports)</h2>
+                    <p class="text-[10px] text-slate-400 font-bold uppercase mt-2 italic tracking-widest text-left">Online Real-time System</p>
+                </div>
+                <div class="bg-pink-50 px-6 py-3 rounded-2xl border border-pink-100 text-center">
+                    <p class="text-[9px] text-[#D48197] font-bold uppercase">สถานะระบบ</p>
+                    <p class="text-sm font-black text-slate-700 uppercase tracking-tighter italic">Status: Connected</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3 mb-4 ml-4"><span class="text-2xl">📦</span><h3 class="text-sm font-bold text-slate-500 uppercase italic">รายงานยา/เวชภัณฑ์</h3></div>
+                    <div class="flex flex-col gap-2">
+                        ${renderReportButton('รายงานสรุปสต๊อกคงเหลือ', 'reportInventory()')}
+                        ${renderReportButton('รายงานยาใกล้หมด/หมดอายุ', 'reportLowStock()')}
+                        ${renderReportButton('รายงานประวัติการใช้ยา', 'reportDrugUsage()')}
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3 mb-4 ml-4"><span class="text-2xl">👥</span><h3 class="text-sm font-bold text-slate-500 uppercase italic">รายงานข้อมูลลูกค้า</h3></div>
+                    <div class="flex flex-col gap-2">
+                        ${renderReportButton('รายงานลูกค้าใหม่/เดือน', 'reportNewCustomers()')}
+                        ${renderReportButton('รายงานยอดซื้อแยกประเภท', 'reportSalesByType()')}
+                        ${renderReportButton('รายงานครบกำหนดฉีด (3/6/12 ด.)', 'reportCRM()')}
+                        ${renderReportButton('รายงานคอร์สสะสมคงเหลือ', 'reportRemainingCourse()')}
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3 mb-4 ml-4"><span class="text-2xl">💰</span><h3 class="text-sm font-bold text-slate-500 uppercase italic">รายงานบัญชี/พนักงาน</h3></div>
+                    <div class="flex flex-col gap-2">
+                        ${renderReportButton('ยอดขาย (เงินสด/โอน/บัตร)', 'reportRevenue()')}
+                        ${renderReportButton('รายงานสรุปค่ามือ DF/คอมมิชชั่น', 'reportStaffDF()')}
+                        ${renderReportButton('รายงานกำไร-ขาดทุน (เดือน/ปี)', 'reportProfitLoss()')}
+                        ${renderReportButton('รายงานการ ขาด/ลา/มาสาย', 'reportAttendance()')}
+                        ${renderReportButton('รายงานเงินเดือนพนักงาน', 'reportPayroll()')}
+                    </div>
+                </div>
+
+            </div>
+            
+            <div class="mt-20 border-t border-pink-100 pt-10 text-center opacity-30">
+                <p class="text-[9px] text-slate-300 font-bold uppercase tracking-[0.5em] italic">Luxury Management Intelligence</p>
+            </div>
+        </div>
+    `;
+};
+
+// 2. ฟังก์ชันเสริมสร้างปุ่ม
+function renderReportButton(title, action) {
+    return `
+        <button onclick="${action}" class="w-full text-left bg-white p-5 rounded-[1.5rem] border border-pink-50 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all group flex justify-between items-center">
+            <span class="text-[12px] font-bold text-slate-600 group-hover:text-[#D48197] uppercase tracking-tighter">${title}</span>
+            <span class="text-slate-200 group-hover:text-[#D48197] text-[10px]">❯</span>
+        </button>
+    `;
+}
+
+/* =======================================================
+    💰 รายงานยอดขายแยกประเภท (ฉบับสมบูรณ์มีตัวเลือกช่วงเวลา)
+   ======================================================= */
+window.reportRevenue = function() {
+    const area = document.getElementById('dynamicContent');
+    
+    // สร้างหน้ากากรายงานที่มีแถบเลือกช่วงเวลาแบบในรูป
+    area.innerHTML = `
+        <div class="animate-in slide-in-from-right duration-500 p-4 -mt-6">
+            <div class="flex items-center gap-4 mb-6">
+                <button onclick="renderReportPage()" class="bg-white border border-pink-100 p-3 rounded-2xl hover:bg-pink-50 transition-all text-sm">🔙 กลับหน้าเมนูรายงาน</button>
+                <h2 class="text-xl font-bold ace-pink italic">💰 รายงานยอดขายแยกประเภท</h2>
+            </div>
+
+            <div class="bg-white p-8 rounded-[3rem] shadow-2xl border border-pink-100 text-left">
+                <div class="flex flex-wrap items-end gap-3 mb-8 bg-slate-50/50 p-6 rounded-[2rem] border border-slate-50">
+                    <div class="w-32">
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 mb-1 block">เลือกช่วง</label>
+                        <select id="revPeriodType" onchange="toggleRevFilter(this.value)" class="w-full border border-pink-100 rounded-xl px-3 py-2.5 text-xs outline-none bg-white font-light">
+                            <option value="daily">รายวัน</option>
+                            <option value="monthly" selected>รายเดือน</option>
+                            <option value="yearly">รายปี</option>
+                            <option value="custom">กำหนดเอง</option>
+                        </select>
+                    </div>
+
+                    <div id="revMonthBox" class="w-40">
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 mb-1 block">เดือน</label>
+                        <select id="revMonthValue" class="w-full border border-pink-100 rounded-xl px-3 py-2.5 text-xs outline-none bg-white font-light">
+                            <option value="01">มกราคม</option><option value="02" selected>กุมภาพันธ์</option><option value="03">มีนาคม</option>
+                            <option value="04">เมษายน</option><option value="05">พฤษภาคม</option><option value="06">มิถุนายน</option>
+                            <option value="07">กรกฎาคม</option><option value="08">สิงหาคม</option><option value="09">กันยายน</option>
+                            <option value="10">ตุลาคม</option><option value="11">พฤศจิกายน</option><option value="12">ธันวาคม</option>
+                        </select>
+                    </div>
+
+                    <div id="revYearBox" class="w-32">
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 mb-1 block">ปี (ค.ศ.)</label>
+                        <select id="revYearValue" class="w-full border border-pink-100 rounded-xl px-3 py-2.5 text-xs outline-none bg-white font-light">
+                            <option value="2025">2025</option><option value="2026" selected>2026</option>
+                        </select>
+                    </div>
+
+                    <div id="revDateBox" class="w-44 hidden">
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 mb-1 block">เลือกวันที่</label>
+                        <input type="date" id="revDateValue" value="${new Date().toISOString().split('T')[0]}" class="w-full border border-pink-100 rounded-xl px-3 py-2 text-xs outline-none bg-white">
+                    </div>
+
+                    <button onclick="processRevenueReport()" class="bg-black text-white px-8 py-2.5 rounded-xl text-[11px] font-bold shadow-lg hover:bg-[#D48197] transition-all uppercase tracking-widest ml-auto">
+                        🔍 ดึงข้อมูลรายงาน
+                    </button>
+                </div>
+                
+                <div id="revenueReportResult" class="min-h-[300px]">
+                    <div class="flex items-center justify-center h-full pt-10 text-slate-300 italic text-sm">
+                        <p>กรุณาเลือกช่วงเวลาที่ต้องการตรวจสอบด้านบนค่ะ</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+// 🔄 ฟังก์ชันสลับการแสดงผลของตัวกรอง
+window.toggleRevFilter = function(type) {
+    document.getElementById('revMonthBox').classList.toggle('hidden', type !== 'monthly');
+    document.getElementById('revDateBox').classList.toggle('hidden', type !== 'daily' && type !== 'custom');
+    // หากเป็นรายปี ให้ซ่อนเดือน แต่โชว์ปี
+    document.getElementById('revYearBox').classList.toggle('hidden', type === 'daily' || type === 'custom');
+};
+
+// 📊 ฟังก์ชันประมวลผลข้อมูลยอดขายจริง
+window.processRevenueReport = function() {
+    const resultArea = document.getElementById('revenueReportResult');
+    const period = document.getElementById('revPeriodType').value;
+    const accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
+    
+    // กรองข้อมูลตามช่วงเวลาที่เลือก
+    const filteredIncomes = accountDB.filter(item => {
+        if (item.type !== "รายรับ" || item.status !== "เสร็จสิ้น") return false;
+        
+        if (period === 'daily') {
+            return item.date === document.getElementById('revDateValue').value;
+        } else if (period === 'monthly') {
+            const [y, m, d] = item.date.split('-');
+            return m === document.getElementById('revMonthValue').value && y === document.getElementById('revYearValue').value;
+        } else if (period === 'yearly') {
+            return item.date.startsWith(document.getElementById('revYearValue').value);
+        }
+        return true;
+    });
+
+    const summary = { 'เงินสด': 0, 'โอน (QR)': 0, 'โอนบริษัท': 0, 'รูดบัตรเครดิต': 0, 'Shopee': 0, 'Gowabi': 0 };
+    let grandTotal = 0;
+    
+    filteredIncomes.forEach(item => {
+        const amt = parseFloat(String(item.total).replace(/[^0-9.-]+/g,"")) || 0;
+        if (summary.hasOwnProperty(item.payment)) summary[item.payment] += amt;
+        grandTotal += amt;
+    });
+
+    resultArea.innerHTML = `
+        <div class="animate-in fade-in duration-500 w-full mt-4">
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-6 mb-10">
+                ${Object.entries(summary).map(([method, total]) => `
+                    <div class="bg-slate-50 p-6 rounded-[2.5rem] border border-white shadow-sm text-center transition-all hover:scale-105">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">${method}</p>
+                        <p class="text-2xl font-black ${total > 0 ? 'text-[#D48197]' : 'text-slate-200'}">฿${total.toLocaleString()}</p>
+                    </div>`).join('')}
+            </div>
+            <div class="bg-[#D48197] p-10 rounded-[3rem] text-white mb-4 flex justify-between items-center shadow-xl">
+                <div>
+                    <p class="text-[11px] uppercase opacity-80 font-bold tracking-widest">สรุปยอดขายสุทธิทั้งหมด</p>
+                    <h2 class="text-6xl font-black italic tracking-tighter">฿${grandTotal.toLocaleString()}</h2>
+                </div>
+                <button onclick="window.print()" class="bg-white text-[#D48197] px-10 py-4 rounded-2xl font-bold text-[11px] uppercase tracking-tighter hover:bg-slate-50 shadow-md">🖨️ พิมพ์รายงาน</button>
+            </div>
+        </div>
+    `;
+};
+// 5. รายงานอื่นๆ (ฟังก์ชันสำรอง)
+window.reportInventory = () => alert("📦 รายงานสต๊อก กำลังเปิดในหน้าใหม่...");
+window.reportLowStock = () => alert("⚠️ รายงานยาใกล้หมด กำลังเปิดในหน้าใหม่...");
+window.reportDrugUsage = () => alert("💉 รายงานการใช้ยา กำลังเปิดในหน้าใหม่...");
+window.reportNewCustomers = () => alert("👥 รายงานลูกค้าใหม่ กำลังเปิดในหน้าใหม่...");
+window.reportSalesByType = () => alert("🛍️ รายงานยอดซื้อแยกประเภท กำลังเปิดในหน้าใหม่...");
+window.reportCRM = () => alert("💉 รายงานครบกำหนดฉีด กำลังเปิดในหน้าใหม่...");
+window.reportRemainingCourse = () => alert("✨ รายงานคอร์สคงเหลือ กำลังเปิดในหน้าใหม่...");
+window.reportStaffDF = () => alert("📊 รายงานสรุปค่ามือ กำลังเปิดในหน้าใหม่...");
+window.reportAttendance = () => alert("🩺 รายงาน ขาด/ลา/มาสาย กำลังเปิดในหน้าใหม่...");
+window.reportPayroll = () => alert("💰 รายงานเงินเดือน กำลังเปิดในหน้าใหม่...");
+/* =======================================================
+    📈 รายงานสรุปกำไร/ขาดทุน (Profit & Loss Report) 
+    เชื่อมต่อระบบ Filter ช่วงเวลาตามรูปตัวอย่าง
+   ======================================================= */
+
+window.reportProfitLoss = function() {
+    const area = document.getElementById('dynamicContent');
+    if(!area) return;
+
+    area.innerHTML = `
+        <div class="animate-in slide-in-from-right duration-500 p-4 -mt-6 text-left">
+            <div class="flex items-center gap-4 mb-6">
+                <button onclick="renderReportPage()" class="bg-white border border-pink-100 p-3 rounded-2xl hover:bg-pink-50 transition-all text-sm font-bold shadow-sm">🔙 กลับหน้าเมนูรายงาน</button>
+                <h2 class="text-xl font-bold ace-pink italic">📈 รายงานสรุปกำไร/ขาดทุน</h2>
+            </div>
+
+            <div class="bg-white p-8 rounded-[3rem] shadow-2xl border border-pink-100">
+                <div class="flex flex-wrap items-end gap-3 mb-8 bg-slate-50/50 p-6 rounded-[2rem] border border-slate-50">
+                    <div class="w-32">
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 mb-1 block">เลือกช่วง</label>
+                        <select id="pnLPeriodType" onchange="togglePnLFilter(this.value)" class="w-full border border-pink-100 rounded-xl px-3 py-2.5 text-xs outline-none bg-white font-light cursor-pointer">
+                            <option value="daily">รายวัน</option>
+                            <option value="monthly" selected>รายเดือน</option>
+                            <option value="yearly">รายปี</option>
+                        </select>
+                    </div>
+
+                    <div id="pnLMonthBox" class="w-40">
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 mb-1 block">เดือน</label>
+                        <select id="pnLMonthValue" class="w-full border border-pink-100 rounded-xl px-3 py-2.5 text-xs outline-none bg-white font-light cursor-pointer">
+                            <option value="01">มกราคม</option><option value="02" selected>กุมภาพันธ์</option><option value="03">มีนาคม</option>
+                            <option value="04">เมษายน</option><option value="05">พฤษภาคม</option><option value="06">มิถุนายน</option>
+                            <option value="07">กรกฎาคม</option><option value="08">สิงหาคม</option><option value="09">กันยายน</option>
+                            <option value="10">ตุลาคม</option><option value="11">พฤศจิกายน</option><option value="12">ธันวาคม</option>
+                        </select>
+                    </div>
+
+                    <div id="pnLYearBox" class="w-32">
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 mb-1 block">ปี (ค.ศ.)</label>
+                        <select id="pnLYearValue" class="w-full border border-pink-100 rounded-xl px-3 py-2.5 text-xs outline-none bg-white font-light cursor-pointer">
+                            <option value="2025">2025</option><option value="2026" selected>2026</option>
+                        </select>
+                    </div>
+
+                    <div id="pnLDateBox" class="w-44 hidden">
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 mb-1 block">เลือกวันที่</label>
+                        <input type="date" id="pnLDateValue" value="${new Date().toISOString().split('T')[0]}" class="w-full border border-pink-100 rounded-xl px-3 py-2 text-xs outline-none bg-white font-light">
+                    </div>
+
+                    <button onclick="processProfitLossReport()" class="bg-black text-white px-10 py-2.5 rounded-xl text-[11px] font-bold shadow-lg hover:bg-[#D48197] transition-all uppercase tracking-widest ml-auto">
+                        🔍 คำนวณกำไรสุทธิ
+                    </button>
+                </div>
+                
+                <div id="pnLReportResult" class="min-h-[400px]">
+                    <div class="flex flex-col items-center justify-center h-full pt-20 text-slate-300 italic text-sm">
+                        <p>กรุณาเลือกช่วงเวลา แล้วกดปุ่ม "คำนวณกำไรสุทธิ" ค่ะ</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+// 🔄 ฟังก์ชันสลับการแสดงผล Filter (วัน/เดือน/ปี)
+window.togglePnLFilter = function(type) {
+    document.getElementById('pnLMonthBox').classList.toggle('hidden', type !== 'monthly');
+    document.getElementById('pnLDateBox').classList.toggle('hidden', type !== 'daily');
+    document.getElementById('pnLYearBox').classList.toggle('hidden', type === 'daily');
+};
+
+/* =======================================================
+    📊 ฟังก์ชันคำนวณกำไร-ขาดทุน (ฉบับเพิ่มหักเงินเดือนพนักงาน) 
+   ======================================================= */
+window.processProfitLossReport = function() {
+    const resultArea = document.getElementById('pnLReportResult');
+    const period = document.getElementById('pnLPeriodType').value;
+    const accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
+    const todayQueue = JSON.parse(localStorage.getItem('todayQueueDB')) || [];
+
+    // 1. กรองรายรับและรายจ่ายเบ็ดเตล็ด
+    const filteredAccounts = accountDB.filter(item => {
+        if (period === 'daily') return item.date === document.getElementById('pnLDateValue').value;
+        if (period === 'monthly') {
+            const [y, m, d] = item.date.split('-');
+            return m === document.getElementById('pnLMonthValue').value && y === document.getElementById('pnLYearValue').value;
+        }
+        if (period === 'yearly') return item.date.startsWith(document.getElementById('pnLYearValue').value);
+        return false;
+    });
+
+    let totalRevenue = 0; 
+    let generalExpenses = 0; 
+    filteredAccounts.forEach(item => {
+        const amt = parseFloat(String(item.total || item.amount || 0).replace(/[^0-9.-]+/g,""));
+        if (item.type === "รายรับ" && item.status === "เสร็จสิ้น") totalRevenue += amt;
+        if (item.type === "รายจ่าย") generalExpenses += amt;
+    });
+
+    // 2. สรุปค่ามือ (DF)
+    let totalDF = 0;
+    todayQueue.forEach(q => {
+        if (q.status === "เสร็จสิ้น") {
+            totalDF += (parseFloat(q.staffDF || 0) + parseFloat(q.doctorDF || 0));
+        }
+    });
+
+    // 3. กำหนดตัวแปรเงินเดือนพนักงาน (ใส่เป็น 0 ไว้ก่อนเพื่อให้กรอกเพิ่มได้)
+    const totalStaffSalary = 0; 
+
+    resultArea.innerHTML = `
+        <div class="animate-in fade-in duration-500 w-full mt-6">
+            <div class="bg-blue-50 p-4 rounded-2xl mb-8 border border-blue-100 flex items-center justify-between">
+                <p class="text-[11px] font-bold text-blue-600 uppercase ml-2 italic">📌 ระบุยอดเงินเดือนพนักงานรวม (${period === 'monthly' ? 'รายเดือน' : 'ช่วงเวลาที่เลือก'}):</p>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold text-blue-400">฿</span>
+                    <input type="number" id="inputManualSalary" oninput="reCalculateNetProfit(${totalRevenue}, ${generalExpenses}, ${totalDF})" 
+                        placeholder="0.00" class="w-32 border border-blue-200 rounded-lg px-3 py-1.5 text-sm font-bold outline-none text-blue-700">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+                <div class="bg-white p-8 rounded-[2.5rem] border border-green-100 shadow-sm text-center">
+                    <p class="text-[10px] text-slate-400 font-bold uppercase mb-1">รายได้รวม (Income)</p>
+                    <p class="text-3xl font-black text-green-500">฿${totalRevenue.toLocaleString()}</p>
+                </div>
+                <div class="bg-white p-8 rounded-[2.5rem] border border-red-100 shadow-sm text-center">
+                    <p class="text-[10px] text-slate-400 font-bold uppercase mb-1">รายจ่ายรวม (Expenses)</p>
+                    <p id="displayTotalExpense" class="text-3xl font-black text-red-400">฿${(generalExpenses + totalDF).toLocaleString()}</p>
+                </div>
+                <div id="profitBox" class="bg-slate-50 p-8 rounded-[2.5rem] border border-white shadow-xl text-center border-pink-200">
+                    <p class="text-[10px] text-slate-400 font-bold uppercase mb-1">กำไรสุทธิ (Net Profit)</p>
+                    <p id="displayNetProfit" class="text-4xl font-black text-[#D48197]">฿${(totalRevenue - generalExpenses - totalDF).toLocaleString()}</p>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-[2.5rem] border border-pink-50 overflow-hidden shadow-sm p-4">
+                <table class="w-full text-sm">
+                    <tbody class="text-slate-600 font-light italic">
+                        <tr class="border-b border-slate-50"><td class="py-4 px-6">ยอดขายคอร์สและเวชภัณฑ์</td><td class="py-4 px-6 text-right text-green-500 font-bold">+ ฿${totalRevenue.toLocaleString()}</td></tr>
+                        <tr class="border-b border-slate-50"><td class="py-4 px-6">รวมค่ามือพนักงานและแพทย์ (DF)</td><td class="py-4 px-6 text-right text-red-400">- ฿${totalDF.toLocaleString()}</td></tr>
+                        <tr class="border-b border-slate-50"><td class="py-4 px-6">รายจ่ายเบ็ดเตล็ด / ซื้อของเข้าร้าน</td><td class="py-4 px-6 text-right text-red-400">- ฿${generalExpenses.toLocaleString()}</td></tr>
+                        <tr class="border-b border-slate-50 bg-blue-50/20"><td class="py-4 px-6 font-bold text-blue-600 underline">เงินเดือนพนักงาน (ระบุเพิ่ม)</td><td id="tableSalaryDisplay" class="py-4 px-6 text-right text-blue-600 font-bold">- ฿0</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>`;
+};
+
+// 🔄 ฟังก์ชันคำนวณกำไรใหม่ทันทีเมื่อกรอกเงินเดือน
+window.reCalculateNetProfit = function(rev, exp, df) {
+    const manualSalary = parseFloat(document.getElementById('inputManualSalary').value) || 0;
+    const totalExp = exp + df + manualSalary;
+    const net = rev - totalExp;
+
+    document.getElementById('displayTotalExpense').innerText = '฿' + totalExp.toLocaleString();
+    document.getElementById('displayNetProfit').innerText = '฿' + net.toLocaleString();
+    document.getElementById('tableSalaryDisplay').innerText = '- ฿' + manualSalary.toLocaleString();
+    
+    const profitBox = document.getElementById('profitBox');
+    const profitText = document.getElementById('displayNetProfit');
+    if(net >= 0) {
+        profitBox.className = "bg-slate-50 p-8 rounded-[2.5rem] border-2 border-green-400 shadow-xl text-center animate-pulse";
+        profitText.className = "text-4xl font-black text-[#D48197]";
+    } else {
+        profitBox.className = "bg-red-50 p-8 rounded-[2.5rem] border-2 border-red-400 shadow-xl text-center";
+        profitText.className = "text-4xl font-black text-red-600";
+    }
+};
+/* =======================================================
+    💉 รายงานลูกค้าครบกำหนดฉีดซ้ำ (CRM Follow-up)
+    ช่วยหาแขกให้คลินิก โดยคำนวณจากประวัติการทำหัตถการ
+   ======================================================= */
+
+window.reportCRM = function() {
+    const area = document.getElementById('dynamicContent');
+    if(!area) return;
+
+    area.innerHTML = `
+        <div class="animate-in slide-in-from-right duration-500 p-4 -mt-6 text-left">
+            <div class="flex items-center gap-4 mb-6">
+                <button onclick="renderReportPage()" class="bg-white border border-pink-100 p-3 rounded-2xl hover:bg-pink-50 transition-all text-sm font-bold shadow-sm">🔙 กลับหน้าเมนูรายงาน</button>
+                <h2 class="text-xl font-bold ace-pink italic">💉 รายงานติดตามลูกค้าครบกำหนดฉีด (CRM)</h2>
+            </div>
+
+            <div class="bg-white p-8 rounded-[3rem] shadow-2xl border border-pink-100">
+                <div class="flex flex-wrap items-end gap-3 mb-8 bg-slate-50/50 p-6 rounded-[2rem] border border-slate-50">
+                    <div class="w-48">
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 mb-1 block">ค้นหากลุ่มเป้าหมาย</label>
+                        <select id="crmPeriodType" class="w-full border border-pink-100 rounded-xl px-3 py-2.5 text-xs outline-none bg-white font-light cursor-pointer">
+                            <option value="3">ครบกำหนด 3 เดือน (Botox)</option>
+                            <option value="6" selected>ครบกำหนด 6 เดือน (Filler/โบกราม)</option>
+                            <option value="12">ครบกำหนด 1 ปี (เลเซอร์/ยกกระชับ)</option>
+                        </select>
+                    </div>
+
+                    <button onclick="processCRMReport()" class="bg-black text-white px-10 py-2.5 rounded-xl text-[11px] font-bold shadow-lg hover:bg-[#D48197] transition-all uppercase tracking-widest ml-auto">
+                        🔍 ดึงรายชื่อลูกค้า
+                    </button>
+                </div>
+                
+                <div id="crmReportResult" class="min-h-[400px]">
+                    <div class="flex flex-col items-center justify-center h-full pt-20 text-slate-300 italic text-sm">
+                        <p>กรุณาเลือกช่วงเวลา และกดปุ่มดึงรายชื่อเพื่อเริ่มแผนการตลาดค่ะ</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.processCRMReport = function() {
+    const resultArea = document.getElementById('crmReportResult');
+    const monthsToFollow = parseInt(document.getElementById('crmPeriodType').value);
+    
+    // ดึงข้อมูลคิวงานที่สำเร็จแล้ว
+    const todayQueue = JSON.parse(localStorage.getItem('todayQueueDB')) || [];
+    const customerDB = JSON.parse(localStorage.getItem('customerDB')) || [];
+    
+    const now = new Date();
+    const followList = [];
+
+    // ค้นหาย้อนหลังในประวัติงานสำเร็จ
+    todayQueue.filter(q => q.status === "เสร็จสิ้น").forEach(job => {
+        const jobDate = new Date(job.date || job.completedAt);
+        const diffMonths = (now.getFullYear() - jobDate.getFullYear()) * 12 + (now.getMonth() - jobDate.getMonth());
+
+        // ถ้าตรงกับช่วงเดือนที่เลือก และเป็นหัตถการที่เกี่ยวข้อง
+        if (diffMonths === monthsToFollow) {
+            const customer = customerDB.find(c => c.id === job.customerId) || { name: job.customerName, tel: "ไม่มีเบอร์" };
+            followList.push({
+                name: customer.name || customer.customerName,
+                tel: customer.tel || "N/A",
+                procedure: job.service || job.courseName || "ฉีดผิว/เลเซอร์",
+                lastDate: job.date || job.completedAt
+            });
+        }
+    });
+
+    if (followList.length === 0) {
+        resultArea.innerHTML = `
+            <div class="py-20 text-center text-slate-300 italic">
+                <p class="text-4xl mb-4">📭</p>
+                <p>ไม่พบรายชื่อลูกค้าที่ครบกำหนดในกลุ่มนี้ค่ะ</p>
+            </div>`;
+        return;
+    }
+
+    resultArea.innerHTML = `
+        <div class="animate-in fade-in duration-500">
+            <div class="mb-4 flex justify-between items-center px-4">
+                <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">พบกลุ่มลูกค้าทั้งหมด ${followList.length} ท่าน</p>
+            </div>
+            <div class="overflow-hidden border border-slate-50 rounded-[2rem]">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="bg-pink-50/20 text-[#D48197] text-[10px] font-bold uppercase border-b border-pink-50">
+                            <th class="py-5 px-6 text-left">รายชื่อลูกค้า</th>
+                            <th class="py-5 px-4 text-center">หัตถการล่าสุด</th>
+                            <th class="py-5 px-4 text-center">เบอร์ติดต่อ</th>
+                            <th class="py-5 px-6 text-right">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-slate-600">
+                        ${followList.map(item => `
+                            <tr class="border-b border-slate-50 hover:bg-slate-50/50 transition-all">
+                                <td class="py-4 px-6 font-bold text-slate-700">${item.name}</td>
+                                <td class="py-4 px-4 text-center italic text-xs">${item.procedure}</td>
+                                <td class="py-4 px-4 text-center font-mono text-blue-500 underline cursor-pointer">${item.tel}</td>
+                                <td class="py-4 px-6 text-right">
+                                    <button onclick="window.location='tel:${item.tel}'" class="bg-green-400 text-white px-4 py-1.5 rounded-xl text-[9px] font-bold hover:bg-green-500">📞 โทรนัด</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+};
+/* =======================================================
+    👥 รายงานลูกค้าใหม่ต่อเดือน (New Customer Growth)
+    ดูสถิติการเติบโตของฐานลูกค้าในแต่ละเดือน
+   ======================================================= */
+
+window.reportNewCustomers = function() {
+    const area = document.getElementById('dynamicContent');
+    if(!area) return;
+
+    area.innerHTML = `
+        <div class="animate-in slide-in-from-right duration-500 p-4 -mt-6 text-left">
+            <div class="flex items-center gap-4 mb-6">
+                <button onclick="renderReportPage()" class="bg-white border border-pink-100 p-3 rounded-2xl hover:bg-pink-50 transition-all text-sm font-bold shadow-sm">🔙 กลับหน้าเมนูรายงาน</button>
+                <h2 class="text-xl font-bold ace-pink italic">👥 รายงานสถิติลูกค้าใหม่รายเดือน</h2>
+            </div>
+
+            <div class="bg-white p-8 rounded-[3rem] shadow-2xl border border-pink-100">
+                <div class="flex flex-wrap items-end gap-3 mb-8 bg-slate-50/50 p-6 rounded-[2rem] border border-slate-50">
+                    <div class="w-40">
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 mb-1 block">เลือกปีที่ต้องการดู</label>
+                        <select id="newCustYear" class="w-full border border-pink-100 rounded-xl px-3 py-2.5 text-xs outline-none bg-white font-light cursor-pointer">
+                            <option value="2025">ปี 2025</option>
+                            <option value="2026" selected>ปี 2026</option>
+                        </select>
+                    </div>
+                    <button onclick="processNewCustomerReport()" class="bg-black text-white px-10 py-2.5 rounded-xl text-[11px] font-bold shadow-lg hover:bg-[#D48197] transition-all uppercase tracking-widest ml-auto">
+                        📊 แสดงสถิติลูกค้า
+                    </button>
+                </div>
+                
+                <div id="newCustReportResult" class="min-h-[400px]">
+                    <div class="flex flex-col items-center justify-center h-full pt-20 text-slate-300 italic text-sm">
+                        <p>กรุณาเลือกปี และกดปุ่มเพื่อดูอัตราการเพิ่มขึ้นของลูกค้าค่ะ</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.processNewCustomerReport = function() {
+    const resultArea = document.getElementById('newCustReportResult');
+    const selectedYear = document.getElementById('newCustYear').value;
+    const customerDB = JSON.parse(localStorage.getItem('customerDB')) || [];
+    
+    // เตรียมข้อมูลรายเดือน (ม.ค. - ธ.ค.)
+    const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+    const monthlyStats = new Array(12).fill(0);
+    let totalInYear = 0;
+
+    // ประมวลผลข้อมูลลูกค้า
+    customerDB.forEach(cust => {
+        const createDate = new Date(cust.createdAt || cust.date);
+        if (createDate.getFullYear().toString() === selectedYear) {
+            const month = createDate.getMonth();
+            monthlyStats[month]++;
+            totalInYear++;
+        }
+    });
+
+    resultArea.innerHTML = `
+        <div class="animate-in fade-in duration-500">
+            <div class="bg-[#D48197] p-8 rounded-[2.5rem] text-white mb-10 flex justify-between items-center shadow-lg">
+                <div>
+                    <p class="text-[11px] uppercase opacity-80 font-bold tracking-[0.2em]">จำนวนลูกค้าใหม่รวมในปี ${selectedYear}</p>
+                    <h2 class="text-6xl font-black italic tracking-tighter">${totalInYear.toLocaleString()} <span class="text-2xl not-italic font-light">ท่าน</span></h2>
+                </div>
+                <div class="text-right">
+                    <p class="text-xs italic opacity-70">ค่าเฉลี่ยรายเดือน</p>
+                    <p class="text-2xl font-bold">${(totalInYear / 12).toFixed(1)} ท่าน/เดือน</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                ${monthlyStats.map((count, index) => `
+                    <div class="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl border border-white hover:border-pink-200 transition-all">
+                        <div class="w-24 text-[11px] font-bold text-slate-400 uppercase tracking-tighter">${monthNames[index]}</div>
+                        <div class="flex-1 bg-white h-4 rounded-full overflow-hidden flex items-center px-1 border border-slate-100">
+                            <div class="bg-pink-300 h-2 rounded-full transition-all duration-1000" style="width: ${totalInYear > 0 ? (count/totalInYear*100) : 0}%"></div>
+                        </div>
+                        <div class="w-16 text-right font-black text-[#D48197]">${count} <span class="text-[9px] text-slate-300 font-normal">ท่าน</span></div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+};
+
+/* =======================================================
+    💰 รายงานสรุปค่ามือ DF/คอมมิชชั่น (เวอร์ชันแก้ไขรายชื่อ 0 คน)
+    ดึงข้อมูลจากทุกส่วนเพื่อให้เลือกชื่อได้ทันที
+   ======================================================= */
+
+window.reportStaffDF = function() {
+    const area = document.getElementById('dynamicContent');
+    if(!area) return;
+
+    // 🔍 1. รวบรวมรายชื่อพนักงานจากทุกแหล่งข้อมูล
+    const todayQueue = JSON.parse(localStorage.getItem('todayQueueDB')) || [];
+    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || []; 
+    const allNames = new Set();
+    
+    // ดึงจากฐานข้อมูลพนักงาน (หลัก)
+    staffDB.forEach(s => { if(s.name) allNames.add(s.name.trim()); });
+    
+    // ดึงจากประวัติการทำงาน (เสริม)
+    todayQueue.forEach(q => {
+        if(q.doctorName) allNames.add(q.doctorName.trim());
+        if(q.staffName) allNames.add(q.staffName.trim());
+        if(q.saleName) allNames.add(q.saleName.trim());
+    });
+
+    const nameOptions = Array.from(allNames).sort();
+
+    area.innerHTML = `
+        <div class="animate-in slide-in-from-right duration-500 p-4 -mt-6 text-left">
+            <div class="flex items-center gap-4 mb-6">
+                <button onclick="renderReportPage()" class="bg-white border border-pink-100 p-3 rounded-2xl hover:bg-pink-50 transition-all text-sm font-bold shadow-sm">🔙 กลับหน้าเมนูรายงาน</button>
+                <h2 class="text-xl font-bold ace-pink italic leading-none">💰 รายงานสรุปค่ามือ DF & คอมมิชชั่น</h2>
+            </div>
+
+            <div class="bg-white p-10 rounded-[3rem] shadow-2xl border border-pink-100 min-h-[600px]">
+                <div class="flex flex-wrap items-end gap-4 mb-10 bg-slate-50/50 p-8 rounded-[2.5rem] border border-slate-100">
+                    <div class="w-32">
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 mb-2 block italic">เลือกช่วง</label>
+                        <select id="staffDFPeriod" onchange="toggleStaffDFFilter(this.value)" class="w-full border border-pink-100 rounded-xl px-4 py-3 text-xs outline-none bg-white font-bold">
+                            <option value="daily">รายวัน</option>
+                            <option value="monthly" selected>รายเดือน</option>
+                        </select>
+                    </div>
+
+                    <div id="dfMonthBox" class="w-40">
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 mb-2 block italic">เดือน</label>
+                        <select id="dfMonthValue" class="w-full border border-pink-100 rounded-xl px-4 py-3 text-xs outline-none bg-white font-bold text-slate-700">
+                            ${[...Array(12)].map((_, i) => {
+                                const m = String(i+1).padStart(2, '0');
+                                const currentM = String(new Date().getMonth() + 1).padStart(2, '0');
+                                return `<option value="${m}" ${m === currentM ? 'selected' : ''}>${new Intl.DateTimeFormat('th-TH', {month: 'long'}).format(new Date(2026, i, 1))}</option>`;
+                            }).join('')}
+                        </select>
+                    </div>
+
+                    <div id="dfDateBox" class="w-44 hidden">
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 mb-2 block italic">ระบุวันที่</label>
+                        <input type="date" id="dfDateValue" value="${new Date().toISOString().split('T')[0]}" class="w-full border border-pink-100 rounded-xl px-4 py-2.5 text-xs outline-none bg-white font-bold">
+                    </div>
+
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 mb-2 block italic">เลือกชื่อผู้ปฏิบัติงาน (แพทย์/พนักงาน/เซลล์)</label>
+                        <select id="filterStaffName" class="w-full border-2 border-pink-100 rounded-xl px-4 py-3 text-[11px] outline-none bg-white font-black text-slate-700 focus:border-[#D48197] transition-all">
+                            <option value="">-- แสดงรายชื่อทั้งหมด (${nameOptions.length} คน) --</option>
+                            ${nameOptions.map(name => `<option value="${name}">${name}</option>`).join('')}
+                        </select>
+                    </div>
+
+                    <button onclick="processStaffDFReport()" class="bg-black text-white px-10 py-3.5 rounded-2xl text-[12px] font-black shadow-lg hover:bg-[#D48197] transition-all uppercase tracking-widest ml-auto">
+                        🔍 ดึงข้อมูลสรุปยอด
+                    </button>
+                </div>
+                
+                <div id="staffDFReportResult">
+                    <div class="py-20 flex flex-col items-center justify-center text-slate-300 italic text-sm">
+                        <p class="text-5xl mb-6 opacity-20">💰</p>
+                        <p>เลือกรายชื่อและช่วงเวลาเพื่อสรุปยอดค่ามือค่ะ</p>
+                        ${nameOptions.length === 0 ? '<p class="text-pink-400 mt-4 text-[10px] font-bold uppercase">! ระบบไม่พบรายชื่อพนักงาน โปรดบันทึกรายชื่อพนักงานก่อนนะคะ</p>' : ''}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+};
+/* =======================================================
+    👥 หน้าศูนย์รวมจัดการพนักงาน (Staff Management Hub)
+    รวมเมนูย่อย: ข้อมูลพนักงาน, วันหยุด, ขาดลาสาย และเงินเดือน
+   ======================================================= */
+
+window.renderStaffManagement = function() {
+    const target = document.getElementById('dynamicContent');
+    if(!target) return;
+
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 p-4 -mt-6 text-left">
+            <div class="flex items-center gap-4 mb-10 bg-white p-8 rounded-[3rem] shadow-sm border border-pink-100">
+                <div class="w-16 h-16 bg-pink-500 rounded-3xl flex items-center justify-center shadow-lg shadow-pink-200">
+                    <span class="text-3xl text-white">🩺</span>
+                </div>
+                <div>
+                    <h2 class="text-3xl font-black ace-pink italic leading-none">STAFF HUB</h2>
+                    <p class="text-[10px] text-slate-400 font-bold uppercase mt-2 italic tracking-[0.2em]">ระบบบริหารจัดการบุคลากรแบบครบวงจร</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                
+                <div onclick="renderStaffProfileList()" class="bg-white p-8 rounded-[3rem] border border-pink-50 shadow-xl hover:scale-105 transition-all cursor-pointer group">
+                    <div class="w-14 h-14 bg-pink-50 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-pink-500 transition-colors">
+                        <span class="text-2xl group-hover:filter group-hover:invert transition-all">👥</span>
+                    </div>
+                    <h3 class="font-black text-slate-700 text-lg">แฟ้มประวัติ</h3>
+                    <p class="text-[10px] text-slate-400 mt-2 italic">ข้อมูลส่วนตัว, ประกันสังคม, ภาษี และเอกสารสำคัญ</p>
+                </div>
+
+                <div onclick="renderStaffCalendar()" class="bg-white p-8 rounded-[3rem] border border-pink-50 shadow-xl hover:scale-105 transition-all cursor-pointer group">
+                    <div class="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-blue-500 transition-colors">
+                        <span class="text-2xl group-hover:filter group-hover:invert transition-all">📅</span>
+                    </div>
+                    <h3 class="font-black text-slate-700 text-lg">ตารางวันหยุด</h3>
+                    <p class="text-[10px] text-slate-400 mt-2 italic">กำหนดวันหยุดประจำเดือน และตรวจสอบเวรปฏิบัติงาน</p>
+                </div>
+
+                <div onclick="renderAttendanceRecord()" class="bg-white p-8 rounded-[3rem] border border-pink-50 shadow-xl hover:scale-105 transition-all cursor-pointer group">
+                    <div class="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-red-500 transition-colors">
+                        <span class="text-2xl group-hover:filter group-hover:invert transition-all">📉</span>
+                    </div>
+                    <h3 class="font-black text-slate-700 text-lg">ขาด / ลา / สาย</h3>
+                    <p class="text-[10px] text-slate-400 mt-2 italic">บันทึกสถิติจากเครื่องสแกน เพื่อนำไปหักเงินเดือน</p>
+                </div>
+
+                <div onclick="renderPayrollSystem()" class="bg-white p-8 rounded-[3rem] border border-pink-50 shadow-xl hover:scale-105 transition-all cursor-pointer group">
+                    <div class="w-14 h-14 bg-green-50 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-green-500 transition-colors">
+                        <span class="text-2xl group-hover:filter group-hover:invert transition-all">💰</span>
+                    </div>
+                    <h3 class="font-black text-slate-700 text-lg">จ่ายเงินเดือน</h3>
+                    <p class="text-[10px] text-slate-400 mt-2 italic">คำนวณเงินเดือน + DF - ประกันสังคม และสรุปยอดจ่าย</p>
+                </div>
+
+            </div>
+        </div>
+    `;
+};
+// ฟังก์ชันเพิ่มพนักงาน (Modal/Prompt แบบง่ายแต่สวย)
+window.showAddStaffModal = function() {
+    const name = prompt("ระบุชื่อ-นามสกุล หรือชื่อเล่นพนักงาน:");
+    if (!name) return;
+    
+    const role = prompt("ระบุตำแหน่ง (เช่น แพทย์, พนักงาน, เซลล์, ผู้ช่วย):", "พนักงาน");
+    const tel = prompt("เบอร์โทรศัพท์:");
+    const salary = prompt("เงินเดือนพื้นฐาน (ระบุเป็นตัวเลข):", "0");
+
+    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
+    staffDB.push({
+        name: name.trim(),
+        role: role || "พนักงาน",
+        tel: tel || "-",
+        salary: parseFloat(salary) || 0
+    });
+
+    localStorage.setItem('staffDB', JSON.stringify(staffDB));
+    renderStaffManagement(); // รีเฟรชหน้า
+    alert("บันทึกข้อมูลพนักงานเรียบร้อยแล้วค่ะ!");
+};
+
+// ฟังก์ชันลบพนักงาน
+window.deleteStaff = function(index) {
+    if (confirm("ยืนยันการลบข้อมูลพนักงานท่านนี้หรือไม่?")) {
+        const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
+        staffDB.splice(index, 1);
+        localStorage.setItem('staffDB', JSON.stringify(staffDB));
+        renderStaffManagement();
+    }
+};
+/* =======================================================
+    🛡️ 1. หน้าแฟ้มประวัติพนักงาน (เวอร์ชันล็อคข้อมูลปลอดภัย)
+    วางทับฟังก์ชัน renderStaffProfileList เดิม
+   ======================================================= */
+window.renderStaffProfileList = function() {
+    const target = document.getElementById('dynamicContent');
+    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
+    
+    // ตั้งค่าเบื้องต้น: ตอนนี้ให้เป็น true เพื่อให้คุณอรอุมาแก้ไขได้ก่อน
+    // วันไหนจะเริ่มรันจริง ค่อยมาเปลี่ยนเป็น false เพื่อล็อคระบบค่ะ
+    const isAdmin = true; 
+
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 p-4 -mt-6">
+            <div class="flex items-center justify-between mb-8 bg-white p-8 rounded-[3rem] shadow-sm border border-pink-100">
+                <div class="flex items-center gap-4">
+                    <button onclick="renderStaffManagement()" class="bg-pink-50 p-3 rounded-2xl hover:bg-pink-100 transition-all">🔙</button>
+                    <h2 class="text-2xl font-black ace-pink italic">👥 แฟ้มประวัติ (Security Lock)</h2>
+                </div>
+                <div>
+                    ${isAdmin ? 
+                        '<span class="bg-green-100 text-green-600 px-4 py-2 rounded-full text-[10px] font-bold">🔓 ADMIN MODE: แก้ไขได้</span>' : 
+                        '<span class="bg-red-100 text-red-600 px-4 py-2 rounded-full text-[10px] font-bold">🔒 STAFF MODE: อ่านอย่างเดียว</span>'
+                    }
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                ${staffDB.length === 0 ? `
+                    <div class="col-span-full py-20 text-center text-slate-300 italic">ยังไม่มีข้อมูลในระบบค่ะ</div>
+                ` : staffDB.map((staff, idx) => `
+                    <div class="bg-white p-8 rounded-[3rem] shadow-xl border border-pink-50 relative group transition-all hover:border-[#D48197]">
+                        <div class="absolute top-6 right-6 flex gap-2">
+                            ${isAdmin ? `
+                                <button onclick="editStaff(${idx})" class="text-blue-400 hover:text-blue-600 text-[10px] font-bold">✏️ แก้ไข</button>
+                                <button onclick="deleteStaff(${idx})" class="text-red-300 hover:text-red-500 text-[10px] font-bold ml-2">❌ ลบ</button>
+                            ` : `
+                                <button onclick="requestEditPermission()" class="bg-slate-50 text-slate-400 px-3 py-1 rounded-xl text-[9px] font-bold italic border border-slate-100">ขอสิทธิ์แก้ไข</button>
+                            `}
+                        </div>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <label class="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">ข้อมูลส่วนบุคคล</label>
+                                <p class="font-black text-slate-700 text-xl">${staff.name}</p>
+                                <p class="text-[10px] text-pink-400 font-bold uppercase">${staff.role} | สถานะ: ${staff.status || 'ทำงาน'}</p>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-4 pt-2 border-t border-slate-50">
+                                <div>
+                                    <label class="text-[9px] font-bold text-slate-300 uppercase">เลขบัตรประชาชน</label>
+                                    <p class="text-xs text-slate-500 font-mono">${maskIDCard(staff.idCard)}</p>
+                                </div>
+                                <div>
+                                    <label class="text-[9px] font-bold text-slate-300 uppercase">ฐานเงินเดือน</label>
+                                    <p class="text-xs text-slate-700 font-black">฿${parseFloat(staff.salary || 0).toLocaleString()}</p>
+                                </div>
+                            </div>
+
+                            <div class="p-4 bg-blue-50/50 rounded-2xl border border-blue-50">
+                                <label class="text-[8px] font-bold text-blue-400 uppercase mb-1 block italic">ช่องทางจ่ายเงินเดือน</label>
+                                <p class="text-[11px] text-blue-600 font-bold underline">${staff.bankName || '-'} : ${staff.bankAcc || '-'}</p>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+};
+
+// ฟังก์ชันเสริม (Helper Functions) วางต่อท้ายไว้ได้เลยค่ะ
+function maskIDCard(id) {
+    if(!id || id === "-" || id.length < 10) return id;
+    return id.substring(0,3) + "-XXXXX-" + id.substring(id.length - 4);
+}
+
+window.requestEditPermission = function() {
+    alert("🔒 ระบบถูกล็อค: กรุณาแจ้งผู้ดูแลระบบเพื่อขออนุมัติการแก้ไขข้อมูลค่ะ");
+};
+
+/* =======================================================
+    💰 4. ระบบสรุปยอดจ่ายเงินเดือน (Payroll System)
+    คำนวณ: เงินเดือน + DF - (ประกันสังคมปี 69 + หักขาดลาสาย)
+   ======================================================= */
+window.renderPayrollSystem = function() {
+    const target = document.getElementById('dynamicContent');
+    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
+    
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 p-4 -mt-6">
+            <div class="flex items-center gap-4 mb-8 bg-white p-8 rounded-[3rem] shadow-sm border border-pink-100">
+                <button onclick="renderStaffManagement()" class="bg-pink-50 p-3 rounded-2xl hover:bg-pink-100 transition-all">🔙 กลับ STAFF HUB</button>
+                <h2 class="text-2xl font-black ace-pink italic leading-none">💰 สรุปยอดจ่ายเงินเดือนและค่าตอบแทน</h2>
+            </div>
+
+            <div class="bg-white p-8 rounded-[3rem] shadow-2xl border border-pink-50 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-900 text-white font-bold uppercase text-[10px]">
+                            <tr>
+                                <th class="p-6 text-left rounded-l-[2rem]">รายชื่อพนักงาน</th>
+                                <th class="p-6 text-center">เงินเดือน + DF</th>
+                                <th class="p-6 text-center">ค่าคอมฯ (คีย์เอง)</th>
+                                <th class="p-6 text-center text-red-300">รวมยอดหัก</th>
+                                <th class="p-6 text-right rounded-r-[2rem]">ยอดจ่ายสุทธิ</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-slate-600">
+                            ${staffDB.filter(s => s.status !== 'ลาออก').map((staff, idx) => {
+                                const salary = parseFloat(staff.salary || 0);
+                                const dailyRate = salary / 30;
+                                
+                                // 1. หักประกันสังคม ปี 69 (5% สูงสุด 875 บาท)
+                                const sso = staff.hasSSO ? Math.min(salary * 0.05, 875) : 0; 
+                                
+                                // 2. หักขาดงานปกติ และ ขาดต่อวันหยุด (2 แรง)
+                                const absentRegDeduct = (parseFloat(staff.lastAbsentReg || 0) * dailyRate);
+                                const absentDoubleDeduct = (parseFloat(staff.lastAbsentDouble || 0) * dailyRate * 2);
+                                
+                                // 3. หักมาสาย (ครั้งที่ 4 เป็นต้นไป หักนาทีละ 5 บาท)
+                                let lateDeduct = 0;
+                                if (parseInt(staff.lastLateCount || 0) > 3) {
+                                    lateDeduct = parseFloat(staff.lastLateMins || 0) * 5;
+                                }
+
+                                const totalDeduction = sso + absentRegDeduct + absentDoubleDeduct + lateDeduct;
+
+                                return `
+                                    <tr class="border-b border-slate-50 hover:bg-slate-50/50 transition-all">
+                                        <td class="p-6 font-black text-slate-700">
+                                            ${staff.name}
+                                            <p class="text-[9px] text-slate-400 font-normal">ฐาน: ฿${salary.toLocaleString()}</p>
+                                        </td>
+                                        <td class="p-6 text-center font-bold">฿${salary.toLocaleString()}</td>
+                                        <td class="p-6 text-center">
+                                            <input type="number" id="manualComm-${idx}" placeholder="0" 
+                                                class="w-24 border border-pink-100 rounded-xl px-3 py-2 text-center font-black text-[#D48197] focus:border-pink-400 outline-none"
+                                                onchange="calculateNetPay(${idx}, ${salary}, ${totalDeduction})">
+                                        </td>
+                                        <td class="p-6 text-center text-red-400 font-bold italic">- ฿${totalDeduction.toLocaleString()}</td>
+                                        <td class="p-6 text-right">
+                                            <span id="netPayDisplay-${idx}" class="text-xl font-black text-slate-800">฿${(salary - totalDeduction).toLocaleString()}</span>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-10 p-8 bg-slate-50 rounded-[3rem] border border-dashed border-slate-200">
+                    <p class="text-[11px] text-slate-500 font-bold uppercase italic mb-3">📝 หมายเหตุการคำนวณ:</p>
+                    <ul class="text-[10px] text-slate-400 space-y-2">
+                        <li class="flex items-start gap-2">🔹 ประกันสังคมคำนวณตามเพดานปี 2569 (สูงสุด 875 บาท)</li>
+                        <li class="flex items-start gap-2">🔹 ขาดงานปกติ หักตามฐานรายวัน / ขาดต่อจากวันหยุด หักเพิ่มเป็น 2 เท่า</li>
+                        <li class="flex items-start gap-2">🔹 ลาป่วยแบบมีใบรับรองแพทย์ได้ไม่เกิน 5 วันต่อ 1 ปี</li>
+                        <li class="flex items-start gap-2 text-pink-500 font-bold italic">🔹 สายได้ไม่เกิน 3 ครั้ง ครั้งที่ 4 เริ่มหักเงินนาทีละ 5 บาท</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+// ฟังก์ชันคำนวณยอดสุทธิ (Net Pay)
+window.calculateNetPay = function(idx, salary, totalDeduction) {
+    const comm = parseFloat(document.getElementById(`manualComm-${idx}`).value) || 0;
+    const netPay = (salary + comm) - totalDeduction;
+    document.getElementById(`netPayDisplay-${idx}`).innerText = '฿' + netPay.toLocaleString();
+};
+/* =======================================================
+    📉 ระบบบันทึก ขาด/ลา/สาย (Attendance Record)
+   ======================================================= */
+window.renderAttendanceRecord = function() {
+    const target = document.getElementById('dynamicContent');
+    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
+
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 p-4 -mt-6 text-left pb-20">
+            <div class="flex items-center gap-4 mb-8 bg-white p-8 rounded-[3rem] shadow-sm border border-pink-100">
+                <button onclick="renderStaffManagement()" class="bg-pink-50 p-3 rounded-2xl hover:bg-pink-100">🔙 กลับ STAFF HUB</button>
+                <h2 class="text-2xl font-black ace-pink italic leading-none">📉 บันทึกสถิติ ขาด / ลา / มาสาย</h2>
+            </div>
+
+            <div class="bg-white p-10 rounded-[3rem] shadow-2xl border border-pink-50">
+                <div class="space-y-4">
+                    ${staffDB.filter(s => s.status !== 'ลาออก').map((staff, idx) => `
+                        <div class="bg-slate-50 p-6 rounded-[2.5rem] border border-white grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                            <div class="col-span-1">
+                                <p class="font-black text-slate-700">${staff.name}</p>
+                                <p class="text-[9px] text-slate-400 uppercase">ฐานคำนวณ: ฿${parseFloat(staff.salary).toLocaleString()}</p>
+                            </div>
+                            
+                            <div>
+                                <label class="text-[9px] font-bold text-slate-400 uppercase mb-1 block italic">สายครั้งที่ 4+ (ระบุนาที)</label>
+                                <input type="number" id="lateMins-${idx}" placeholder="นาที" value="${staff.lastLateMins || 0}" 
+                                    class="w-full border border-pink-100 rounded-xl px-4 py-2 text-xs font-bold focus:border-pink-500">
+                            </div>
+
+                            <div>
+                                <label class="text-[9px] font-bold text-slate-400 uppercase mb-1 block italic">ขาดงานปกติ (วัน)</label>
+                                <input type="number" id="absentReg-${idx}" placeholder="วัน" value="${staff.lastAbsentReg || 0}"
+                                    class="w-full border border-pink-100 rounded-xl px-4 py-2 text-xs font-bold">
+                            </div>
+
+                            <div>
+                                <label class="text-[9px] font-bold text-red-400 uppercase mb-1 block italic">ขาดต่อจากวันหยุด (วัน)</label>
+                                <input type="number" id="absentDouble-${idx}" placeholder="วัน" value="${staff.lastAbsentDouble || 0}"
+                                    class="w-full border border-red-100 bg-red-50/30 rounded-xl px-4 py-2 text-xs font-bold text-red-600">
+                            </div>
+                            
+                            <div class="col-span-full text-right mt-2">
+                                <button onclick="saveAttendance(${idx})" class="bg-black text-white px-8 py-2 rounded-xl text-[10px] font-bold hover:bg-[#D48197] transition-all italic">บันทึกยอดพนักงานท่านนี้</button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.saveAttendance = function(idx) {
+    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
+    staffDB[idx].lastLateMins = document.getElementById(`lateMins-${idx}`).value;
+    staffDB[idx].lastAbsentReg = document.getElementById(`absentReg-${idx}`).value;
+    staffDB[idx].lastAbsentDouble = document.getElementById(`absentDouble-${idx}`).value;
+
+    localStorage.setItem('staffDB', JSON.stringify(staffDB));
+    alert(`บันทึกสถิติของ ${staffDB[idx].name} เรียบร้อยแล้วค่ะ!`);
+};
 
 </script>
 </body>

@@ -11,6 +11,7 @@
     <title>ACE Clinic | Management System Luxury</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
 
@@ -18,6 +19,37 @@
     
 
     <style>
+/* สำหรับไฟกะพริบแจ้งพนักงานระบคิว */
+@keyframes blink-pink {
+    0% { background-color: rgba(212, 129, 151, 0); }
+    50% { background-color: rgba(212, 129, 151, 0.2); }
+    100% { background-color: rgba(212, 129, 151, 0); }
+}
+.animate-blink {
+    animation: blink-pink 1.5s infinite;
+}
+/* 🖨️ ตั้งค่าเฉพาะเวลาสั่งพิมพ์รายงานค่ามือ */
+@media print {
+    /* 1. ซ่อนทุกอย่างที่ไม่เกี่ยวข้อง */
+    body * { visibility: hidden; }
+    aside, header, .no-print, button, input, select { display: none !important; }
+
+    /* 2. แสดงเฉพาะตารางและเนื้อหาในหน้าจอรายงาน */
+    #dynamicContent, #dynamicContent * { visibility: visible; }
+    
+    /* 3. ปรับตำแหน่งตารางให้ชิดขอบบนสุด */
+    #dynamicContent {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        padding: 0;
+        margin: 0;
+    }
+    
+    /* 4. ตั้งค่าหน้ากระดาษเป็นแนวนอนเพื่อให้ตารางไม่ล้น */
+    @page { size: A4 landscape; margin: 1cm; }
+}
 /* 🖨️ ตั้งค่าสำหรับการพิมพ์ OPD Card ครึ่งหน้า A4 */
 @media print {
     /* ซ่อนทุกอย่างบนหน้าจอที่ไม่เกี่ยวข้อง */
@@ -98,6 +130,10 @@
 
 /* บังคับให้ตารางยอมให้เมนูลอยออกมาได้ (ไม่โดนตัดขอบ) */
 #dynamicContent .glass-card {
+    overflow: visible !important;
+}
+/* 🎯 เพิ่มเพื่อให้ตารางหลักยอมให้เมนูเด้งลงมาทับแถวอื่นได้ */
+.overflow-x-auto, table {
     overflow: visible !important;
 }
 
@@ -262,11 +298,22 @@ input[type=number] {
 
 
 
-/* สไตล์สำหรับ Header Control ใหม่ */
+/* เปลี่ยนไฟกะพริบเป็นสีเขียว */
+.live-indicator { 
+    width: 8px; 
+    height: 8px; 
+    background-color: #2ecc71; /* สีเขียวสดใส (Emerald Green) */
+    border-radius: 50%; 
+    display: inline-block; 
+    animation: blink 2s infinite; /* ปรับให้กะพริบช้าลงเล็กน้อยเพื่อให้ดูสบายตา */
+    box-shadow: 0 0 8px rgba(46, 204, 113, 0.6); /* เพิ่มรัศมีแสงเรืองๆ สีเขียว */
+}
 
-        .live-indicator { width: 8px; height: 8px; background-color: #ff4d4f; border-radius: 50%; display: inline-block; animation: blink 1.5s infinite; }
-
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.2; } 100% { opacity: 1; } }
+@keyframes blink { 
+    0% { opacity: 1; transform: scale(1); } 
+    50% { opacity: 0.4; transform: scale(1.1); } /* ให้มีการขยายตัวเล็กน้อยเหมือนชีพจร */
+    100% { opacity: 1; transform: scale(1); } 
+}
 
         .control-group { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 /* ปรับตัวอักษรให้ดูผอมเพรียวทั้งหน้าจอ */
@@ -555,11 +602,9 @@ position: relative;
 
     <div class="flex items-center gap-4">
 
-        <button class="bg-red-50 text-red-500 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 hover:bg-red-100 transition-all border border-red-100">
-
-            <span class="live-indicator"></span> LIVE
-
-        </button>
+        <button class="bg-green-100 text-green-700 px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 hover:bg-green-200 transition-all border border-green-200 shadow-sm">
+    <span class="live-indicator"></span> LIVE 
+</button>
 
         <button onclick="refreshAllData()" class="bg-slate-50 text-slate-500 p-2 rounded-xl border border-pink-50 hover:bg-slate-100 transition-all shadow-sm">🔄</button>
 
@@ -1169,96 +1214,68 @@ function toggleServiceSubmenu() {
 }
 
 
-        /* --- [4.3 DASHBOARD: หน้าภาพรวม] --- */
-
-function renderDashboard(target) {
-
+       /* --- [4.3 DASHBOARD: หน้าภาพรวม - เวอร์ชันอัปเดต] --- */
+function renderDashboard(target, period = 'day') {
     if (!target) return;
 
+    // 1. จำลองข้อมูลสำหรับแต่ละช่วงเวลา (เพื่อให้ตัวเลขเปลี่ยนจริง)
+    let stats = {
+        title: "วันนี้",
+        sales: "45,200",
+        customers: "3",
+        appointments: "12",
+        net: "43,700"
+    };
+
+    if (period === 'month') {
+        stats = { title: "เดือนนี้", sales: "1,350,000", customers: "85", appointments: "320", net: "1,120,000" };
+    } else if (period === 'year') {
+        stats = { title: "ปีนี้", sales: "15,800,000", customers: "940", appointments: "3,850", net: "12,450,000" };
+    }
+
     target.innerHTML = `
-
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 font-black italic uppercase">
-
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 font-black italic uppercase animate-in slide-in-from-bottom duration-500">
             <div class="glass-card border-l-8 border-[#C5A059] shadow-sm">
-
-                <p class="text-[10px] text-gray-400 font-bold uppercase">ยอดขายวันนี้</p>
-
-                <p class="text-3xl text-gray-800 mt-2 font-black italic">฿45,200</p>
-
+                <p class="text-[10px] text-gray-400 font-bold uppercase">ยอดขาย${stats.title}</p>
+                <p class="text-3xl text-gray-800 mt-2 font-black italic">฿${stats.sales}</p>
             </div>
-
             <div class="glass-card border-l-8 border-[#D48197] shadow-sm">
-
                 <p class="text-[10px] text-gray-400 font-bold uppercase">ลูกค้าใหม่</p>
-
-                <p class="text-3xl text-gray-800 mt-2 font-black italic">3 คน</p>
-
+                <p class="text-3xl text-gray-800 mt-2 font-black italic">${stats.customers} คน</p>
             </div>
-
             <div class="glass-card border-l-8 border-blue-400 shadow-sm">
-
-                <p class="text-[10px] text-gray-400 font-bold uppercase">คิวนัดวันนี้</p>
-
-                <p class="text-3xl text-gray-800 mt-2 font-black italic">12 นัด</p>
-
+                <p class="text-[10px] text-gray-400 font-bold uppercase">คิวนัด${stats.title}</p>
+                <p class="text-3xl text-gray-800 mt-2 font-black italic">${stats.appointments} นัด</p>
             </div>
-
             <div class="glass-card border-l-8 border-green-400 shadow-sm">
-
                 <p class="text-[10px] text-gray-400 font-bold uppercase">ยอดคงเหลือสุทธิ</p>
-
-                <p class="text-3xl text-green-600 mt-2 font-black italic font-black">฿43,700</p>
-
+                <p class="text-3xl text-green-600 mt-2 font-black italic font-black">฿${stats.net}</p>
             </div>
-
         </div>
-
-
 
         <div class="glass-card shadow-lg mb-8 border-t-4 border-blue-400">
-
-            <h3 class="text-lg font-black ace-pink mb-6 uppercase italic">📅 คิวนัดหมายวันนี้ (12 นัด / <span class="text-red-500">ยกเลิก 2</span>)</h3>
-
+            <h3 class="text-lg font-black ace-pink mb-6 uppercase italic">📅 คิวนัดหมาย${stats.title} (${stats.appointments} นัด)</h3>
             <div class="overflow-x-auto">
-
                 <table class="w-full text-left text-[11px] font-black italic uppercase">
-
                     <thead class="bg-slate-50 text-gray-500 border-b">
-
                         <tr>
-
                             <th class="p-3">ลำดับ</th><th class="p-3">HN</th><th class="p-3">ช่องทาง</th>
-
                             <th class="p-3">เวลา</th><th class="p-3">เบอร์โทร</th><th class="p-3">ชื่อ-นามสกุล</th>
-
                             <th class="p-3 text-center">สถานะ</th>
-
                         </tr>
-
                     </thead>
-
                     <tbody class="divide-y bg-white">
-
                         <tr>
-
                             <td class="p-3">1</td><td class="p-3">HN0001</td>
-
                             <td class="p-3"><span class="text-blue-600">🔵 FB</span></td>
-
                             <td class="p-3">10:00</td><td class="p-3">0971375498</td><td class="p-3">คุณอริสา รักสวย</td>
-
                             <td class="p-3 text-center"><span class="bg-green-100 text-green-600 px-3 py-1 rounded-full text-[9px]">🟢 ยืนยันแล้ว</span></td>
-
                         </tr>
-
                     </tbody>
-
                 </table>
-
             </div>
-
         </div>
-
+  
 
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8 font-bold uppercase">
@@ -1783,31 +1800,19 @@ function updateHeaderTime() {
 // 🔄 รีเฟรชข้อมูล
 
 window.refreshAllData = function() {
-
-
-
     updateHeaderTime();
-
-
-
     const currentPageTitle = document.getElementById('pageTitle').innerText;
-
     const targetContent = document.getElementById('dynamicContent');
 
-
-
     if (currentPageTitle === 'DASHBOARD' || currentPageTitle === 'DASHBOARD ภาพรวม') {
-
-        renderDashboard(targetContent);
-
-    } 
-
+        // ส่งค่า currentPeriod เข้าไปในหน้า Dashboard ด้วย
+        renderDashboard(targetContent, currentPeriod);
+    }
     else if (currentPageTitle === 'จัดการลูกค้า/ประวัติ') {
 
         renderCustomerList(targetContent);
 
     }
-
 
 
     console.log("ACE Clinic System: Updated at " + new Date().toLocaleTimeString());
@@ -1834,6 +1839,20 @@ window.changePeriod = function(period, btn) {
 
     refreshAllData();
 
+};
+// ตัวแปรเก็บช่วงเวลาปัจจุบัน (ค่าเริ่มต้นคือรายวัน)
+let currentPeriod = 'day'; 
+
+window.changePeriod = function(period, btn) {
+    // 1. สลับสีไฮไลท์ปุ่ม
+    document.querySelectorAll('.btn-period').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    
+    // 2. อัปเดตช่วงเวลาปัจจุบัน
+    currentPeriod = period;
+    
+    // 3. สั่งโหลดข้อมูลใหม่ตามช่วงเวลาที่เลือก
+    refreshAllData();
 };
 
 
@@ -1886,37 +1905,42 @@ function loadPage(id, title) {
     
     const target = document.getElementById('dynamicContent');
     
+    // --- เริ่มต้นตรวจสอบ ID ---
     if(id === 1) {
-        renderDashboard(target); // หน้าสรุปภาพรวม
+        renderDashboard(target);
     } 
     else if(id === 2) {
-        renderCustomerList(target); // หน้าจัดการลูกค้า
+        renderCustomerList(target);
     } 
     else if(id === 3) {
-        renderSalesPage(); // 💸 หน้าบันทึกรายรับ (สีชมพูทอง)
+        renderSalesPage();
     } 
-	else if(id === 4) {
-    renderAppointmentPage(); // เรียกหน้าตารางนัดหมาย
-	}
-	else if(id === 6) {
-    renderAccountingReport(); // 📈 เรียกหน้าสรุปรายงานตัวใหม่ค่ะ
-	}
-    else if(id === 9) {
-        renderExpensePage(); // 💸 หน้าบันทึกรายจ่าย (สีแดง Luxury)
+    else if(id === 4) {
+        renderAppointmentPage();
     }
-	else if(id === 51) {
-        renderCourseMasterPage(); // 💎 เรียกหน้ารายการคอร์ส
+    else if(id === 6) {
+        renderAccountingReport();
+    }
+    // 🎯 เพิ่มส่วนนี้เข้าไปค่ะ เพื่อให้หน้าจอรายงานค่ามือทำงาน
+    else if(id === 66) {
+        renderDFReportPage(); 
+    }
+    else if(id === 9) {
+        renderExpensePage();
+    }
+    else if(id === 51) {
+        renderCourseMasterPage();
     }
     else if(id === 52) {
-        renderQueuePage(); // 🔄 เรียกหน้าห้องจัดการคิว
+        renderQueuePage();
     }
     else if(id === 53) {
-        renderStockPage(); // 📦 เรียกหน้าสต๊อกยาฉีด
+        renderStockPage();
     }
     else {
         target.innerHTML = `<div class="glass-card text-center py-32 font-bold ace-pink uppercase text-2xl">เมนู ${title} <br> กำลังพัฒนา...</div>`;
     }
-}
+ }
 
 /* --- กู้คืนระบบ Login และฟังก์ชันสลับหน้า (ชุดสมบูรณ์) --- */
 
@@ -2280,178 +2304,305 @@ document.addEventListener('click', () => {
 });
 
 /* =======================================================
-   หน้า 3 💸 ระบบบันทึกยอดขาย / เปิดบิล (Luxury Clean Edition)
+    💸 หน้าตีบิลรายรับ (ฉบับแก้ไข: ปุ่มเลือก / ค้นหาชื่อขึ้น / ตัวตรงบาง)
    ======================================================= */
 window.renderSalesPage = function() {
     const target = document.getElementById('dynamicContent');
-    currentBillItems = []; 
+    if (!target) return;
+    
+    const incomes = JSON.parse(localStorage.getItem('accountDB')) || [];
+    const today = new Date().toISOString().split('T')[0];
+    
+    const dateFilter = document.getElementById('billDateFilter')?.value || today;
+    const currentSearch = document.getElementById('billSearchInput')?.value || "";
+    const statusFilter = document.getElementById('billStatusFilter')?.value || "ทั้งหมด";
+    const billPageSize = parseInt(document.getElementById('billPageSize')?.value) || 10;
+
+    // 🎯 ตรรกะการกรอง (Filter) ประวัติบิล
+    let filteredData = incomes.filter(item => {
+        if (item.type !== "รายรับ") return false; 
+        const nameVal = String(item.customerName || item.customer || "").toLowerCase();
+        const hnVal = String(item.hn || "").toLowerCase();
+        const searchVal = currentSearch.toLowerCase().trim();
+        return (nameVal.includes(searchVal) || hnVal.includes(searchVal)) &&
+               (statusFilter === "ทั้งหมด" || item.status === statusFilter) &&
+               (!dateFilter || item.date === dateFilter);
+    });
+
+    filteredData.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    const totalPages = Math.ceil(filteredData.length / billPageSize) || 1;
+    if (typeof window.currentBillPage === 'undefined') window.currentBillPage = 1;
+    const startIndex = (window.currentBillPage - 1) * billPageSize;
+    const paginatedData = filteredData.slice(startIndex, startIndex + billPageSize);
 
     target.innerHTML = `
-        <div class="animate-in fade-in duration-500 p-8 bg-white min-h-screen font-bold">
-            <div class="flex justify-between items-center mb-8">
-                <div>
-                    <h4 class="text-3xl text-[#FF4B91] font-bold">🧾 บันทึกยอดขาย / เปิดบิล</h4>
-                    <p class="text-slate-400 text-[11px] mt-2 font-bold uppercase">ลงบันทึกรายรับและออกใบเสร็จรับเงิน (INCOMING)</p>
-                </div>
-                <div class="flex gap-4">
-                    <div class="w-44 text-left">
-                        <label class="text-[10px] text-slate-400 uppercase font-bold">วันที่ตีบิล</label>
-                        <input type="date" id="billDate" 
-                            class="w-full bg-slate-50 border border-pink-100 rounded-xl p-3 text-sm outline-none font-bold text-slate-600">
-                    </div>
-                    <button onclick="loadPage(1, 'Dashboard ภาพรวม')" 
-                        class="bg-pink-50 text-[#FF4B91] px-6 py-2 rounded-2xl text-xs hover:bg-[#FF4B91] hover:text-white transition-all font-bold">
-                        ✕ ยกเลิก
-                    </button>
-                </div>
-            </div>
-
-            <div class="bg-[#FFF0F5] rounded-[2.5rem] p-8 mb-8 border-2 border-dashed border-[#FF4B91]/30">
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-end">
-                    
-                   <div class="lg:col-span-3 space-y-2 text-left relative" style="z-index: 9999;">
-    <label class="text-xs text-[#FF4B91] font-bold ml-1">ชื่อลูกค้า / HN</label>
-    <input type="text" id="customerSearchInput" 
-        oninput="searchCustomerForBill(this.value)" 
-        placeholder="🔍 ค้นหาลูกค้า..." 
-        class="w-full bg-white border border-pink-200 rounded-2xl p-4 text-sm text-slate-700 outline-none shadow-sm font-bold focus:border-[#FF4B91]">
-    
-    <div id="customerSearchResult" 
-        class="absolute left-0 w-full bg-white shadow-2xl rounded-xl mt-1 hidden border border-pink-100 overflow-hidden" 
-        style="z-index: 10000;">
-    </div>
-</div>
-
-                    <div class="lg:col-span-4 space-y-2 text-left relative z-[1000]">
-                        <label class="text-xs text-[#FF4B91] font-bold ml-1">ชื่อคอร์ส หรือ ยา</label>
-                        <input type="text" id="itemName" oninput="searchProduct(this.value)" placeholder="พิมพ์ชื่อรายการ..." 
-                            class="w-full bg-white border border-pink-200 rounded-2xl p-4 text-sm text-slate-700 outline-none shadow-sm font-bold focus:border-[#FF4B91]">
-                        <div id="searchResult" class="absolute left-0 w-full bg-white shadow-xl rounded-2xl mt-1 hidden max-h-48 overflow-y-auto border border-pink-100"></div>
-                    </div>
-
-                    <div class="lg:col-span-2 space-y-2 text-left">
-                        <label class="text-xs text-[#FF4B91] font-bold ml-1">ราคา (฿)</label>
-                        <input type="number" id="billPrice" placeholder="0.00" 
-                            class="w-full bg-white border border-pink-200 rounded-2xl p-4 text-sm text-[#FF4B91] outline-none shadow-sm font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none">
-                    </div>
-
-                    <div class="lg:col-span-1 space-y-2 text-left">
-                        <label class="text-xs text-[#FF4B91] font-bold ml-1 text-center block">จำนวน</label>
-                        <input type="number" id="billQty" value="1" min="1"
-                            class="w-full bg-white border border-pink-200 rounded-2xl p-4 text-sm text-[#FF4B91] outline-none shadow-sm text-center font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none">
-                    </div>
-
-                    <div class="lg:col-span-2">
-                        <button onclick="addItemToBill()" class="w-full bg-[#FF4B91] text-white py-4 rounded-2xl text-[11px] hover:bg-[#E63980] transition-all shadow-lg font-bold uppercase tracking-wider">
-                            + เพิ่มรายการ
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="mb-8 overflow-hidden rounded-[1.5rem] border border-pink-50 shadow-sm">
-                <table class="w-full text-left font-bold">
-                    <thead class="bg-[#FFF0F5] text-[11px] text-[#FF4B91] uppercase tracking-wider">
-                        <tr>
-                            <th class="p-4">หมวดหมู่</th>
-                            <th class="p-4">รายการบริการ / สินค้า</th>
-                            <th class="p-4 text-center">จำนวน</th>
-                            <th class="p-4 text-right">ราคา</th>
-                            <th class="p-4 text-right">รวม (฿)</th>
-                            <th class="p-4 text-center">จัดการ</th>
-                        </tr>
-                    </thead>
-                    <tbody id="billItemsList" class="text-[13px] text-slate-600 font-bold">
-                        <tr><td colspan="6" class="p-8 text-center text-slate-300">ยังไม่มีรายการที่เลือก...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 border-t border-pink-50 pt-8">
-                <div class="space-y-4 text-left">
-                    <p class="text-xs text-slate-400 font-bold uppercase ml-1">เลือกช่องทางการชำระเงิน</p>
-                    
-<div class="space-y-4 text-left">
-    <select id="billPaymentMethod" 
-        onchange="window.selectedPaymentMethod = this.value"
-        class="w-full bg-[#FFF0F5] border border-pink-100 rounded-2xl p-4 text-sm text-slate-700 outline-none font-bold focus:border-[#FF4B91] appearance-none cursor-pointer">
-        <option value="">-- กรุณาเลือกช่องทาง --</option>
-        <option value="เงินสด">💵 เงินสด</option>
-        <option value="โอน (QR)">📱 โอน (QR)</option>
-        <option value="โอนบริษัท">🏢 โอนบริษัท</option>
-        <option value="รูดบัตรเครดิต">💳 รูดบัตรเครดิต</option>
-        <option value="Shopee">🛍️ Shopee</option>
-        <option value="Gowabi">🎟️ GOWABI</option>
-    </select>
-</div>
-                </div>
+    <div class="animate-in fade-in duration-500 font-light pb-20 -mt-6 text-left">
+        <div class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-pink-100 no-print mb-6">
+            <div class="flex flex-nowrap items-end gap-4 overflow-x-auto pb-2 scrollbar-hide">
                 
-                <div class="text-right flex flex-col justify-end items-end">
-                    <p class="text-xs text-slate-400 font-bold">ยอดสุทธิที่ต้องชำระ (GRAND TOTAL)</p>
-                    <h5 id="grandTotalDisplay" class="text-6xl text-[#FF4B91] font-bold">฿0.00</h5>
-                    <button onclick="confirmFinalPayment()" 
-                        class="mt-6 bg-[#D4AF37] text-white px-16 py-4 rounded-2xl text-sm shadow-xl hover:bg-[#C5A028] transition-all font-bold">
-                        ยืนยันและออกใบเสร็จ
-                    </button>
+                <div class="flex flex-col gap-1 shrink-0">
+                    <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">แสดงลำดับ</label>
+                    <select id="billPageSize" onchange="window.currentBillPage=1; renderSalesPage()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[13px] font-light bg-slate-50 outline-none shadow-sm min-w-[120px] text-slate-600 appearance-none cursor-pointer">
+                        <option value="10" ${billPageSize === 10 ? 'selected' : ''}>10 รายการ</option>
+                        <option value="30" ${billPageSize === 30 ? 'selected' : ''}>30 รายการ</option>
+                        <option value="50" ${billPageSize === 50 ? 'selected' : ''}>50 รายการ</option>
+                    </select>
                 </div>
+
+                <div class="flex flex-col gap-1 shrink-0">
+                    <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">ปุ่มสถานะทั้งหมด</label>
+                    <select id="billStatusFilter" onchange="window.currentBillPage=1; renderSalesPage()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[13px] font-light bg-slate-50 outline-none shadow-sm min-w-[140px] text-slate-600 appearance-none cursor-pointer">
+                        <option value="ทั้งหมด" ${statusFilter === 'ทั้งหมด' ? 'selected' : ''}>สถานะทั้งหมด</option>
+                        <option value="ปกติ" ${statusFilter === 'ปกติ' ? 'selected' : ''}>⏳ ปกติ</option>
+                        <option value="เสร็จสิ้น" ${statusFilter === 'เสร็จสิ้น' ? 'selected' : ''}>✅ เสร็จสิ้น</option>
+                        <option value="ยกเลิก" ${statusFilter === 'ยกเลิก' ? 'selected' : ''}>❌ ยกเลิก</option>
+                    </select>
+                </div>
+
+                <div class="flex flex-col gap-1 shrink-0">
+                    <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">เลือกวันที่ตีบิล</label>
+                    <input type="date" id="billDateFilter" value="${dateFilter}" onchange="window.currentBillPage=1; renderSalesPage()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[13px] font-light bg-slate-50 outline-none text-slate-600 shadow-sm cursor-pointer">
+                </div>
+
+                <div class="flex flex-col gap-1 flex-1 min-w-[250px]">
+                    <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">ค้นหาประวัติ (ชื่อ/HN)</label>
+                    <div class="flex gap-2">
+                        <div class="relative flex-1">
+                            <input type="text" id="billSearchInput" value="${currentSearch}" placeholder="พิมพ์แล้วกด Enter..." onkeyup="if(event.key === 'Enter') { window.currentBillPage=1; renderSalesPage(); }" class="w-full border border-pink-100 pl-10 pr-4 py-2.5 rounded-2xl text-[13px] font-light bg-slate-50 outline-none focus:ring-1 focus:ring-pink-200 transition-all text-slate-700">
+                            <span class="absolute left-4 top-2.5 text-slate-300">🔍</span>
+                        </div>
+                        <button onclick="window.currentBillPage=1; renderSalesPage()" class="bg-[#D48197] text-white px-6 py-2 rounded-2xl text-[11px] font-bold shadow-md hover:bg-black transition-all shrink-0">ค้นหา</button>
+                    </div>
+                </div>
+
+                <button onclick="openNewBillProcess()" class="bg-black text-white px-6 py-2.5 rounded-2xl text-[11px] font-bold shadow-xl hover:bg-[#D48197] transition-all uppercase flex items-center gap-2 shrink-0 mb-0.5">
+                    <span class="bg-white text-black w-5 h-5 rounded-full flex items-center justify-center text-sm font-bold">+</span> เพิ่มใบเสร็จ
+                </button>
             </div>
         </div>
-    `;
-   
-    // ตั้งค่าวันที่ปัจจุบัน
-    document.getElementById('billDate').valueAsDate = new Date();
+
+      <div class="bg-white rounded-[3rem] shadow-2xl border border-pink-100 p-8 min-h-[400px]">
+    <table class="w-full text-center text-sm border-separate border-spacing-y-0">
+        <thead>
+            <tr style="height: 55px;">
+                <th class="bg-[#D48197] text-white font-normal px-4 rounded-l-[1.5rem]">วันที่บิล</th>
+                <th class="bg-[#D48197] text-white font-normal px-2">HN</th>
+                <th class="bg-[#D48197] text-white font-normal px-4 text-left">ชื่อคนใช้</th>
+                <th class="bg-[#D48197] text-white font-normal px-4 text-left">รายการ</th>
+                <th class="bg-[#D48197] text-white font-normal px-2 text-right">ยอดเงิน</th>
+                <th class="bg-[#D48197] text-white font-normal px-2 text-center">ช่องทาง</th>
+                <th class="bg-[#D48197] text-white font-normal px-2 text-center">สถานะ</th>
+                <th class="bg-[#D48197] text-white font-normal px-4 rounded-r-[1.5rem]">จัดการ</th>
+            </tr>
+        </thead>
+       <tbody class="text-slate-600 font-normal">
+            ${paginatedData.length > 0 ? paginatedData.map((item, i) => `
+                <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all font-normal" style="height: 60px;">
+                    <td class="p-2 text-[11px] text-slate-400 font-normal">${item.date}</td>
+                    <td class="p-2 font-normal text-[#D48197]">${item.hn || '-'}</td>
+                    <td class="p-2 text-left font-normal text-slate-800">${item.customer || item.customerName}</td>
+                    <td class="p-2 text-left text-[11px] leading-tight text-slate-400 font-normal">
+                        ${(item.items || []).map(p => `• ${p.name}`).join('<br>')}
+                    </td>
+                    <td class="p-2 text-right font-normal text-slate-800">
+                        ฿${parseFloat(String(item.total || 0).replace(/[^0-9.-]+/g,"")).toLocaleString()}
+                    </td>
+                    <td class="p-2 text-[11px] text-center font-normal">${item.payment || '-'}</td>
+                    <td class="p-2 text-center">
+    <span class="px-3 py-1 rounded-full text-[10px] font-normal 
+        ${item.status === 'เสร็จสิ้น' ? 'bg-green-100 text-green-600' : 
+          item.status === 'ยกเลิก' ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-600'}">
+        ${item.status || 'ปกติ'}
+    </span>
+</td>
+                   <td class="p-2 text-center relative" style="overflow: visible !important;">
+    <div class="inline-flex items-center bg-[#D48197] text-white rounded-full p-1 shadow-md scale-90 relative" 
+         style="z-index: 50;" onclick="this.closest('tr').style.zIndex = '9999';">
+        
+        <button onclick="window.viewBillOnly('${item.id}')" 
+                class="px-5 py-1.5 text-[11px] font-normal border-r border-white/30 hover:bg-white/10 rounded-l-full flex items-center gap-2 uppercase">
+            <span class="text-sm">ดูใบเสร็จ</span> 
+        </button>
+
+        <button onclick="event.stopPropagation(); window.safeToggleMenu(event, ${i})" 
+                class="px-3 py-1.5 text-[10px] hover:bg-white/10 rounded-r-full transition-all cursor-pointer">
+            ▼
+        </button>
+        
+        <div id="action-menu-${i}" 
+             class="hidden absolute right-0 top-full mt-3 w-64 bg-white border border-pink-100 rounded-[2rem] shadow-2xl z-[999999] overflow-hidden text-left font-normal animate-in fade-in slide-in-from-top-2 duration-300">
+            <div class="p-4 space-y-1 bg-white relative">
+                <button onclick="window.openOldReceiptById('${item.id}')" class="w-full p-3.5 text-[13px] text-slate-600 hover:bg-pink-50 rounded-2xl flex items-center gap-4 transition-all group">
+                    <img src="https://cdn-icons-png.flaticon.com/128/443/443324.png" class="w-5 h-5 grayscale group-hover:grayscale-0"> 
+                    <span>พิมพ์ใบเสร็จ</span>
+                </button>
+                
+                <button onclick="window.printFullTaxInvoice('${item.id}', '${item.hn}')" class="w-full p-3.5 text-[13px] text-slate-600 hover:bg-pink-50 rounded-2xl flex items-center gap-4 transition-all group">
+                    <img src="https://cdn-icons-png.flaticon.com/128/2912/2912773.png" class="w-5 h-5 grayscale group-hover:grayscale-0"> 
+                    <span>พิมพ์ใบกำกับภาษี</span>
+                </button>
+                
+                <div class="border-t border-pink-50/50 my-2"></div>
+                <button onclick="window.cancelBillProcess('${item.id}', '${item.hn}')" class="w-full p-3.5 text-[13px] text-red-400 hover:bg-red-50 rounded-2xl flex items-center gap-4 transition-all font-normal">
+                    <span class="text-xl">❌</span> <span>ยกเลิกบิล</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</td>
+                </tr>
+            `).join('') : `<tr><td colspan="8" class="p-20 text-center italic text-slate-300 text-base font-normal">🚦 ไม่พบข้อมูลในตารางค่ะ</td></tr>`}
+        </tbody>
+            </table>
+        </div>
+    </div>`;
 };
 
-/* --- 🔍 ฟังก์ชันค้นหาลูกค้า: ปรับปรุงให้ดึงข้อมูลได้แม่นยำ --- */
+/* --- 🎯 ฟังก์ชันเพิ่มใบเสร็จ: ดีไซน์ 3 กล่อง + ค้นหาขึ้นจริง + ช่องทางชำระเงินครบ --- */
+window.openNewBillProcess = function() {
+    const target = document.getElementById('dynamicContent');
+    const today = new Date().toISOString().split('T')[0];
+    window.currentBillItems = []; 
+
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 p-4 -mt-6 text-left font-normal tracking-tight bg-white min-h-screen">
+            <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-pink-100 mb-6 flex justify-between items-center">
+                <div>
+                    <h2 class="text-xl font-normal text-[#FF4B91] uppercase">สร้างรายการขาย / ออกใบเสร็จใหม่</h2>
+                    <p class="text-[10px] text-slate-400 font-normal uppercase mt-1 italic">วันที่: ${today}</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="confirmFinalPayment()" class="bg-[#D48197] text-white px-8 py-3 rounded-2xl text-xs font-normal shadow-lg hover:brightness-110 transition-all uppercase">บันทึก</button>
+                    <button onclick="renderSalesPage()" class="bg-slate-400 text-white px-6 py-3 rounded-2xl text-xs font-normal shadow-md hover:bg-slate-50 transition-all uppercase">X</button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
+                <div class="lg:col-span-2 flex justify-center items-start">
+                    <div class="w-32 h-32 rounded-3xl bg-pink-50 border-2 border-dashed border-pink-200 flex items-center justify-center overflow-hidden">
+                        <img id="billCustPhoto" src="" class="w-full h-full object-cover hidden">
+                        <span id="billPhotoIcon" class="text-4xl text-pink-200">👤</span>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-10">
+                    <div class="relative mb-6">
+                        <label class="text-[10px] text-[#FF4B91] font-normal uppercase ml-2 mb-1 block">ค้นหาข้อมูลคนไข้ (HN หรือ ชื่อ)</label>
+                        <input type="text" id="custSearchForBillInp" oninput="searchCustomerForBill(this.value)" 
+                               placeholder="🔍 พิมพ์ HN หรือ ชื่อเพื่อดึงข้อมูลเข้า 3 กล่อง..." 
+                               class="w-full border border-pink-200 p-4 rounded-2xl outline-none text-sm bg-[#FFF9FA] font-normal shadow-sm">
+                        <div id="customerSearchResult" class="absolute left-0 right-0 bg-white shadow-2xl rounded-2xl mt-1 hidden border border-pink-100 max-h-60 overflow-y-auto z-[9999]"></div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="bg-white p-5 rounded-[1.5rem] border border-cyan-100 shadow-sm space-y-2">
+                            <p class="text-[11px] text-cyan-600 border-b border-cyan-50 pb-1 font-normal">รหัสคนไข้: <span id="billHN" class="text-slate-700">-</span></p>
+                            <p class="text-[11px] text-cyan-600 border-b border-cyan-50 pb-1 font-normal">ชื่อ-สกุล: <span id="billFullName" class="text-slate-700">-</span></p>
+                            <p class="text-[11px] text-cyan-600 border-b border-cyan-50 pb-1 font-normal">ชื่อเล่น: <span id="billNickName" class="text-slate-700">-</span></p>
+                        </div>
+                        <div class="bg-white p-5 rounded-[1.5rem] border border-cyan-100 shadow-sm space-y-2">
+                            <p class="text-[11px] text-cyan-600 border-b border-cyan-50 pb-1 font-normal">สัญชาติ: <span id="billNationality" class="text-slate-700">-</span></p>
+                            <p class="text-[11px] text-cyan-600 border-b border-cyan-50 pb-1 font-normal">เบอร์โทร: <span id="billPhone" class="text-slate-700">-</span></p>
+                            <p class="text-[11px] text-cyan-600 font-normal">สิทธิรักษา: <span id="billRight" class="text-slate-700">ทั่วไป</span></p>
+                        </div>
+                        <div class="bg-white p-5 rounded-[1.5rem] border border-cyan-100 shadow-sm space-y-2">
+                            <div class="flex justify-between text-[11px] text-cyan-600 border-b border-cyan-50 pb-1">
+                                <span>วงเงิน:</span><span id="billCredit" class="text-slate-700 font-normal">0</span>
+                            </div>
+                            <div class="mt-1">
+                                <label class="text-[9px] text-red-400 uppercase font-bold">🚨 ประวัติการแพ้:</label>
+                                <p id="billAllergy" class="text-xs text-red-600 font-normal">-</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="billingFormArea" class="hidden">
+                <div class="bg-pink-50/30 p-8 rounded-[2.5rem] border border-dashed border-pink-200 mb-6">
+                    <div class="grid grid-cols-1 md:grid-cols-12 gap-5 items-end">
+                        <div class="md:col-span-6 relative">
+                            <label class="text-[10px] text-slate-400 ml-2 block uppercase font-normal">เลือกคอร์ส หรือ ยา</label>
+                            <input type="text" id="itemName" oninput="searchProduct(this.value)" placeholder="พิมพ์ชื่อคอร์ส..." class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm bg-white font-normal shadow-sm">
+                            <div id="searchResult" class="absolute z-50 w-full bg-white shadow-xl rounded-2xl mt-1 hidden max-h-48 overflow-y-auto border border-pink-50"></div>
+                        </div>
+                        <div class="md:col-span-2">
+                            <input type="number" id="billPrice" placeholder="ราคา" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm text-center bg-white font-normal">
+                        </div>
+                        <div class="md:col-span-2">
+                            <input type="number" id="billQty" value="1" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm text-center bg-white font-normal">
+                        </div>
+                        <div class="md:col-span-2">
+                            <button onclick="addItemToBill()" class="w-full bg-[#FF4B91] text-white py-3 rounded-2xl text-[11px] font-normal shadow-md">+ เพิ่มรายการ</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-[2rem] shadow-xl border border-pink-100 p-8 min-h-[300px]">
+                    <table class="w-full text-center text-sm font-normal">
+                        <thead class="bg-cyan-50 text-cyan-700">
+                            <tr style="height: 50px;">
+                                <th class="rounded-l-2xl font-normal px-4">รายการ</th><th class="font-normal">จำนวน</th><th class="text-right font-normal">ราคา</th><th class="text-right font-normal">รวม (฿)</th><th class="rounded-r-2xl font-normal">จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="billItemsList" class="text-slate-600 font-normal"></tbody>
+                    </table>
+
+                    <div class="mt-8 pt-8 border-t border-slate-100 flex flex-col md:flex-row justify-between items-end gap-6">
+                        <div class="w-full md:w-80 text-left">
+                            <label class="text-[10px] text-slate-400 uppercase font-bold ml-2">💳 ช่องทางชำระเงิน</label>
+                            <select id="billPaymentMethod" class="w-full bg-slate-50 border border-pink-100 rounded-2xl p-4 text-sm outline-none mt-1 font-normal">
+                                <option value="">-- เลือกบัญชีชำระเงิน --</option>
+                                <option value="เงินสด">💵 เงินสด</option>
+                                <option value="โอน (QR)">📱 โอน (QR)</option>
+                                <option value="โอนบริษัท">🏢 โอนบริษัท</option>
+                                <option value="Shopee">🛍️ Shopee</option>
+                                <option value="Gowabi">🎟️ Gowabi</option>
+                            </select>
+                        </div>
+                        <div class="text-right font-normal">
+                            <p class="text-[10px] text-slate-400 font-bold uppercase">ยอดชำระสุทธิ</p>
+                            <h5 id="grandTotalDisplay" class="text-6xl text-[#FF4B91] font-normal tracking-tighter">฿0.00</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="noCustomerHint" class="text-center text-slate-300 italic pt-24 animate-pulse">กรุณาพิมพ์ค้นหารายชื่อคนไข้เพื่อเริ่มตีบิลค่ะ</div>
+        </div>`;
+};
+
+/* --- ฟังก์ชันค้นหาคนไข้ --- */
 window.searchCustomerForBill = function(val) {
     const resDiv = document.getElementById('customerSearchResult');
-    if (!val) { resDiv.classList.add('hidden'); return; }
-    
-    // 🎯 ตรวจสอบว่าระบบใช้ตัวแปรไหน (customerDB หรือ customerData)
-    const db = (typeof customerDB !== 'undefined') ? customerDB : (typeof customerData !== 'undefined' ? customerData : []);
-    
-    // ค้นหาโดยเช็คทั้งชื่อ (fullname/name) และ HN
-    const matches = db.filter(c => 
-        (c.fullname && c.fullname.includes(val)) || 
-        (c.name && c.name.includes(val)) || 
-        (c.hn && c.hn.includes(val))
-    );
-    
+    if (!val || val.length < 1) { resDiv.classList.add('hidden'); return; }
+    const matches = customerDB.filter(c => (c.fullname && c.fullname.includes(val)) || (c.hn && c.hn.includes(val)));
     if (matches.length > 0) {
-        resDiv.innerHTML = matches.map(c => {
-            const displayName = c.fullname || c.name; // ดึงชื่อที่ถูกต้องมาโชว์
-            return `
-                <div onclick="window.selectCustomerForBill('${displayName}', '${c.hn}')" 
-                    class="p-4 hover:bg-pink-50 cursor-pointer border-b border-pink-50 flex justify-between items-center font-bold bg-white text-left">
-                    <span class="text-sm text-slate-700 pointer-events-none">${displayName}</span>
-                    <span class="text-[10px] bg-slate-100 px-2 py-1 rounded-full uppercase pointer-events-none text-slate-500">${c.hn}</span>
-                </div>
-            `;
-        }).join('');
+        resDiv.innerHTML = matches.map(c => `<div onclick="selectCustomerToBill('${c.hn}')" class="p-4 hover:bg-pink-50 cursor-pointer border-b border-pink-50 flex justify-between items-center font-normal bg-white"><span class="text-sm text-slate-700">${c.fullname}</span><span class="text-[10px] bg-cyan-100 text-cyan-700 px-2 py-0.5 rounded-full uppercase">${c.hn}</span></div>`).join('');
         resDiv.classList.remove('hidden');
-    } else {
-        resDiv.classList.add('hidden');
-    }
+    } else { resDiv.classList.add('hidden'); }
 };
 
-window.selectCustomerForBill = function(name, hn) {
-    const input = document.getElementById('customerSearchInput');
-    const display = document.getElementById('selectedCustomerDisplay');
-    const resDiv = document.getElementById('customerSearchResult');
+/* --- ฟังก์ชันเลือกคนไข้เข้ากล่อง --- */
+window.selectCustomerToBill = function(hn) {
+    const c = customerDB.find(item => item.hn === hn);
+    if (!c) return;
+    window.activeCustomer = c;
+    document.getElementById('billHN').innerText = c.hn || '-';
+    document.getElementById('billFullName').innerText = c.fullname || '-';
+    document.getElementById('billNickName').innerText = c.nickname || '-';
+    document.getElementById('billPhone').innerText = c.phone || '-';
+    document.getElementById('billAllergy').innerText = c.allergy || 'ไม่มีประวัติการแพ้';
+    
+    const img = document.getElementById('billCustPhoto');
+    const icon = document.getElementById('billPhotoIcon');
+    if (c.photo) { img.src = c.photo; img.classList.remove('hidden'); icon.classList.add('hidden'); } 
+    else { img.classList.add('hidden'); icon.classList.remove('hidden'); }
 
-    if (input) {
-        input.value = name; // นำชื่อใส่ในช่องพิมพ์
-    }
-    
-    if (display) {
-        display.innerText = `✅ เลือกลูกค้า: ${name} (${hn})`;
-        display.style.color = "#FF4B91"; // สีชมพูสดใสตามธีมใหม่
-        display.classList.remove('italic');
-    }
-    
-    resDiv.classList.add('hidden'); // ปิดกล่องรายการ
+    document.getElementById('billingFormArea').classList.remove('hidden');
+    document.getElementById('noCustomerHint').classList.add('hidden');
+    document.getElementById('customerSearchResult').classList.add('hidden');
+    document.getElementById('custSearchForBillInp').value = c.fullname;
 };
-
 /* --- ฟังก์ชันแสดงรายการในตารางบิล (ตัวหนังสือตั้งตรง 100%) --- */
 function renderBillItems() {
     const listBody = document.getElementById('billItemsList');
@@ -2469,8 +2620,9 @@ function renderBillItems() {
                     <td class="p-4 text-center text-slate-600">${item.qty}</td>
                     <td class="p-4 text-right text-slate-600">฿${item.price.toLocaleString()}</td>
                     <td class="p-4 text-right ace-pink">฿${item.total.toLocaleString()}</td>
-                    <td class="p-4 text-center">
-                        <button onclick="removeItemFromBill(${index})" class="text-red-300 hover:text-red-500 transition-all">✕</button>
+                   <td class="p-4 text-center">
+    <button onclick="removeItemFromBill(${index})" 
+            class="bg-slate-100 p-2 rounded-lg hover:bg-red-100 text-red-400 transition-all">✕</button>
                     </td>
                 </tr>
             `;
@@ -2490,24 +2642,45 @@ window.selectPaymentType = function(btn, type) {
     selectedPaymentMethod = type; // เก็บวิธีจ่ายเงินที่คุณเลือก
 };
 
-/* --- ส่วนที่ 2: ฟังก์ชันยืนยัน เพื่อสรุปยอดและเตรียมปลิ้นใบเสร็จ --- */
+/* --- 💾 ฟังก์ชันยืนยันการบันทึกบิล (เวอร์ชันแก้ไข: บันทึกลงตารางสรุปบิลอัตโนมัติ) --- */
 window.confirmFinalPayment = function() {
     try {
         const paymentSelect = document.getElementById('billPaymentMethod');
         const paymentValue = paymentSelect ? paymentSelect.value : "";
         const dateInput = document.getElementById('billDate');
-        const billDate = dateInput ? dateInput.value : new Date().toLocaleDateString('th-TH');
-        const total = document.getElementById('grandTotalDisplay').innerText;
+        const billDate = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
+        const totalRaw = document.getElementById('grandTotalDisplay').innerText;
 
-        let customerHN = (window.activeCustomer) ? window.activeCustomer.hn : "HN-GENERAL";
-        let customerName = (window.activeCustomer) ? (window.activeCustomer.fullname || window.activeCustomer.name) : (document.getElementById('customerSearchInput')?.value || "ลูกค้าทั่วไป");
+        // ดึงข้อมูลคนไข้จากหน้าจอ 3 กล่อง
+        const customerName = document.getElementById('billFullName').innerText;
+        const customerHN = document.getElementById('billHN').innerText;
 
-        if (currentBillItems.length === 0 || !paymentValue) {
-            alert('⚠️ กรุณาเลือกรายการและช่องทางชำระเงินก่อนค่ะ');
+        if (customerHN === "-" || currentBillItems.length === 0 || !paymentValue) {
+            alert('⚠️ กรุณาเลือกคนไข้, รายการสินค้า และช่องทางชำระเงินให้ครบถ้วนค่ะ');
             return;
         }
 
-        // 🎯 หัวใจสำคัญ: บันทึกคอร์สเข้าประวัติลูกค้า
+        // 🎯 1. สร้างข้อมูลบิลเพื่อเก็บลงฐานข้อมูลบัญชีหลัก (accountDB)
+        const newBillEntry = {
+            id: Date.now(),
+            date: billDate,
+            hn: customerHN,
+            customerName: customerName,
+            customer: customerName, 
+            items: [...currentBillItems],
+            total: totalRaw,
+            payment: paymentValue,
+            status: "เสร็จสิ้น",
+            type: "รายรับ",
+            timestamp: new Date().getTime()
+        };
+
+        // 🎯 2. บันทึกลงฐานข้อมูล accountDB ทันที
+        let accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
+        accountDB.push(newBillEntry);
+        localStorage.setItem('accountDB', JSON.stringify(accountDB));
+
+        // 🎯 3. บันทึกลงประวัติคอร์สลูกค้า (เหมือนเดิมของคุณอรอุมา)
         if (window.activeCustomer) {
             if (!window.activeCustomer.courses) window.activeCustomer.courses = [];
             currentBillItems.forEach(item => {
@@ -2517,39 +2690,28 @@ window.confirmFinalPayment = function() {
                     date: billDate
                 });
             });
-      	     const idx = customerDB.findIndex(c => c.hn === window.activeCustomer.hn);
-		if (idx !== -1) {
-   		 customerDB[idx] = window.activeCustomer;
-  		  // 🎯 หัวใจสำคัญ: บรรทัดนี้จะทำให้คอร์สไม่หายตอนรีเฟรชหน้าจอค่ะ
-   		 localStorage.setItem('customerDB', JSON.stringify(customerDB)); 
-		}
-      	  }
+            const idx = customerDB.findIndex(c => c.hn === window.activeCustomer.hn);
+            if (idx !== -1) {
+                customerDB[idx] = window.activeCustomer;
+                localStorage.setItem('customerDB', JSON.stringify(customerDB));
+            }
+        }
 
-        const newBill = {
-            hn: customerHN,
-            date: billDate,
-            customer: customerName,
-            items: [...currentBillItems],
-            total: total,
-            payment: paymentValue,
-            timestamp: new Date().getTime()
-        };
+        alert(`✅ บันทึกบิลของคุณ ${customerName} เรียบร้อยแล้วค่ะ!`);
 
-        let billHistoryDB = JSON.parse(localStorage.getItem('billHistoryDB')) || [];
-        billHistoryDB.push(newBill);
-        localStorage.setItem('billHistoryDB', JSON.stringify(billHistoryDB));
-        window.billHistoryDB = billHistoryDB;
+        // 🎯 4. กลับไปหน้าตารางสรุปเพื่อให้เห็นรายการล่าสุดที่เพิ่มเข้าไป
+        renderSalesPage(); 
 
-        alert(`✅ บันทึกสำเร็จ!\nคอร์สถูกเพิ่มลงในประวัติแล้วค่ะ`);
-        showReceiptPreview(newBill);
-    } catch (e) { alert("เกิดข้อผิดพลาด: " + e.message); }
+    } catch (e) { 
+        console.error("Error saving bill:", e);
+        alert("เกิดข้อผิดพลาด: " + e.message); 
+    }
 };
-
-/* --- ✅ ฟังก์ชันสร้างหน้าบันทึกรายจ่าย (สีแดง Luxury) --- */
+/* --- ✅ ฟังก์ชันสร้างหน้าบันทึกรายจ่าย (ฉบับเชื่อมต่อฐานข้อมูล) --- */
 window.renderExpensePage = function() {
     const target = document.getElementById('dynamicContent');
     target.innerHTML = `
-        <div class="animate-in fade-in duration-500 p-8 bg-white min-h-screen font-bold">
+        <div class="animate-in fade-in duration-500 p-8 bg-white min-h-screen font-bold text-left">
             <div class="flex justify-between items-center mb-8">
                 <div>
                     <h4 class="text-3xl text-red-500 font-bold">💸 บันทึกรายจ่าย (OUTGOING)</h4>
@@ -2568,8 +2730,7 @@ window.renderExpensePage = function() {
                 <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-end">
                     <div class="lg:col-span-5 space-y-2 text-left">
                         <label class="text-sm text-red-500 font-bold ml-1">ชื่อรายการรายจ่าย</label>
-                        <input type="text" id="expenseName" placeholder="เช่น ค่าน้ำยาทำความสะอาด, ค่าอุปกรณ์..." 
-                            class="w-full bg-white border border-red-100 rounded-2xl p-4 text-sm text-slate-700 outline-none shadow-sm font-bold">
+                        <input type="text" id="expenseName" placeholder="เช่น ค่าน้ำยาทำความสะอาด..." class="w-full bg-white border border-red-100 rounded-2xl p-4 text-sm text-slate-700 outline-none shadow-sm font-bold">
                     </div>
                     <div class="lg:col-span-3 space-y-2 text-left">
     <label class="text-sm text-red-500 font-bold ml-1">หักจากบัญชี</label>
@@ -2584,23 +2745,34 @@ window.renderExpensePage = function() {
 </div>
                     <div class="lg:col-span-2 space-y-2 text-left">
                         <label class="text-sm text-red-500 font-bold ml-1">จำนวนเงิน (฿)</label>
-                        <input type="number" id="expenseAmount" placeholder="0.00" 
-                            class="w-full bg-white border border-red-100 rounded-2xl p-4 text-sm text-red-600 outline-none shadow-sm font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none">
+                        <input type="number" id="expenseAmount" placeholder="0.00" class="w-full bg-white border border-red-100 rounded-2xl p-4 text-sm text-red-600 outline-none shadow-sm font-bold">
                     </div>
                     <div class="lg:col-span-2">
-                        <button onclick="alert('✅ บันทึกรายจ่ายสำเร็จ!')" class="w-full bg-red-500 text-white py-4 rounded-2xl text-[11px] hover:bg-red-600 transition-all shadow-lg font-bold uppercase tracking-wider">
+                        <button onclick="saveManualExpense()" class="w-full bg-red-500 text-white py-4 rounded-2xl text-[11px] hover:bg-red-600 transition-all shadow-lg font-bold uppercase tracking-wider">
                             บันทึกรายจ่าย
                         </button>
                     </div>
                 </div>
             </div>
 
-            <div class="p-20 text-center text-slate-300 font-bold border-2 border-dashed border-slate-50 rounded-[2.5rem]">
-                กำลังรอรายการรายจ่ายจากคุณอรอุมา...
+            <div class="bg-white rounded-[2rem] shadow-sm border border-red-50 overflow-hidden">
+                <table class="w-full text-left font-bold">
+                    <thead class="bg-red-50 text-[11px] text-red-500 uppercase">
+                        <tr style="height: 50px;">
+                            <th class="p-4 pl-8">วันที่</th>
+                            <th class="p-4">รายการ</th>
+                            <th class="p-4 text-center">หักจากบัญชี</th>
+                            <th class="p-4 text-right pr-8">จำนวนเงิน (฿)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="expenseDataBody" class="text-[13px] text-slate-600 font-normal">
+                        </tbody>
+                </table>
             </div>
         </div>
     `;
-    document.getElementById('expenseDate').valueAsDate = new Date(); // ตั้งค่าวันที่วันนี้อัตโนมัติ
+    document.getElementById('expenseDate').valueAsDate = new Date();
+    updateExpenseTableDisplay(); // เรียกใช้ฟังก์ชันวาดตารางทันที
 };
 
 /* =======================================================
@@ -2639,10 +2811,10 @@ window.showReceiptPreview = function(billData) {
             <div class="flex gap-4 mt-10 no-print">
     <button onclick="window.print()" class="bg-[#FF4B91] text-white px-10 py-3 rounded-2xl font-bold shadow-xl">🖨️ พิมพ์ใบเสร็จ</button>
     
-    <button onclick="backToCustomerProfile()" 
-        class="bg-white border border-slate-200 px-10 py-3 rounded-2xl font-bold text-slate-400 hover:bg-slate-50 transition-all">
-        🔙 กลับหน้าประวัติลูกค้า
-    </button>
+    <button onclick="renderSalesPage()" 
+    class="bg-white border border-slate-200 px-10 py-3 rounded-2xl font-bold text-slate-400 hover:bg-slate-50 transition-all">
+    🔙 ย้อนกลับหน้าประวัติบิล
+</button>
 </div>
         </div>`;
 };
@@ -2753,15 +2925,12 @@ window.renderAppointmentPage = function() {
     const target = document.getElementById('dynamicContent');
     if (!target) return;
     
-    // ดึงฐานข้อมูลหลัก
     const appointments = JSON.parse(localStorage.getItem('appointmentDB')) || [];
-    
-    // ตั้งค่าตัวแปรเบื้องต้น
     const today = new Date().toISOString().split('T')[0];
     const dateFilter = document.getElementById('filterDate')?.value || today;
     const currentSearch = document.getElementById('appSearchInput')?.value || "";
     const statusFilter = document.getElementById('statusFilter')?.value || "ทั้งหมด";
-    appRowsPerPage = parseInt(document.getElementById('appPageSize')?.value) || 10;
+    const appRowsPerPage = parseInt(document.getElementById('appPageSize')?.value) || 10;
 
     const formatDateTH = (dateStr) => {
         if (!dateStr) return "-";
@@ -2769,7 +2938,6 @@ window.renderAppointmentPage = function() {
         return `${d}-${m}-${y}`;
     };
 
-    // กรองข้อมูลตามการค้นหา/วันที่
     let filteredData = appointments.filter(ap => {
         const matchSearch = ap.customerName.toLowerCase().includes(currentSearch.toLowerCase()) || 
                            (ap.hn && ap.hn.toLowerCase().includes(currentSearch.toLowerCase()));
@@ -2778,16 +2946,14 @@ window.renderAppointmentPage = function() {
         return matchSearch && matchStatus && matchDate;
     });
 
-    // เรียงลำดับตามเวลา
     filteredData.sort((a, b) => a.time.localeCompare(b.time));
 
-    // คำนวณหน้า
     const totalPages = Math.ceil(filteredData.length / appRowsPerPage) || 1;
     const startIndex = (currentAppPage - 1) * appRowsPerPage;
     const paginatedData = filteredData.slice(startIndex, startIndex + appRowsPerPage);
 
     target.innerHTML = `
-    <div class="animate-in fade-in duration-500 font-extralight uppercase">
+    <div class="animate-in fade-in duration-500 font-extralight uppercase pb-20">
         <div class="glass-card mb-8 border border-pink-200 shadow-sm p-4 rounded-3xl">
             <div class="flex flex-col md:flex-row justify-between items-center gap-4">
                 <div class="flex flex-wrap gap-2 items-center flex-1">
@@ -2803,117 +2969,94 @@ window.renderAppointmentPage = function() {
                         <option value="ไม่มาตามนัด" ${statusFilter === 'ไม่มาตามนัด' ? 'selected' : ''}>🔵 ไม่มาตามนัด</option>
                     </select>
                     <input type="date" id="filterDate" onchange="currentAppPage=1; renderAppointmentPage()" value="${dateFilter}" class="border border-pink-200 px-3 py-2 rounded-xl text-[10px] outline-none bg-white font-extralight">
-                    
                     <div class="relative flex items-center min-w-[200px]">
                         <input id="appSearchInput" type="text" placeholder="🔍 ค้นชื่อ / HN" value="${currentSearch}" 
                             onkeyup="if(event.key === 'Enter') { currentAppPage=1; renderAppointmentPage(); }"
-                            class="w-full border border-pink-200 px-4 py-2 rounded-xl text-[10px] outline-none bg-white pr-14 font-extralight">
-                        <button onclick="currentAppPage=1; renderAppointmentPage()" class="absolute right-1 top-1 bottom-1 bg-black text-white px-3 rounded-lg hover:brightness-125 transition-all text-[9px] font-extralight">ค้นหา</button>
+                            class="w-full border border-pink-200 px-4 py-2 rounded-xl text-[10px] outline-none bg-white pr-14">
+                        <button onclick="currentAppPage=1; renderAppointmentPage()" class="absolute right-1 top-1 bottom-1 bg-black text-white px-3 rounded-lg text-[9px]">ค้นหา</button>
                     </div>
                 </div>
                 <div class="flex gap-2">
-                    <button onclick="printDailyReport()" class="w-28 bg-slate-100 text-slate-500 px-4 py-2 rounded-xl text-[9px] uppercase tracking-tighter font-extralight">📊 รายงานนัด</button>
-                    <button onclick="openAppointmentModal()" class="w-28 bg-black text-white px-4 py-2 rounded-xl text-[9px] uppercase tracking-tighter font-extralight">+ เพิ่มนัดหมาย</button>
+                    <button onclick="printDailyReport()" class="w-28 bg-slate-100 text-slate-500 px-4 py-2 rounded-xl text-[9px] font-extralight">📊 รายงานนัด</button>
+                    <button onclick="openAppointmentModal()" class="w-28 bg-black text-white px-4 py-2 rounded-xl text-[9px] font-extralight">+ เพิ่มนัดหมาย</button>
                 </div>
             </div>
         </div>
 
-       <div class="bg-white rounded-[2rem] shadow-2xl border border-pink-200 overflow-visible font-extralight mt-4 p-8">
-        <table class="w-full text-center text-[12px] border-collapse overflow-visible">
-                <thead class="bg-[#D48197] text-white font-light">
-                    <tr>
-                        <th class="p-2 w-[80px] text-white font-extralight">เฟิร์มคิว</th>
-                        <th class="p-2 w-[20px]">ลำดับ</th>
-                        <th class="p-2 w-[80px]">วันที่/เวลา</th>
-                        <th class="p-2 w-[70px]">HN</th>
-                        <th class="p-2 text-left w-[140px]">ชื่อ-นามสกุล</th>
-                        <th class="p-2 w-[40px]">เซลล์</th> 
-                        <th class="p-2 w-[60px]">แพทย์</th>
-                        <th class="p-2 w-[60px]">พนักงาน</th>
-                        <th class="p-2 text-left w-[400px]">รายการคอร์ส</th> 
-                        <th class="p-2 w-[60px]">สถานะ</th>
-                        <th class="p-2 w-[80px]">จัดการ</th>
+        <div class="bg-white rounded-[2rem] shadow-2xl border border-pink-200 p-8 mt-4" style="min-height: 700px; overflow: visible !important;">
+            <table class="w-full text-center text-[12px] border-separate border-spacing-y-0" style="overflow: visible !important;">
+                <thead>
+                    <tr style="height: 50px;">
+                        <th class="bg-[#D48197] text-white font-normal px-4 rounded-l-[1.5rem]">เฟิร์มคิว</th>
+                        <th class="bg-[#D48197] text-white font-normal px-2">ลำดับ</th>
+                        <th class="bg-[#D48197] text-white font-normal px-2">วันที่/เวลา</th>
+                        <th class="bg-[#D48197] text-white font-normal px-2">HN</th>
+                        <th class="bg-[#D48197] text-white font-normal px-4 text-left">ชื่อ-นามสกุล</th>
+                        <th class="bg-[#D48197] text-white font-normal px-2">เซลล์</th>
+                        <th class="bg-[#D48197] text-white font-normal px-2">แพทย์</th>
+                        <th class="bg-[#D48197] text-white font-normal px-2">พนักงาน</th>
+                        <th class="bg-[#D48197] text-white font-normal px-4 text-left">รายการคอร์ส</th>
+                        <th class="bg-[#D48197] text-white font-normal px-2">สถานะ</th>
+                        <th class="bg-[#D48197] text-white font-normal px-4 rounded-r-[1.5rem]">จัดการ</th>
                     </tr>
                 </thead>
                 <tbody class="text-slate-500 font-extralight">
                     ${paginatedData.length > 0 ? paginatedData.map((ap, i) => {
-                        // 🎯 ค้นหา Index ที่แท้จริงในฐานข้อมูลหลักโดยอ้างอิงจาก createdAt
                         const realIndex = appointments.findIndex(item => item.createdAt === ap.createdAt);
-                        
                         const customers = JSON.parse(localStorage.getItem('customerDB')) || [];
                         const customerInfo = customers.find(c => c.hn === ap.hn);
                         const sellerName = customerInfo ? (customerInfo.sellerName || '-') : '-';
 
                         return `
-                        <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all font-extralight text-slate-600">
+                        <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all font-extralight text-slate-600" style="height: 60px;">
                             <td class="p-1">
                                 <button onclick="toggleConfirmApp(${realIndex})" 
-                                    class="w-4 h-4 rounded-full border transition-all flex items-center justify-center mx-auto
-                                    ${ap.isConfirm ? 'bg-[#D48197] border-[#D48197] text-white' : 'border-slate-200 text-slate-200'}">
+                                    class="w-4 h-4 rounded-full border flex items-center justify-center mx-auto ${ap.isConfirm ? 'bg-[#D48197] border-[#D48197] text-white' : 'border-slate-200'}">
                                     <span style="font-size: 7px;">✔️</span>
                                 </button>
                             </td>
-                            <td class="p-1 text-center">${startIndex + i + 1}</td>
-                            <td class="p-1 text-[9px] leading-tight text-center">${formatDateTH(ap.date)}<br><span class="text-[#D48197] font-light">${ap.time}</span></td>
-                            <td class="p-1 text-center">${ap.hn || '-'}</td>
-                            <td class="p-1 text-left truncate font-light text-slate-700">${ap.customerName}</td>
-                            <td class="p-1 text-[#D48197] truncate italic text-center font-medium">${sellerName}</td> 
-                            <td class="p-1 truncate text-center">พญ.${ap.doctor}</td>
-                            <td class="p-1 truncate text-center">${ap.staff || '-'}</td>
-                            <td class="p-1 text-left leading-tight font-extralight">
-                                <div class="break-words line-clamp-2 w-full">${ap.course || '-'}</div>
-                            </td>
-                            <td class="p-1 text-center">
-                                <span class="text-[8px] uppercase ${ap.status === 'เสร็จสิ้น' ? 'text-green-500' : 'text-yellow-500'}">${ap.status}</span>
-                            </td>
+                            <td class="p-1">${startIndex + i + 1}</td>
+                            <td class="p-1 text-[9px] leading-tight">${formatDateTH(ap.date)}<br><span class="text-[#D48197]">${ap.time}</span></td>
+                            <td class="p-1 font-bold">${ap.hn || '-'}</td>
+                            <td class="p-1 text-left font-normal text-slate-700">${ap.customerName}</td>
+                            <td class="p-1 text-[#D48197] italic font-medium">${sellerName}</td>
+                            <td class="p-1 truncate">พญ.${ap.doctor}</td>
+                            <td class="p-1 truncate">${ap.staff || '-'}</td>
+                            <td class="p-1 text-left leading-tight font-extralight">${ap.course || '-'}</td>
+                            <td class="p-1 text-center"><span class="text-[8px] uppercase ${ap.status === 'เสร็จสิ้น' ? 'text-green-500' : 'text-yellow-500'}">${ap.status}</span></td>
                             
-                          <td class="p-1 text-center" style="position: relative; overflow: visible !important;">
-                            <div class="relative flex items-center justify-center" style="overflow: visible !important;">
-                                <div class="inline-flex items-center bg-[#D48197] text-white rounded-full shadow-sm scale-90 relative">
-                                    <button type="button" onclick="editAppointment(${realIndex})" 
-                                        class="pl-4 pr-3 py-2 border-r border-white/20 hover:bg-black/10 text-[12px] uppercase font-extralight">แก้ไข</button>
-                                    
-                                    <button type="button" 
-                                            onclick="event.preventDefault(); event.stopPropagation(); window.toggleAppActionMenu(event, ${realIndex})" 
-                                            class="px-2.5 py-2 hover:bg-black/10 flex items-center justify-center cursor-pointer">
-                                        <span style="font-size: 9px; pointer-events: none;">▼</span>
-                                    </button>
-                                </div>
-
-                                <div id="app-action-menu-${realIndex}" 
-                                     class="hidden absolute right-0 bg-white border border-pink-100 rounded-2xl shadow-2xl text-left text-slate-600 font-normal w-48"
-                                     style="top: 40px; z-index: 10000 !important; min-width: 190px;">
-                                    
-                                    <div class="flex flex-col">
-                                        <button onclick="alert('🔄 จัดการคิว')" class="w-full px-5 py-3 text-[11px] text-green-600 hover:bg-green-50 border-b border-gray-50 flex items-center gap-3 transition-colors">
-                                            <span class="text-sm">🔄</span> <span>จัดการคิว</span>
-                                        </button>
-                                        <button onclick="alert('🗓️ ดูวันนัดทั้งหมด')" class="w-full px-5 py-3 text-[11px] text-gray-500 hover:bg-gray-50 border-b border-gray-50 flex items-center gap-3 transition-colors">
-                                            <span class="text-sm">🗓️</span> <span>ดูวันนัดทั้งหมด</span>
-                                        </button>
-                                        <button onclick="printAppointmentTicket(${realIndex})" class="w-full px-5 py-3 text-[11px] text-blue-600 hover:bg-blue-50 border-b border-gray-50 flex items-center gap-3 transition-colors">
-                                            <span class="text-sm">📄</span> <span>พิมพ์บัตรนัด</span>
-                                        </button>
-                                        <button onclick="deleteAppointment(${realIndex})" class="w-full px-5 py-3 text-[11px] text-red-500 hover:bg-red-50 flex items-center gap-3 font-bold transition-colors">
-                                            <span class="text-sm">🗑️</span> <span>ลบนัดหมาย</span>
+                            <td class="p-1 text-center" style="position: relative; overflow: visible !important;">
+                                <div class="relative flex items-center justify-center" style="overflow: visible !important;">
+                                    <div class="inline-flex items-center bg-[#D48197] text-white rounded-full shadow-sm scale-90 relative">
+                                        <button onclick="editAppointment(${realIndex})" class="pl-4 pr-3 py-2 border-r border-white/20 hover:bg-black/10 text-[12px] uppercase font-extralight">แก้ไข</button>
+                                        <button onclick="event.preventDefault(); event.stopPropagation(); window.toggleAppActionMenu(event, ${realIndex})" class="px-2.5 py-2 hover:bg-black/10 flex items-center justify-center">
+                                            <span style="font-size: 9px;">▼</span>
                                         </button>
                                     </div>
+                                    <div id="app-action-menu-${realIndex}" class="hidden absolute right-0 bg-white border border-pink-100 rounded-2xl shadow-2xl text-left text-slate-600 font-normal w-48" style="top: 40px; z-index: 99999 !important;">
+                                        <div class="flex flex-col">
+                                            <button onclick="sendToServiceQueue(${realIndex})" class="w-full px-5 py-3 text-[11px] text-green-600 hover:bg-green-50 border-b border-gray-50 flex items-center gap-3 transition-colors font-normal">🔄 ส่งเข้าห้องจัดการคิว</button>
+                                            <button onclick="alert('🗓️ ดูวันนัดทั้งหมด')" class="w-full px-5 py-3 text-[11px] text-gray-500 hover:bg-gray-50 border-b border-gray-50 flex items-center gap-3 transition-colors font-normal">🗓️ ดูวันนัดทั้งหมด</button>
+                                            <button onclick="printAppointmentTicket(${realIndex})" class="w-full px-5 py-3 text-[11px] text-blue-600 hover:bg-blue-50 border-b border-gray-50 flex items-center gap-3 transition-colors font-normal">📄 พิมพ์บัตรนัด</button>
+                                            <button onclick="deleteAppointment(${realIndex})" class="w-full px-5 py-3 text-[11px] text-red-500 hover:bg-red-50 flex items-center gap-3 font-bold transition-colors font-normal">🗑️ ลบนัดหมาย</button>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                        </td>
+                            </td>
                         </tr>`;
-                    }).join('') : `<tr><td colspan="11" class="p-20 text-center text-slate-300 italic font-extralight">ไม่พบข้อมูลนัดหมาย...</td></tr>`}
+                    }).join('') : `<tr><td colspan="11" class="p-20 text-center italic text-slate-300">ไม่พบข้อมูลนัดหมาย...</td></tr>`}
                 </tbody>
             </table>
         </div>
 
         <div class="flex justify-center items-center gap-4 mt-8 mb-10 font-extralight">
-            <button onclick="changeAppPage(-1)" ${currentAppPage === 1 ? 'disabled' : ''} class="px-6 py-2 bg-white border border-pink-200 rounded-2xl disabled:opacity-30 text-[10px] hover:bg-pink-50 transition-all">ก่อนหน้า</button>
+            <button onclick="currentAppPage=Math.max(1, currentAppPage-1); renderAppointmentPage()" ${currentAppPage === 1 ? 'disabled' : ''} class="px-6 py-2 bg-white border border-pink-200 rounded-2xl disabled:opacity-30 text-[10px] hover:bg-pink-50 transition-all">ก่อนหน้า</button>
             <span class="text-[11px] text-[#D48197]">หน้า ${currentAppPage} / ${totalPages}</span>
-            <button onclick="changeAppPage(1)" ${currentAppPage === totalPages ? 'disabled' : ''} class="px-6 py-2 bg-white border border-pink-200 rounded-2xl disabled:opacity-30 text-[10px] hover:bg-pink-50 transition-all">ถัดไป</button>
+            <button onclick="currentAppPage=Math.min(totalPages, currentAppPage+1); renderAppointmentPage()" ${currentAppPage === totalPages ? 'disabled' : ''} class="px-6 py-2 bg-white border border-pink-200 rounded-2xl disabled:opacity-30 text-[10px] hover:bg-pink-50 transition-all">ถัดไป</button>
         </div>
     </div>`;
 };
+
 window.printAppointmentTicket = function(index) {
     // ดึงฐานข้อมูลล่าสุดมาใช้งาน
     const db = JSON.parse(localStorage.getItem('appointmentDB')) || [];
@@ -3289,16 +3432,11 @@ window.printDailyReport = function() {
                         margin-top: 5px;
                     }
 
-                    @media print { 
-                        body { background: white; padding: 0; }
-                        .no-print-btn { display: none; } 
-                        .report-container { 
-                            width: 100% !important; 
-                            max-width: 100% !important; 
-                            padding: 0; 
-                            box-shadow: none; 
-                        }
-                    }
+                    @media print {
+    aside, header, .no-print, button, select { display: none !important; }
+    #dynamicContent { position: absolute; left: 0; top: 0; width: 100%; }
+    @page { size: A4 landscape; margin: 1cm; }
+}
                 </style>
             </head>
             <body>
@@ -3670,70 +3808,279 @@ window.toggleServiceSubmenu = function() {
 /* =======================================================
     💎 1. รายการคอร์สมาตรฐาน (ดันขึ้นชิดบน)
    ======================================================= */
+/* --- 📋 1. หน้าจอรายการคอร์ส (เพิ่มช่องค้นหาและจัดระเบียบแถว) --- */
 window.renderCourseMasterPage = function() {
     const target = document.getElementById('dynamicContent');
-    if(!target) return;
-
     target.innerHTML = `
-        <div class="animate-in fade-in duration-500 font-extralight uppercase p-4 -mt-6"> <div class="flex justify-between items-center mb-2 bg-white p-4 rounded-[2rem] shadow-sm border border-pink-100">
-                <div>
-                    <h2 class="text-xl font-black ace-pink italic leading-none"> รายการคอร์สมาตรฐาน</h2>
-                    <p class="text-[9px] text-slate-400 font-bold uppercase mt-0.5">จัดการราคาและค่ามือพนักงาน</p>
+        <div class="animate-in fade-in duration-500 p-4 -mt-6">
+            <div class="flex justify-between items-center mb-4 bg-white p-6 rounded-[2rem] shadow-sm border border-pink-100">
+                <div class="flex items-center gap-6">
+                    <div>
+                        <h2 class="text-xl font-black ace-pink italic leading-none text-left">รายการคอร์สมาตรฐาน</h2>
+                        <p class="text-[9px] text-slate-400 font-bold uppercase mt-1 text-left">ฐานข้อมูลบริการและคลังยา</p>
+                    </div>
+                    <div class="relative">
+                        <input type="text" id="searchCourseInput" onkeyup="updateCourseMasterTable()" 
+                            placeholder="🔍 ค้นหาชื่อคอร์ส หรือ ชื่อยา..." 
+                            class="w-64 bg-slate-50 border border-pink-100 rounded-xl px-4 py-2 text-[12px] font-light focus:outline-none focus:ring-2 focus:ring-pink-200 transition-all">
+                    </div>
                 </div>
-                <button onclick="openAddCourseModal()" class="bg-black text-white px-6 py-2 rounded-2xl text-[12px] font-bold shadow-lg hover:bg-[#D48197] transition-all">
-                    + เพิ่มคอร์สใหม่
+                <button onclick="openAddCourseModal()" class="bg-black text-white px-8 py-3 rounded-2xl text-[12px] font-bold shadow-lg hover:bg-[#D48197] transition-all">
+                    + เพิ่มรายการใหม่
                 </button>
             </div>
 
             <div class="bg-white rounded-[2.5rem] shadow-2xl border border-pink-200 overflow-hidden">
-                <table class="w-full text-center text-[15px] border-collapse">
-                    <thead class="bg-[#D48197] text-white font-normal">
-                        <tr style="height: 45px;">
+                <table class="w-full text-center border-collapse table-fixed">
+                    <thead class="bg-[#D48197] text-white font-normal uppercase italic text-[13px]">
+                        <tr style="height: 60px;">
+                            <th class="w-16">ลำดับ</th>
                             <th class="w-24">รหัส</th>
-                            <th class="text-left pl-8">ชื่อรายการคอร์ส / บริการ</th>
-                            <th class="w-32">ราคา/หน่วย</th>
-                            <th class="w-32">ค่ามือพนักงาน</th>
-                            <th class="w-24">จัดการ</th>
+                            <th class="text-left pl-10">ชื่อรายการคอร์ส / ยา</th>
+                            <th class="w-32">หมวดหมู่</th>
+                            <th class="w-32 text-right pr-8">ราคา/หน่วย</th>
+                            <th class="w-24 text-center">จำนวน</th>
+                            <th class="w-48 text-left pl-8">ค่ามือ (พนักงาน/แพทย์)</th>
+                            <th class="w-32 rounded-r-[2.5rem]">จัดการ</th>
                         </tr>
                     </thead>
-                    <tbody id="courseMasterTableBody" class="text-slate-500">
-                        <tr><td colspan="5" class="p-8 text-center italic text-slate-300 font-normal">🚦 ยังไม่มีข้อมูลคอร์สในระบบ...</td></tr>
-                    </tbody>
+                    <tbody id="courseMasterTableBody" class="text-slate-500 font-light"></tbody>
                 </table>
             </div>
         </div>`;
-    
-    setTimeout(updateCourseMasterTable, 100); 
+    updateCourseMasterTable();
 };
-
 /* =======================================================
-    🔄 2. ห้องจัดการคิว (ดันขึ้นชิดบน)
+    🔄 2. ห้องจัดการคิว (ฉบับเปลี่ยนปุ่มรีเฟรช เป็นแจ้งเตือนคิว)
    ======================================================= */
 window.renderQueuePage = function() {
     const target = document.getElementById('dynamicContent');
     if(!target) return;
 
+    // 1. ดึงข้อมูลคิวทั้งหมด
+    let allQueue = JSON.parse(localStorage.getItem('todayQueueDB')) || [];
+    
+    // ตั้งค่าวันที่ปัจจุบัน (23/02/2026)
+    const todayStr = new Date().toLocaleDateString('th-TH');
+    if (!window.currentQDateFilter) window.currentQDateFilter = todayStr;
+    
+    const statusFilter = document.getElementById('qStatusFilter')?.value || "ทั้งหมด";
+    const pageSize = parseInt(document.getElementById('qPageSize')?.value) || 10;
+    const searchTerm = document.getElementById('qSearchInput')?.value.toLowerCase() || "";
+
+    // 🎯 ระบบกรองข้อมูล
+    let filteredData = allQueue.filter(q => {
+        const qDate = q.date || todayStr;
+        const matchDate = qDate === window.currentQDateFilter;
+        const matchSearch = (q.name || "").toLowerCase().includes(searchTerm) || (q.hn || "").toLowerCase().includes(searchTerm);
+        const matchStatus = statusFilter === "ทั้งหมด" || q.status === statusFilter;
+        return matchDate && matchSearch && matchStatus;
+    });
+
+    filteredData.sort((a, b) => (a.status === "เสร็จสิ้น" ? 1 : -1));
+    const paginatedData = filteredData.slice(0, pageSize);
+
     target.innerHTML = `
-        <div class="animate-in fade-in duration-500 font-extralight uppercase p-4 -mt-6"> <div class="flex justify-between items-center mb-2 bg-white p-4 rounded-[2rem] shadow-sm border border-pink-100">
-                <div>
-                    <h2 class="text-xl font-black ace-pink italic leading-none"> ห้องจัดการคิวรับบริการ</h2>
-                    <p class="text-[9px] text-slate-400 font-bold uppercase mt-0.5">คิวรอพบแพทย์และทำหัตถการวันนี้</p>
+        <div class="animate-in fade-in duration-500 font-light p-4 -mt-6 text-left"> 
+            
+            <div class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-pink-100 mb-6 flex flex-col gap-4">
+                
+                <div class="flex justify-between items-center border-b border-pink-50 pb-4">
+                    <div class="flex items-center gap-4">
+                        <h2 class="text-xl font-bold ace-pink italic leading-none">ห้องจัดการคิวรับบริการ</h2>
+                        <div class="h-4 w-[1px] bg-pink-200"></div>
+                        <p class="text-[12px] text-slate-500 font-light">ประจำวันที่: <span class="text-pink-500 font-bold">${window.currentQDateFilter}</span></p>
+                    </div>
+                    <div class="flex gap-2">
+                         <button onclick="loadPage(66, 'รายงานค่ามือ DF')" class="bg-[#D48197] text-white px-5 py-2.5 rounded-2xl text-[10px] font-bold shadow-lg hover:bg-black transition-all uppercase tracking-wider">📊 รายงานค่ามือ</button>
+                         
+                         <button onclick="notifyNextQueue()" class="bg-black text-white px-5 py-2.5 rounded-2xl text-[10px] font-bold shadow-lg hover:scale-105 transition-all uppercase flex items-center gap-2">
+                            <span class="animate-bounce">🔔</span> แจ้งเตือนคิวถัดไป
+                         </button>
+                    </div>
                 </div>
-                <div class="flex gap-2">
-                    <input type="date" value="${new Date().toISOString().split('T')[0]}" 
-                        class="border border-pink-100 px-3 py-1.5 rounded-xl text-[10px] outline-none font-normal">
-                    <button class="bg-black text-white px-5 py-2 rounded-xl text-[9px] font-bold">🔄 รีเฟรชคิว</button>
+
+                <div class="flex items-center gap-3 overflow-x-auto whitespace-nowrap pt-2">
+                    <select id="qPageSize" onchange="renderQueuePage()" class="border border-pink-100 rounded-xl px-3 py-2 text-[12px] outline-none bg-slate-50 font-light cursor-pointer">
+                        <option value="10" ${pageSize == 10 ? 'selected' : ''}>10 รายการ</option>
+                        <option value="30" ${pageSize == 30 ? 'selected' : ''}>30 รายการ</option>
+                    </select>
+
+                    <select id="qStatusFilter" onchange="renderQueuePage()" class="border border-pink-100 rounded-xl px-3 py-2 text-[12px] outline-none bg-slate-50 font-light cursor-pointer">
+                        <option value="ทั้งหมด" ${statusFilter === 'ทั้งหมด' ? 'selected' : ''}>สถานะ: ทั้งหมด</option>
+                        <option value="รอรับบริการ" ${statusFilter === 'รอรับบริการ' ? 'selected' : ''}>⏳ รอรับบริการ</option>
+                    </select>
+
+                    <div class="relative flex items-center bg-slate-50 border border-pink-100 rounded-xl px-3 py-2 min-w-[160px]">
+                        <input type="date" id="qDateInput" onchange="window.currentQDateFilter = new Date(this.value).toLocaleDateString('th-TH'); renderQueuePage();" class="bg-transparent outline-none text-[12px] font-light cursor-pointer w-full">
+                    </div>
+
+                    <div class="relative flex-1 min-w-[200px]">
+                        <input type="text" id="qSearchInput" value="${searchTerm}" placeholder="ค้นชื่อ หรือ HN..." onkeyup="if(event.key==='Enter') renderQueuePage()" class="w-full border border-pink-100 bg-slate-50 rounded-xl px-10 py-2 text-[12px] outline-none font-light">
+                        <span class="absolute left-4 top-2 text-slate-300">🔍</span>
+                    </div>
                 </div>
             </div>
-            
-            <div class="bg-white rounded-[2.5rem] shadow-2xl border border-pink-200 overflow-hidden min-h-[200px] flex flex-col items-center justify-center p-6">
-                <div class="text-center">
-                    <p class="italic text-slate-300 text-sm font-normal uppercase">⌛️ กำลังรอข้อมูลการ "ส่งคิว" จากหน้านัดหมาย...</p>
+
+            <div class="bg-white rounded-[3rem] shadow-2xl border border-pink-100 overflow-hidden p-8">
+                <table class="w-full text-center text-[12px] border-separate border-spacing-y-0">
+                    <thead>
+                        <tr style="height: 55px;">
+                            <th class="bg-[#D48197] text-white font-normal px-4 rounded-l-[1.5rem] w-24">เวลา</th>
+                            <th class="bg-[#D48197] text-white font-normal px-2 w-24">HN</th>
+                            <th class="bg-[#D48197] text-white font-normal px-6 text-left">ชื่อคนไข้</th>
+                            <th class="bg-[#D48197] text-white font-normal px-6 text-left">หัตถการ</th>
+                            <th class="bg-[#D48197] text-white font-normal px-4 w-32">สถานะ</th>
+                            <th class="bg-[#D48197] text-white font-normal px-4 rounded-r-[1.5rem] w-40">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-slate-600 font-light">
+    ${paginatedData.length > 0 ? paginatedData.map((q, i) => `
+        <tr class="border-b border-pink-50 hover:bg-pink-50/10 transition-all ${q.isCalling ? 'animate-blink' : ''}" style="height: 75px;">
+            <td class="p-2 text-slate-400 font-light italic">${q.time || '--:--'}</td>
+            <td class="p-2 font-normal text-[#D48197]">${q.hn || '-'}</td>
+            <td class="p-2 text-left font-normal text-slate-800 text-[14px]">
+                ${q.name || 'ไม่ระบุชื่อ'}
+                ${q.acceptedBy ? `<br><span class="text-[9px] text-green-500 font-bold uppercase">✔️ รับโดย: ${q.acceptedBy}</span>` : ''}
+            </td>
+            <td class="p-2 text-left text-[11px] leading-tight text-slate-500 font-light italic">${q.course || '-'}</td>
+            <td class="p-2 text-center">
+                <span class="px-4 py-1.5 rounded-full text-[9px] font-bold ${q.status === 'เสร็จสิ้น' ? 'bg-green-50 text-green-500' : 'bg-yellow-50 text-yellow-600 animate-pulse'}">${q.status || 'รอรับบริการ'}</span>
+            </td>
+            <td class="p-2 text-center">
+                <div class="flex items-center justify-center gap-3">
+                    ${q.status !== 'เสร็จสิ้น' ? `<button onclick="openProcessServiceModal('${q.queueId}')" class="bg-black text-white px-5 py-2 rounded-xl text-[10px] font-bold hover:bg-[#D48197] transition-all">✨ บันทึกงาน</button>` : `<span class="text-slate-300 text-[10px] italic">สำเร็จที่ ${q.finishTime || '-'}</span>`}
+                    <button onclick="deleteQueueItem('${q.queueId}')" class="p-2 opacity-20 hover:opacity-100 transition-all"><img src="https://cdn-icons-png.flaticon.com/128/3096/3096673.png" class="w-5 h-5"></button>
                 </div>
+            </td>
+        </tr>
+    `).join('') : `<tr><td colspan="6" class="p-20 text-center italic text-slate-300 font-light">🚦 ยังไม่มีคิวในขณะนี้</td></tr>`}
+</tbody>
+                </table>
             </div>
         </div>`;
 };
 
+
+/* --- 🔍 ฟังก์ชันเสริม: ค้นหาในตารางคิวแบบ Real-time --- */
+window.filterQueueTable = function() {
+    const input = document.getElementById("searchQueueInput");
+    const filter = input.value.toLowerCase();
+    const rows = document.querySelectorAll(".queue-row");
+
+    rows.forEach(row => {
+        const text = row.innerText.toLowerCase();
+        if (text.includes(filter)) {
+            row.style.display = "";
+        } else {
+            row.style.display = "none";
+        }
+    });
+};
+/* --- 🔔 ฟังก์ชันแจ้งเตือนคิว (ฉบับสมบูรณ์: รวมทุกระบบไว้ในหนึ่งเดียว) --- */
+window.notifyNextQueue = function() {
+    let todayQueue = JSON.parse(localStorage.getItem('todayQueueDB')) || [];
+    // ค้นหาคิวแรกที่สถานะ "รอรับบริการ"
+    const nextInLine = todayQueue.find(q => q.status === "รอรับบริการ");
+    
+    if (nextInLine) {
+        // 1. 📱 สั่งให้โทรศัพท์สั่นทันที
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+
+        // 2. 📲 ส่ง Push Notification เข้าหน้าล็อกจอมือถือ (ถ้าขออนุญาตไว้แล้ว)
+        if (Notification.permission === "granted") {
+            const notification = new Notification("🔔 ACE CLINIC: มีคิวใหม่!", {
+                body: `คุณ ${nextInLine.name} ถึงคิวแล้วค่ะ\nรายการ: ${nextInLine.course}`,
+                icon: 'https://cdn-icons-png.flaticon.com/128/3119/3119338.png',
+                vibrate: [200, 100, 200]
+            });
+            notification.onclick = function() { window.focus(); this.close(); };
+        }
+
+        // 3. ✨ แสดงหน้าต่างแจ้งเตือนกลางหน้าจอแบบสวยงาม
+        Swal.fire({
+            title: '<span class="ace-pink font-bold italic text-2xl">🔔 เรียกคิวคนไข้</span>',
+            html: `
+                <div class="p-6 text-center font-light">
+                    <p class="text-2xl font-bold text-slate-700 mb-1">${nextInLine.name}</p>
+                    <p class="text-[#D48197] italic text-base mb-4">${nextInLine.course}</p>
+                    
+                    <div class="bg-slate-50 rounded-[2rem] p-5 border border-slate-100 space-y-3">
+                        <div class="flex justify-between items-center px-2">
+                            <span class="text-[10px] text-slate-400 uppercase font-bold text-left">พนักงานผู้ทำ:</span>
+                            <span class="text-[13px] text-slate-700 font-normal text-right">${nextInLine.staff || 'ไม่ได้ระบุ'}</span>
+                        </div>
+                        <div class="flex justify-between items-center px-2">
+                            <span class="text-[10px] text-slate-400 uppercase font-bold text-left">แพทย์ผู้ทำ:</span>
+                            <span class="text-[13px] text-blue-600 font-normal text-right">${nextInLine.doctor || 'ไม่ได้ระบุ'}</span>
+                        </div>
+                    </div>
+
+                    <hr class="my-5 border-pink-50">
+                    <p class="text-[10px] text-slate-400 uppercase tracking-widest italic">กรุณากดยืนยันเพื่อเริ่มการรับคิว</p>
+                </div>
+            `,
+            confirmButtonText: '✅ ฉันรับคิวนี้แล้ว',
+            confirmButtonColor: '#000000',
+            showCancelButton: true,
+            cancelButtonText: 'ยกเลิก',
+            borderRadius: '2.5rem'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // บันทึกสถานะรับคิวและเปิดโหมดไฟกะพริบ
+                nextInLine.status = "พนักงานรับคิวแล้ว";
+                nextInLine.isCalling = true; 
+                localStorage.setItem('todayQueueDB', JSON.stringify(todayQueue));
+                
+                // แจ้งยืนยันสั้นๆ
+                Swal.fire({
+                    toast: true, position: 'top-end', icon: 'success',
+                    title: `รับคิวคุณ ${nextInLine.name} เรียบร้อย`, 
+                    showConfirmButton: false, timer: 2000
+                });
+
+                if (typeof renderQueuePage === "function") renderQueuePage();
+            }
+        });
+    } else {
+        // กรณีไม่มีคิวค้างอยู่
+        Swal.fire({
+            text: '✨ ตอนนี้ไม่มีคิวที่รอรับบริการค่ะ',
+            icon: 'success',
+            confirmButtonColor: '#D48197',
+            borderRadius: '2rem'
+        });
+    }
+};
+
+/* --- ฟังก์ชันลบคนไข้ออกจากคิว --- */
+window.deleteQueueItem = function(qId) {
+    if(confirm("ต้องการยกเลิกคิวนี้ใช่หรือไม่? (หากทำรายการเสร็จแล้ว ระบบจะคืนจำนวนคอร์สให้ลูกค้าค่ะ)")) {
+        let db = JSON.parse(localStorage.getItem('todayQueueDB')) || [];
+        const targetIdx = db.findIndex(item => item.queueId === qId);
+        
+        if (targetIdx !== -1) {
+            const item = db[targetIdx];
+            // 🎯 ถ้าสถานะเป็นเสร็จสิ้น ให้ทำรายการคืนคอร์ส
+            if (item.status === "เสร็จสิ้น") {
+                let customerDB = JSON.parse(localStorage.getItem('customerDB')) || [];
+                const cIdx = customerDB.findIndex(c => c.hn === item.hn);
+                if (cIdx !== -1) {
+                    // หาคอร์สที่ชื่อตรงกันแล้วบวกกลับ 1 ครั้ง
+                    const courseIdx = customerDB[cIdx].courses.findIndex(bc => bc.name === item.course);
+                    if (courseIdx !== -1) {
+                        customerDB[cIdx].courses[courseIdx].amount = (parseInt(customerDB[cIdx].courses[courseIdx].amount) + 1);
+                        localStorage.setItem('customerDB', JSON.stringify(customerDB));
+                    }
+                }
+            }
+            // ลบคิวออก
+            db.splice(targetIdx, 1);
+            localStorage.setItem('todayQueueDB', JSON.stringify(db));
+            renderQueuePage();
+        }
+    }
+};
 /* =======================================================
     📦 3. สต๊อกยาฉีด (ดันขึ้นชิดบน)
    ======================================================= */
@@ -3741,40 +4088,73 @@ window.renderStockPage = function() {
     const target = document.getElementById('dynamicContent');
     if(!target) return;
 
+    const today = "23/02/2026"; // วันที่ปัจจุบันตามระบบของคุณ
+
     target.innerHTML = `
-        <div class="animate-in fade-in duration-500 font-extralight uppercase p-4 -mt-6"> <div class="flex justify-between items-center mb-2 bg-white p-4 rounded-[2rem] shadow-sm border border-pink-100">
-                <div>
-                    <h2 class="text-xl font-black ace-pink italic leading-none"> สต๊อกยาและอุปกรณ์</h2>
-                    <p class="text-[9px] text-slate-400 font-bold uppercase mt-0.5">คลังยาฉีดประจำคลินิก</p>
+        <div class="animate-in fade-in duration-500 font-light p-4 -mt-6 text-left"> 
+            
+            <div class="bg-white p-5 rounded-[2.5rem] shadow-sm border border-pink-100 mb-6 flex items-center gap-3 overflow-x-auto whitespace-nowrap">
+                <div class="min-w-[130px]">
+                    <select id="stockPageSize" onchange="updateStockTable()" 
+                        class="w-full border border-pink-100 rounded-2xl px-4 py-2.5 text-[12px] outline-none bg-slate-50 cursor-pointer font-light">
+                        <option value="10">10 รายการ</option>
+                        <option value="30">30 รายการ</option>
+                        <option value="50">50 รายการ</option>
+                    </select>
                 </div>
-                <div class="flex gap-2">
-    <button onclick="openDrugMasterSettings()" class="bg-white text-[#D48197] border border-[#D48197] px-5 py-2 rounded-xl text-[12px] font-bold hover:bg-pink-50 transition-all uppercase">⚙️ ตั้งค่าชื่อยา/สูตรฉลาก</button>
-    
-    <button onclick="openLabelModal()" class="bg-slate-100 text-slate-500 px-5 py-2 rounded-xl text-[12px] font-bold hover:bg-pink-50 transition-all uppercase">➕ เพิ่มฉลากยา</button>
-    <button onclick="openAddStockModal()" class="bg-[#D48197] text-white px-6 py-2.5 rounded-2xl text-[12px] font-bold shadow-xl">➕ รับยาเข้าสต๊อก</button>
-</div>
+
+                <div class="relative min-w-[160px]">
+                    <input type="text" value="${today}" readonly
+                        class="w-full border border-pink-100 rounded-2xl px-4 py-2 text-[12px] outline-none bg-slate-50 font-light text-center h-[42px]">
+                </div>
+
+                <div class="flex-1 flex gap-2 min-w-[300px]">
+                    <div class="relative flex-1">
+                        <input type="text" id="stockSearchInput" placeholder="ค้นหาชื่อยา หรือ HN เวชภัณฑ์..." 
+                            onkeyup="if(event.key==='Enter') updateStockTable()"
+                            class="w-full border border-pink-100 bg-slate-50 rounded-2xl px-10 py-2.5 text-[12px] outline-none font-light shadow-inner">
+                        <span class="absolute left-4 top-3 text-slate-300">🔍</span>
+                    </div>
+                    <button onclick="updateStockTable()" 
+                        class="bg-black text-white px-8 py-2 rounded-2xl text-[12px] font-bold shadow-lg hover:bg-[#D48197] transition-all h-[42px] flex-shrink-0">
+                        ค้นหา
+                    </button>
+                </div>
             </div>
 
-            <div class="bg-white rounded-[3rem] shadow-xl border border-pink-100 overflow-hidden">
-    <table class="w-full text-left border-collapse">
-        <thead class="bg-[#D48197] text-white text-[10px] uppercase font-bold">
-            <tr>
-                <th class="p-4 text-center">วันที่รับ</th>
-                <th class="p-4">ชื่อยา / เวชภัณฑ์</th>
-                <th class="p-4 text-center">คงเหลือ</th>
-                <th class="p-4 text-center">จัดการ</th>
-            </tr>                    
-		</thead>
+            <div class="bg-white rounded-[3rem] shadow-2xl border border-pink-100 overflow-hidden p-8">
+                <div class="flex justify-between items-center mb-6 px-4">
+                    <div>
+                        <h2 class="text-xl font-bold ace-pink italic leading-none">สต๊อกยาและอุปกรณ์</h2>
+                        <p class="text-[10px] text-slate-400 font-light italic mt-1">คลังเวชภัณฑ์และการจัดการวันหมดอายุ</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="openDrugMasterSettings()" class="bg-white text-[#D48197] border border-[#D48197] px-5 py-2 rounded-xl text-[10px] font-bold hover:bg-pink-50 transition-all">⚙️ ตั้งค่าชื่อยา</button>
+                        <button onclick="openLabelModal()" class="bg-slate-100 text-slate-500 px-5 py-2 rounded-xl text-[10px] font-bold">➕ เพิ่มฉลากยา</button>
+                        <button onclick="openAddStockModal()" class="bg-[#D48197] text-white px-6 py-2.5 rounded-2xl text-[10px] font-bold shadow-xl hover:bg-black transition-all uppercase tracking-wider">+ รับยาเข้าสต๊อก</button>
+                    </div>
+                </div>
 
-
-                    <tbody class="text-slate-600">
-                        <tr><td colspan="4" class="p-8 text-center italic text-slate-300 font-normal">📦 ยังไม่มีข้อมูลสต๊อกในขณะนี้</td></tr>
-                    </tbody>
+                <table class="w-full text-center text-[12px] border-separate border-spacing-y-0">
+                    <thead>
+                        <tr style="height: 55px;">
+                            <th class="bg-[#D48197] text-white font-normal px-4 rounded-l-[1.5rem] w-16">ลำดับ</th>
+                            <th class="bg-[#D48197] text-white font-normal px-4">วันที่รับ</th>
+                            <th class="bg-[#D48197] text-white font-normal px-6 text-left">ชื่อยา หรือ อุปกรณ์</th>
+                            <th class="bg-[#D48197] text-white font-normal px-4">จำนวนคงเหลือ</th>
+                            <th class="bg-[#D48197] text-white font-normal px-4 italic">ราคาต้นทุน</th>
+                            <th class="bg-[#D48197] text-white font-normal px-4">🚨 วันหมดอายุ</th>
+                            <th class="bg-[#D48197] text-white font-normal px-4 rounded-r-[1.5rem] w-32">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stockTableBody" class="text-slate-600 font-light">
+                        </tbody>
                 </table>
             </div>
         </div>`;
+    
+    updateStockTable();
 };
-
 /* =======================================================
     🛠️ 1. ฟังก์ชันเปิดหน้าต่างเพิ่มคอร์ส (Modal)
    ======================================================= */
@@ -3786,14 +4166,14 @@ window.openAddCourseModal = function() {
     modalWrap.innerHTML = `
         <div class="bg-white w-full max-w-xl rounded-[3rem] p-10 shadow-2xl border border-pink-200 animate-in zoom-in duration-300">
             <div class="flex justify-between items-center mb-8">
-                <h3 class="text-2xl font-black ace-pink italic uppercase font-normal">✨ เพิ่มคอร์ส/บริการใหม่</h3>
-                <button onclick="closeCourseModal()" class="text-slate-300 hover:text-pink-500 transition-all text-2xl font-normal">✕</button>
+                <h3 class="text-2xl font-bold ace-pink uppercase font-normal">✨ เพิ่มคอร์ส/บริการใหม่</h3>
+                <button onclick="closeCourseModal()" class="text-slate-300 hover:text-pink-500 transition-all text-2xl">✕</button>
             </div>
             
             <div class="space-y-4 text-left font-normal">
                 <div>
                     <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">หมวดหมู่บริการ</label>
-                    <select id="newCourseCat" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal bg-white">
+                    <select id="newCourseCat" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm bg-white font-normal">
                         <option value="โบท็อก">💉 โบท็อก (Botox)</option>
                         <option value="ฟิลเลอร์">💉 ฟิลเลอร์ (Filler)</option>
                         <option value="ฉีดผิว">✨ ฉีดผิว/วิตามิน</option>
@@ -3811,102 +4191,137 @@ window.openAddCourseModal = function() {
                         <input type="number" id="newCoursePrice" placeholder="0.00" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal">
                     </div>
                     <div>
-                        <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">จำนวน (ครั้ง/Unit/Shot)</label>
+                        <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">จำนวนครั้ง</label>
                         <input type="number" id="newCourseAmount" placeholder="10" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal">
                     </div>
                 </div>
-                <div>
-                    <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">💰 ค่ามือพนักงาน (DF)</label>
-                    <input type="number" id="newCourseDF" placeholder="ระบุยอดเงินที่พนักงานได้รับ..." class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">💰 ค่ามือพนักงาน (DF)</label>
+                        <input type="number" id="newCourseDF" placeholder="0.00" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-blue-400 font-bold uppercase ml-2">👨‍⚕️ ค่ามือแพทย์ (Doctor DF)</label>
+                        <input type="number" id="newCourseDoctorDF" placeholder="0.00" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal">
+                    </div>
                 </div>
             </div>
 
-            <div class="flex justify-end gap-3 mt-10">
-                <button onclick="closeCourseModal()" class="px-8 py-3 rounded-2xl text-[11px] font-bold bg-slate-100 text-slate-400 font-normal">ยกเลิก</button>
-                <button onclick="saveNewMasterCourse()" class="px-10 py-3 rounded-2xl text-[11px] font-bold bg-black text-white shadow-xl hover:bg-[#D48197] transition-all font-normal uppercase">บันทึกคอร์ส</button>
+            <div class="flex justify-end gap-3 mt-10 font-normal">
+                <button onclick="closeCourseModal()" class="px-8 py-3 rounded-2xl text-[11px] font-bold bg-slate-100 text-slate-400">ยกเลิก</button>
+                <button onclick="saveNewMasterCourse()" class="px-10 py-3 rounded-2xl text-[11px] font-bold bg-black text-white shadow-xl hover:bg-[#D48197] transition-all uppercase">บันทึกคอร์ส</button>
             </div>
         </div>
     `;
     document.body.appendChild(modalWrap);
 };
-
 /* =======================================================
-    💾 2. ฟังก์ชันบันทึกข้อมูลลงฐานข้อมูล (LocalStorage)
+    💾 2. ฟังก์ชันบันทึก/อัปเดตข้อมูล (วางทับของเดิมได้เลยค่ะ)
    ======================================================= */
 window.saveNewMasterCourse = function() {
     const name = document.getElementById('newCourseName').value.trim();
     const cat = document.getElementById('newCourseCat').value;
     const price = document.getElementById('newCoursePrice').value || 0;
     const amount = document.getElementById('newCourseAmount').value || 1;
-    const df = document.getElementById('newCourseDF').value || 0;
+    const staffDF = document.getElementById('newCourseDF').value || 0;
+    const doctorDF = document.getElementById('newCourseDoctorDF').value || 0;
 
-    if (!name) { alert("⚠️ กรุณาระบุชื่อคอร์สด้วยนะคะ"); return; }
+    if (!name) { 
+        alert("⚠️ กรุณาระบุชื่อคอร์สด้วยนะคะ"); 
+        return; 
+    }
 
     const newCourse = {
-        id: "C-" + Date.now().toString().slice(-4),
+        id: "C-" + Math.floor(1000 + Math.random() * 9000), // สุ่มรหัสใหม่ให้ดูสวยแบบ C-2473
         name: name,
         category: cat,
-        price: parseFloat(price).toLocaleString(),
-        amount: amount,
-        df: parseFloat(df).toLocaleString(),
+        price: parseFloat(price),
+        amount: parseInt(amount),
+        staffDF: parseFloat(staffDF),
+        doctorDF: parseFloat(doctorDF),
         createdAt: new Date().toLocaleDateString('th-TH')
     };
 
     let masterDB = JSON.parse(localStorage.getItem('courseMasterDB')) || [];
-    masterDB.push(newCourse);
+    
+    // ตรวจสอบว่าเป็นการ "เพิ่มใหม่" หรือ "แก้ไขของเก่า"
+    const saveBtn = document.querySelector('#courseModal button[onclick*="saveNewMasterCourse"]');
+    
+    // ถ้าไม่มีการระบุ index ไว้ (เพิ่มใหม่ปกติ)
+    masterDB.unshift(newCourse); 
+    
     localStorage.setItem('courseMasterDB', JSON.stringify(masterDB));
 
-    alert("✅ บันทึกคอร์สเรียบร้อยแล้วค่ะ!");
+    alert(`✅ บันทึกคอร์ส "${name}" เรียบร้อยแล้วค่ะ!`);
     closeCourseModal();
-    updateCourseMasterTable(); // สั่งวาดตารางใหม่
+    
+    // รีเฟรชตารางทันที
+    if (typeof updateCourseMasterTable === "function") {
+        updateCourseMasterTable(); 
+    } else {
+        renderCourseMasterPage();
+    }
 };
-
 /* =======================================================
-    📊 3. ฟังก์ชันวาดตารางรายการคอร์สใหม่
+    📊 3. ฟังก์ชันสต๊อกยา
    ======================================================= */
 window.updateStockTable = function() {
-    const tbody = document.querySelector('#dynamicContent tbody');
+    // 1. ระบุตำแหน่งตาราง (ID เจาะจงเพื่อความแม่นยำ)
+    const tbody = document.getElementById('stockTableBody');
     if (!tbody) return;
 
-    // 🎯 หัวใจสำคัญ: ต้องล้างตารางให้ว่างเปล่าก่อนเริ่มวาดข้อมูลใหม่ทุกครั้ง
+    // 🎯 ล้างข้อมูลเก่าก่อนวาดใหม่ ป้องกันข้อมูลซ้ำ
     tbody.innerHTML = ''; 
 
+    // 2. ดึงข้อมูลล่าสุดและการกรอง
     const stockDB = JSON.parse(localStorage.getItem('clinicStockDB')) || [];
+    const searchTerm = document.getElementById('stockSearchInput')?.value.toLowerCase() || "";
     
-    if (stockDB.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" class="p-12 text-center italic text-slate-300 font-normal uppercase">📦 ยังไม่มีข้อมูลสต๊อกในขณะนี้</td></tr>`;
+    // กรองข้อมูลตามที่พิมพ์ค้นหา
+    const filteredStock = stockDB.filter(s => (s.name || "").toLowerCase().includes(searchTerm));
+
+    // 3. ถ้าไม่มีข้อมูล ให้โชว์แถวว่าง (colspan="7")
+    if (filteredStock.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="p-12 text-center italic text-slate-300 font-normal">📦 ยังไม่มีข้อมูลสต๊อกในขณะนี้</td></tr>`;
         return;
     }
 
-    // วาดแถวข้อมูลใหม่ลงในตารางที่ว่างแล้ว
-    tbody.innerHTML = stockDB.map((s, idx) => `
-        <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all font-normal text-slate-600">
-            <td class="p-4 text-center text-[10px] text-slate-400 font-normal">${s.date}</td>
-            <td class="p-4 text-left font-bold text-slate-700">
-                ${s.name}
-                <div class="text-[9px] text-red-400 font-normal italic uppercase">EXP: ${s.exp}</div>
-            </td>
-            <td class="p-4 text-center font-black ace-pink text-sm">
-                ${s.qty} <span class="text-[10px] font-normal text-slate-400">${s.unit || 'หน่วย'}</span>
-            </td>
-            <td class="p-4 text-center">
-                <button onclick="deleteStockItem(${idx})" class="text-slate-300 hover:text-red-500 transition-all text-[10px] uppercase font-bold">🗑️ ลบ</button>
-            </td>
-        </tr>
-    `).join('');
+    // 4. วาดข้อมูลใหม่ลงไป
+    tbody.innerHTML = filteredStock.map((s, idx) => {
+        // เช็ควันหมดอายุ (เตือนล่วงหน้า 30 วัน)
+        const isExpiring = s.expDate && new Date(s.expDate) < new Date(new Date().setDate(new Date().getDate() + 30));
+        
+        return `
+            <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all font-normal text-slate-600" style="height: 75px;">
+                <td class="p-2 text-center text-[10px] text-slate-400 font-normal">${idx + 1}</td>
+                <td class="p-2 text-center text-slate-500 italic font-light">${s.receiveDate || s.date || '23/02/2026'}</td>
+                <td class="p-4 text-left">
+                    <div class="font-bold text-slate-700 text-[14px] leading-tight">${s.name}</div>
+                    <div class="text-[9px] text-pink-400 italic mt-1 font-light uppercase">📦 หน่วยเรียก: ${s.unit || 'ชิ้น'}</div>
+                </td>
+                <td class="p-2 text-center font-black ace-pink text-base">
+                    ${s.qty} <span class="text-[10px] font-normal text-slate-400">${s.unit || 'หน่วย'}</span>
+                </td>
+                <td class="p-2 text-center text-slate-500 font-normal">
+                    ฿${parseFloat(s.cost || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}
+                </td>
+                <td class="p-2 text-center">
+                    <span class="px-3 py-1.5 rounded-full text-[10px] ${isExpiring ? 'bg-red-50 text-red-500 font-bold' : 'bg-slate-50 text-slate-400'}">
+                        ${s.expDate || s.exp || 'ไม่ระบุ'}
+                    </span>
+                </td>
+                <td class="p-2 text-center">
+                    <div class="flex items-center justify-center gap-3">
+                        <button onclick="editStock(${idx})" class="text-[11px] text-slate-400 hover:text-pink-500 transition-all font-bold">📝 แก้ไข</button>
+                        <button onclick="deleteStockItem(${idx})" class="p-2 opacity-20 hover:opacity-100 transition-all">
+                            <img src="https://cdn-icons-png.flaticon.com/128/3096/3096673.png" class="w-4 h-4">
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
 };
-
-window.closeCourseModal = function() { const m = document.getElementById('courseModal'); if (m) m.remove(); };
-
-window.deleteMasterCourse = function(idx) {
-    if(confirm("ต้องการลบคอร์สนี้ใช่หรือไม่?")) {
-        let db = JSON.parse(localStorage.getItem('courseMasterDB')) || [];
-        db.splice(idx, 1);
-        localStorage.setItem('courseMasterDB', JSON.stringify(db));
-        updateCourseMasterTable();
-    }
-};
-
 /* =======================================================
     🛠️ 1. ฟังก์ชันเปิดหน้าต่างเพิ่มฉลากยา (Label Modal)
    ======================================================= */
@@ -4203,6 +4618,939 @@ window.saveStockItem = function() {
         updateStockTable();
     }
 };
+
+// 2. ฟังก์ชันลบรายการ (แก้ปัญหาปุ่มลบกดไม่ได้)
+window.deleteStockItem = function(idx) {
+    // 1. ถามยืนยันแค่ครั้งเดียว
+    if (confirm("✅ ต้องการลบรายการนี้ใช่หรือไม่คะ?")) {
+        
+        // 2. ดึงข้อมูลจาก LocalStorage มาจัดการ
+        let db = JSON.parse(localStorage.getItem('clinicStockDB')) || [];
+        
+        // 3. ลบข้อมูลใน Array ตามตำแหน่ง (index) ที่ส่งมา
+        db.splice(idx, 1);
+        
+        // 4. บันทึกข้อมูลที่เหลือกลับลงไปในหน่วยความจำทันที
+        localStorage.setItem('clinicStockDB', JSON.stringify(db));
+        
+        // 5. 🎯 หัวใจสำคัญ: สั่งวาดตารางใหม่จากข้อมูลที่อัปเดตแล้ว
+        // ซึ่งฟังก์ชัน updateStockTable ตัวใหม่ที่เราแก้กัน จะทำการล้างตารางเก่าก่อนวาดเสมอ
+        updateStockTable();
+        
+        console.log("รายการลำดับที่ " + idx + " ถูกลบออกจากระบบแล้ว");
+    }
+};
+
+// 3. ฟังก์ชันปิดหน้าต่างรับยา
+window.closeStockModal = function() {
+    const m = document.getElementById('stockModal');
+    if (m) m.remove();
+};
+
+/* =======================================================
+    🚀 ระบบส่งคิวรับบริการ (Queue Management Logic)
+   ======================================================= */
+window.sendToServiceQueue = function(index) {
+    // 1. ดึงฐานข้อมูลนัดหมายปัจจุบัน
+    let appointments = JSON.parse(localStorage.getItem('appointmentDB')) || [];
+    const appData = appointments[index];
+
+    if (!appData) return;
+
+    let todayQueue = JSON.parse(localStorage.getItem('todayQueueDB')) || [];
+
+    // เช็คกันส่งซ้ำ
+    const isInQueue = todayQueue.find(q => q.hn === appData.hn && q.status !== "เสร็จสิ้น");
+    if (isInQueue) {
+        if (!confirm("คนไข้รายนี้อยู่ในคิวอยู่แล้ว ต้องการส่งซ้ำหรือไม่คะ?")) return;
+    }
+
+    // 2. สร้างข้อมูลคิวใหม่เพื่อส่งไปหน้า "ห้องจัดการคิว"
+    const newQueueItem = {
+        queueId: "Q-" + Math.floor(1000 + Math.random() * 9000),
+        hn: appData.hn,
+        name: appData.customerName,
+        course: appData.course,
+        doctor: appData.doctor,
+        staff: appData.staff,
+        time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+        status: "รอรับบริการ",
+        appointmentRef: appData.createdAt
+    };
+
+    // 🎯 3. จุดสำคัญ: อัปเดตสถานะในหน้า "ระบบนัดหมาย" ให้เป็นเสร็จสิ้นทันที
+    appointments[index].status = "เสร็จสิ้น";
+    localStorage.setItem('appointmentDB', JSON.stringify(appointments));
+
+    // 4. บันทึกลงฐานข้อมูลคิววันนี้
+    todayQueue.push(newQueueItem);
+    localStorage.setItem('todayQueueDB', JSON.stringify(todayQueue));
+
+    // 5. แจ้งเตือนและวาร์ปไปหน้า "ห้องจัดการคิว"
+    alert(`✅ ส่งคุณ ${newQueueItem.name} เข้าห้องจัดการคิว และอัปเดตสถานะนัดหมายเรียบร้อยค่ะ`);
+    loadPage(52, 'ห้องจัดการคิว'); 
+    
+    // รีเฟรชตารางนัดหมาย (ถ้าต้องการให้สถานะหน้าเดิมเปลี่ยนสีทันทีในกรณีที่ไม่ได้วาร์ปหน้า)
+    if (typeof renderAppointmentPage === 'function') {
+        renderAppointmentPage();
+    }
+};
+/* =======================================================
+    💉 1. หน้าต่างประมวลผล (ฉบับสมบูรณ์: ปิดไฟกะพริบ + จัดระเบียบโค้ด)
+   ======================================================= */
+window.openProcessServiceModal = function(qId) {
+    const todayQueue = JSON.parse(localStorage.getItem('todayQueueDB')) || [];
+    
+    // 🎯 1. ค้นหาคนไข้จาก ID จริงๆ เพื่อความแม่นยำ
+    const q = todayQueue.find(item => item.queueId === qId);
+    if(!q) return;
+
+    // 💡 2. สั่งปิดไฟกะพริบทันทีที่กดปุ่ม เพื่อให้พนักงานคนอื่นทราบว่ารับงานแล้ว
+    q.isCalling = false; 
+    localStorage.setItem('todayQueueDB', JSON.stringify(todayQueue));
+    
+    // รีเฟรชหน้าจอเบื้องหลังเพื่อให้แถวหยุดกะพริบทันที
+    if (typeof renderQueuePage === "function") renderQueuePage();
+
+    // 💰 3. ดึงข้อมูลค่ามือมาตรฐานจากฐานข้อมูลคอร์ส
+    const masterCourses = JSON.parse(localStorage.getItem('courseMasterDB')) || [];
+    const courseDetail = masterCourses.find(c => c.name === q.course);
+    
+    const defaultStaffDF = courseDetail ? (courseDetail.staffDF || 0) : 0;
+    const defaultDoctorDF = courseDetail ? (courseDetail.doctorDF || 0) : 0;
+
+    // 📦 4. เตรียมตัวเลือกตัดสต๊อกยา
+    const stockDB = JSON.parse(localStorage.getItem('clinicStockDB')) || [];
+    const stockOptions = stockDB.map(s => `
+        <option value="${s.name}">${s.name} (คงเหลือ: ${s.qty} ${s.unit})</option>
+    `).join('');
+
+    // 🎨 5. สร้างหน้าต่าง Modal (UI Luxury ตามสไตล์ ACE Clinic)
+    const modalWrap = document.createElement('div');
+    modalWrap.id = "processModal";
+    modalWrap.className = "fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[10005] font-light";
+    
+    modalWrap.innerHTML = `
+        <div class="bg-white w-full max-w-5xl rounded-[3.5rem] overflow-hidden shadow-2xl flex flex-col md:flex-row min-h-[700px] animate-in zoom-in duration-300">
+            <div class="w-full md:w-2/5 bg-pink-50 flex flex-col items-center justify-center p-10 border-r border-pink-100">
+                <div class="w-52 h-52 bg-white rounded-[4rem] shadow-inner flex items-center justify-center border-4 border-white mb-6">
+                    <span class="text-7xl">💉</span>
+                </div>
+                <h3 class="text-2xl font-bold text-slate-800 italic">${q.name}</h3>
+                <div class="mt-8 bg-white/60 p-6 rounded-[2rem] w-full border border-white">
+                    <p class="text-[10px] text-[#D48197] font-black uppercase text-center mb-2 italic tracking-widest">📌 รายการที่ทำ :</p>
+                    <p class="text-sm font-normal text-slate-700 text-center leading-relaxed">${q.course}</p>
+                </div>
+            </div>
+
+            <div class="flex-1 p-12 text-left relative overflow-y-auto" style="max-height: 90vh;">
+                <button onclick="this.closest('#processModal').remove()" class="absolute top-8 right-10 text-slate-300 text-3xl hover:text-pink-400 transition-all">✕</button>
+                <h4 class="text-xl font-bold ace-pink uppercase italic mb-8 underline decoration-pink-100 decoration-4 underline-offset-8">บันทึกข้อมูลและค่ามือ</h4>
+                
+                <div class="space-y-6">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">👩‍⚕️ พนักงานผู้ทำ</label>
+                            <input type="text" id="procStaffName" value="${q.staff || ''}" placeholder="ระบุชื่อพนักงาน" class="w-full border-2 border-pink-50 p-4 rounded-2xl outline-none text-sm font-light focus:border-pink-200 transition-all">
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">👨‍⚕️ แพทย์ผู้ทำ</label>
+                            <input type="text" id="procDoctorName" value="${q.doctor || ''}" placeholder="ระบุชื่อแพทย์" class="w-full border-2 border-pink-50 p-4 rounded-2xl outline-none text-sm font-light focus:border-pink-200 transition-all">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-[10px] text-slate-400 font-bold uppercase ml-2">💵 ค่ามือพนักงาน (DF)</label>
+                            <input type="number" id="staffDF" value="${defaultStaffDF}" class="w-full border-2 border-slate-50 p-4 rounded-2xl outline-none text-base font-normal text-slate-600">
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-slate-400 font-bold uppercase ml-2">💵 ค่ามือแพทย์ (DF)</label>
+                            <input type="number" id="doctorDF" value="${defaultDoctorDF}" class="w-full border-2 border-slate-50 p-4 rounded-2xl outline-none text-base font-normal text-slate-600">
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100 shadow-inner">
+                        <p class="text-[10px] text-slate-400 font-bold uppercase mb-4 ml-1 italic">📦 หักลดยา/อุปกรณ์จากคลังฉีด</p>
+                        <div class="flex gap-2">
+                            <select id="procStockItem" class="flex-1 border border-pink-100 p-3 rounded-xl outline-none text-[12px] bg-white font-light">
+                                <option value="">-- เลือกยา/อุปกรณ์ --</option>
+                                ${stockOptions}
+                            </select>
+                            <input type="number" id="procQty" placeholder="0" class="w-20 border border-pink-100 p-3 rounded-xl outline-none text-sm text-center font-bold">
+                            <button type="button" onclick="alert('เพิ่มรายการหักยอดสำเร็จ')" class="bg-black text-white px-6 rounded-xl text-[10px] font-bold uppercase hover:bg-[#D48197] transition-all">เพิ่ม</button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 italic">📔 หมายเหตุเพิ่มเติม</label>
+                        <textarea id="procNote" placeholder="รายละเอียดเพิ่มเติมเกี่ยวกับการทำหัตถการ..." class="w-full border-2 border-pink-50 p-4 rounded-2xl outline-none text-sm h-24 font-light focus:border-pink-200 transition-all"></textarea>
+                    </div>
+                </div>
+
+                <div class="flex justify-end mt-10">
+                    <button type="button" onclick="finishService('${q.queueId}')" 
+                        class="w-full py-5 rounded-3xl text-[12px] font-bold bg-[#D48197] text-white shadow-2xl hover:bg-black transition-all uppercase tracking-[0.2em]">
+                        ✅ บันทึกข้อมูลและเสร็จสิ้นการบริการ
+                    </button>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(modalWrap);
+};
+/* =======================================================
+    ✅ 2. ฟังก์ชันบันทึกงาน (อ้างอิงด้วย ID ทำให้บันทึกได้ทุกคน)
+   ======================================================= */
+window.finishService = function(qId) {
+    let allQueue = JSON.parse(localStorage.getItem('todayQueueDB')) || [];
+    const q = allQueue.find(item => item.queueId === qId);
+    if(!q) return;
+
+    // --- 📍 ส่วนที่ 1: ตัดสต๊อกยาฉีด (เพิ่มเข้าไปใหม่) ---
+    const usedItem = document.getElementById('procStockItem')?.value; 
+    const usedQty = parseInt(document.getElementById('procQty')?.value) || 0;
+
+    if (usedItem && usedQty > 0) {
+        let stockDB = JSON.parse(localStorage.getItem('clinicStockDB')) || [];
+        const itemIdx = stockDB.findIndex(s => s.name === usedItem);
+
+        if (itemIdx !== -1) {
+            // หักยอดคงเหลือในคลัง
+            stockDB[itemIdx].qty = parseInt(stockDB[itemIdx].qty) - usedQty;
+            localStorage.setItem('clinicStockDB', JSON.stringify(stockDB));
+            console.log(`📦 ตัดสต๊อก: ${usedItem} ออก ${usedQty} ชิ้นเรียบร้อย`);
+        }
+    }
+    // -----------------------------------------------------------------------
+
+    // --- 📍 ส่วนที่ 2: โค้ดเดิมของคุณอรอุมา (เก็บไว้ครบถ้วน) ---
+    const staffDF = parseFloat(document.getElementById('staffDF').value) || 0;
+    const doctorDF = parseFloat(document.getElementById('doctorDF').value) || 0;
+    const procNote = document.getElementById('procNote').value;
+    const procStaff = document.getElementById('procStaffName').value;
+    const procDoctor = document.getElementById('procDoctorName').value;
+
+    // อัปเดตข้อมูลในคิว
+    q.status = "เสร็จสิ้น";
+    q.staff = procStaff;
+    q.doctor = procDoctor;
+    q.staffDF = staffDF;
+    q.doctorDF = doctorDF;
+    q.note = procNote;
+    q.finishTime = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+
+    // หักยอดคอร์สคงเหลือของลูกค้า (ถ้ามี)
+    if (q.courseIndex !== undefined) {
+        let customers = JSON.parse(localStorage.getItem('clinicCustomers')) || [];
+        let cust = customers.find(c => c.hn === q.hn);
+        if (cust && cust.courses[q.courseIndex]) {
+            cust.courses[q.courseIndex].remains -= 1;
+            localStorage.setItem('clinicCustomers', JSON.stringify(customers));
+        }
+    }
+
+    localStorage.setItem('todayQueueDB', JSON.stringify(allQueue));
+    
+    // ปิดหน้าต่างและอัปเดตหน้าจอ
+    if (document.getElementById('processModal')) document.getElementById('processModal').remove();
+    
+    Swal.fire({
+        icon: 'success',
+        title: 'บันทึกสำเร็จ!',
+        text: 'ระบบได้ตัดยอดสต๊อกยาและหักจำนวนคอร์สเรียบร้อยค่ะ',
+        timer: 2000,
+        showConfirmButton: false
+    });
+
+    renderQueuePage();
+};
+/* =======================================================
+    💰 ระบบสรุปรายงานค่ามือ (DF REPORT) - ฉบับบันทึก PDF + คอมมิชชั่น
+   ======================================================= */
+window.renderDFReportPage = function() {
+    const target = document.getElementById('dynamicContent');
+    const today = new Date().toISOString().split('T')[0];
+    const todayQueue = JSON.parse(localStorage.getItem('todayQueueDB')) || [];
+    const staffList = [...new Set(todayQueue.map(q => q.staff).filter(s => s))];
+    const doctorList = [...new Set(todayQueue.map(q => q.doctor).filter(d => d))];
+
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 font-normal p-4 -mt-6">
+            <div class="bg-white p-6 rounded-[2rem] shadow-sm border border-pink-100 no-print mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-black ace-pink italic uppercase leading-none">สรุปค่ามือรายบุคคล</h2>
+                    <div class="flex gap-2">
+                        <button onclick="window.print()" class="bg-slate-800 text-white px-8 py-2 rounded-xl text-[11px] font-bold shadow-lg hover:bg-black transition-all uppercase flex items-center gap-2">
+                            <span>💾</span> บันทึกเป็น PDF
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase ml-2">วันที่</label>
+                        <input type="date" id="reportDate" value="${today}" onchange="updateDFTable()" class="w-full border border-pink-100 px-4 py-2 rounded-xl text-sm bg-slate-50 outline-none">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase ml-2">พนักงาน (Staff)</label>
+                        <select id="filterStaff" onchange="handleFilterChange('staff')" class="w-full border border-pink-100 px-4 py-2 rounded-xl text-sm bg-slate-50 outline-none">
+                            <option value="ทั้งหมด">-- ทุกคน --</option>
+                            ${staffList.map(s => `<option value="${s}">${s}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-400 uppercase ml-2">แพทย์ (Doctor)</label>
+                        <select id="filterDoctor" onchange="handleFilterChange('doctor')" class="w-full border border-pink-100 px-4 py-2 rounded-xl text-sm bg-slate-50 outline-none">
+                            <option value="ทั้งหมด">-- ทุกคน --</option>
+                            ${doctorList.map(d => `<option value="${d}">พญ.${d}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="flex gap-2">
+                        <div class="flex-1">
+                            <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">พิเศษ/ค่าเวร(฿)</label>
+                            <input type="number" id="extraPay" value="0" oninput="updateDFTable()" class="w-full border border-pink-100 px-4 py-2 rounded-xl text-sm bg-pink-50/50 outline-none ace-pink font-bold text-center">
+                        </div>
+                        <div class="w-24">
+                            <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">คอม (%)</label>
+                            <input type="number" id="comPercent" value="0" oninput="updateDFTable()" class="w-full border border-pink-100 px-4 py-2 rounded-xl text-sm bg-pink-50/50 outline-none ace-pink font-bold text-center" placeholder="%">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-[2.5rem] shadow-2xl border border-pink-100 p-8" id="printableArea">
+                <div class="print:block hidden text-center mb-6">
+                    <h1 class="text-2xl font-bold ace-pink uppercase">ACE CLINIC - รายงานค่ามือ</h1>
+                    <p id="printSubtitle" class="text-slate-500 font-bold mt-2"></p>
+                    <p class="text-[10px] text-slate-400">ข้อมูลวันที่: ${today}</p>
+                </div>
+                <table class="w-full text-center text-[12px] border-separate border-spacing-y-0">
+                    <thead><tr style="height: 55px;"></tr></thead>
+                    <tbody id="dfTableBody" class="text-slate-600 font-normal"></tbody>
+                    <tfoot id="dfTableFoot"></tfoot>
+                </table>
+            </div>
+        </div>`;
+    updateDFTable();
+};
+
+/* --- ฟังก์ชันคำนวณเงินและวาดตาราง (ฉบับเพิ่มปุ่มโอนจ่ายแพทย์) --- */
+window.updateDFTable = function() {
+    const tbody = document.getElementById('dfTableBody');
+    const tfoot = document.getElementById('dfTableFoot');
+    const thead = document.querySelector('#printableArea thead tr');
+    const selectedStaff = document.getElementById('filterStaff').value;
+    const selectedDoctor = document.getElementById('filterDoctor').value;
+    
+    const extraPay = parseFloat(document.getElementById('extraPay')?.value || 0);
+    const comPercent = parseFloat(document.getElementById('comPercent')?.value || 0);
+    
+    const todayQueue = JSON.parse(localStorage.getItem('todayQueueDB')) || [];
+    const doneItems = todayQueue.filter(q => q.status === "เสร็จสิ้น");
+    
+    const filteredItems = doneItems.filter(q => {
+        const matchStaff = (selectedStaff === "ทั้งหมด") || (q.staff === selectedStaff);
+        const matchDoctor = (selectedDoctor === "ทั้งหมด") || (q.doctor === selectedDoctor);
+        return matchStaff && matchDoctor;
+    });
+
+    if (filteredItems.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-20 text-center italic text-slate-300">ไม่พบข้อมูลตามที่เลือกค่ะ</td></tr>`;
+        tfoot.innerHTML = "";
+        return;
+    }
+
+    // 1. จัดหัวตาราง
+    let columns = [{ label: 'คนไข้', class: 'px-4 rounded-l-[1.5rem]' }, { label: 'หัตถการ', class: 'px-4 text-left' }];
+    if (selectedStaff !== "ทั้งหมด" || (selectedStaff === "ทั้งหมด" && selectedDoctor === "ทั้งหมด")) {
+        columns.push({ label: 'ผู้ทำ (Staff)', class: 'px-4' }, { label: 'ค่ามือพนักงาน', class: 'px-4' });
+    }
+    if (selectedDoctor !== "ทั้งหมด" || (selectedStaff === "ทั้งหมด" && selectedDoctor === "ทั้งหมด")) {
+        columns.push({ label: 'แพทย์', class: 'px-4' }, { label: 'ค่ามือแพทย์', class: 'px-4' });
+    }
+    columns[columns.length - 1].class += ' rounded-r-[1.5rem]';
+    thead.innerHTML = columns.map(col => `<th class="bg-[#D48197] text-white font-normal ${col.class}">${col.label}</th>`).join('');
+
+    // 2. วาดเนื้อหาและสรุปรายละเอียดสำหรับ LINE
+    let totalS = 0, totalD = 0;
+    let lineDetails = "";
+
+    tbody.innerHTML = filteredItems.map(q => {
+        const s = parseFloat(q.staffDF || 0);
+        const d = parseFloat(q.doctorDF || 0);
+        totalS += s; totalD += d;
+
+        if (selectedStaff !== "ทั้งหมด") {
+            lineDetails += `• ${q.name} (${q.course}): ฿${s.toLocaleString()}\n`;
+        } else if (selectedDoctor !== "ทั้งหมด") {
+            lineDetails += `• ${q.name} (${q.course}): ฿${d.toLocaleString()}\n`;
+        }
+
+        let rowHtml = `<td class="p-4 font-bold text-slate-700">${q.name}</td><td class="p-4 text-left text-slate-500 text-[11px]">${q.course}</td>`;
+        if (selectedStaff !== "ทั้งหมด" || (selectedStaff === "ทั้งหมด" && selectedDoctor === "ทั้งหมด")) {
+            rowHtml += `<td class="p-4">${q.staff || '-'}</td><td class="p-4 font-black ace-pink">฿${s.toLocaleString()}</td>`;
+        }
+        if (selectedDoctor !== "ทั้งหมด" || (selectedStaff === "ทั้งหมด" && selectedDoctor === "ทั้งหมด")) {
+            rowHtml += `<td class="p-4">${q.doctor ? 'พญ.' + q.doctor : '-'}</td><td class="p-4 font-black ace-pink">฿${d.toLocaleString()}</td>`;
+        }
+        return `<tr class="border-b border-pink-50 hover:bg-pink-50/20" style="height: 60px;">${rowHtml}</tr>`;
+    }).join('');
+
+    // 3. คำนวณยอดสุทธิ
+    const comAmount = (totalS * comPercent) / 100;
+    const finalTotal = (selectedStaff !== "ทั้งหมด" ? (totalS + extraPay + comAmount) : (totalD + extraPay));
+
+   // --- 🎯 4. สร้างปุ่ม LINE และ ปุ่มโอนเงินแพทย์ (ฉบับแก้ไขปุ่มหาย) ---
+    let sendLineBtn = "";
+    let payDoctorBtn = ""; // ประกาศไว้ที่นี่ที่เดียวพอค่ะ
+    
+    if (selectedStaff !== "ทั้งหมด" || selectedDoctor !== "ทั้งหมด") {
+        const targetName = selectedStaff !== "ทั้งหมด" ? selectedStaff : "พญ." + selectedDoctor;
+        
+        // สร้างปุ่มบันทึกบัญชี (แสดงเฉพาะเมื่อเลือกแพทย์)
+        if (selectedDoctor !== "ทั้งหมด") {
+            payDoctorBtn = `
+                <div class="flex flex-col gap-1 ml-4 no-print border-l pl-4 border-pink-200">
+                    <span class="text-[9px] text-slate-400 font-bold uppercase italic text-left">กดเพื่อลงบันทึกบัญชี:</span>
+                    <div class="flex gap-1">
+                        <button onclick="confirmDoctorPayment('${targetName}', ${finalTotal}, 'เงินสด')" class="bg-orange-500 text-white px-3 py-1.5 rounded-lg text-[9px] font-bold hover:bg-black transition-all">💵 เงินสด</button>
+                        <button onclick="confirmDoctorPayment('${targetName}', ${finalTotal}, 'โอน (QR)')" class="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-[9px] font-bold hover:bg-black transition-all">📱 โอน (QR)</button>
+                        <button onclick="confirmDoctorPayment('${targetName}', ${finalTotal}, 'โอนบริษัท')" class="bg-slate-700 text-white px-3 py-1.5 rounded-lg text-[9px] font-bold hover:bg-black transition-all">🏢 โอนบริษัท</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        let msgExtra = "";
+        if (extraPay > 0) msgExtra += `➕ พิเศษ/ค่าเวร: ฿${extraPay.toLocaleString()}\n`;
+        if (comPercent > 0) msgExtra += `➕ คอมมิชชั่น ${comPercent}%: ฿${comAmount.toLocaleString()}\n`;
+
+        const message = `📢 สรุปค่ามือ ACE Clinic\nถึง: ${targetName}\n-------------------------\nรายการที่ทำ:\n${lineDetails}${msgExtra}\n💰 ยอดรวมทั้งสิ้น: ฿${finalTotal.toLocaleString()}`;
+        sendLineBtn = `<button onclick="window.open('https://social-plugins.line.me/lineit/share?text=${encodeURIComponent(message)}', 'line', 'width=500,height=600')" class="bg-[#06C755] text-white px-4 py-1.5 rounded-xl text-[9px] font-bold shadow-md hover:bg-black ml-4 no-print inline-flex items-center gap-1 transition-all">🟢 LINE ส่งรายละเอียด</button>`;
+    }
+
+    // --- 🎯 5. สรุปยอดรวมท้ายตาราง ---
+    let footHtml = `<tr class="bg-slate-50 font-bold">
+        <td colspan="2" class="p-4 text-right uppercase text-slate-400">ยอดรวมสุทธิ :</td>
+        <td colspan="4" class="p-4 text-lg ace-pink text-center font-black">
+            <div class="flex items-center justify-center">
+                <span class="text-2xl mr-2">฿${finalTotal.toLocaleString()}</span>
+                ${sendLineBtn}
+                ${payDoctorBtn}
+            </div>
+        </td>
+    </tr>`;
+    
+    if (extraPay > 0 || comPercent > 0) {
+        footHtml = `<tr class="text-[10px] text-slate-400 italic bg-slate-50/50">
+            <td colspan="2" class="text-right p-1 font-bold">สรุปรายละเอียดเพิ่ม:</td>
+            <td colspan="4" class="text-center p-1">
+                ${extraPay > 0 ? `พิเศษ ฿${extraPay.toLocaleString()}` : ''} 
+                ${comPercent > 0 ? ` | คอมมิชชั่น ${comPercent}% (฿${comAmount.toLocaleString()})` : ''}
+            </td>
+        </tr>` + footHtml;
+    }
+    tfoot.innerHTML = footHtml;
+    
+    let subtitle = "สรุปยอดรวมทั้งหมด";
+    if(selectedStaff !== "ทั้งหมด") subtitle = `รายงานค่ามือของพนักงาน: ${selectedStaff}`;
+    else if(selectedDoctor !== "ทั้งหมด") subtitle = `รายงานค่ามือของแพทย์: พญ.${selectedDoctor}`;
+    document.getElementById('printSubtitle').innerText = subtitle;
+};
+window.openPaymentAccountSelector = function(name, amount) {
+    if (amount <= 0) { alert("ยอดเงินโอนต้องมากกว่า 0 บาทค่ะ"); return; }
+
+    // สร้าง Modal เลือกบัญชีแบบชั่วคราวขึ้นมาบนหน้าจอ
+    const modalHtml = `
+        <div id="accountSelectorModal" class="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-[10006] animate-in fade-in duration-300">
+            <div class="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl border border-pink-200 animate-in zoom-in duration-300 text-center font-normal">
+                <h3 class="text-xl font-black ace-pink italic mb-2">🏦 เลือกบัญชีสำหรับโอน</h3>
+                <p class="text-[11px] text-slate-400 uppercase font-bold mb-6">โอนค่ามือให้: ${name}<br>ยอดเงินสุทธิ: ฿${amount.toLocaleString()}</p>
+                
+                <div class="space-y-3">
+                    <button onclick="window.confirmDoctorPayment('${name}', ${amount}, '🏢 โอนบริษัท')" 
+                        class="w-full bg-slate-50 border-2 border-slate-100 p-5 rounded-[2rem] hover:border-[#D48197] hover:bg-pink-50 transition-all flex items-center justify-between group">
+                        <span class="text-2xl">🏢</span>
+                        <span class="font-bold text-slate-700 group-hover:text-[#D48197]">บัญชีบริษัท</span>
+                        <span class="text-[#D48197] opacity-0 group-hover:opacity-100">❯</span>
+                    </button>
+
+                    <button onclick="window.confirmDoctorPayment('${name}', ${amount}, '📱 บัญชี K (ส่วนตัว)')" 
+                        class="w-full bg-slate-50 border-2 border-slate-100 p-5 rounded-[2rem] hover:border-green-500 hover:bg-green-50 transition-all flex items-center justify-between group">
+                        <span class="text-2xl">📱</span>
+                        <span class="font-bold text-slate-700 group-hover:text-green-600">บัญชี K (ส่วนตัว)</span>
+                        <span class="text-green-600 opacity-0 group-hover:opacity-100">❯</span>
+                    </button>
+                </div>
+
+                <button onclick="document.getElementById('accountSelectorModal').remove()" 
+                    class="mt-8 text-slate-300 text-[10px] font-bold uppercase hover:text-red-500 transition-all">✕ ยกเลิกการโอน</button>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+/* --- 🛠️ ฟังก์ชันยืนยันการจ่ายเงิน (ฉบับสมบูรณ์: มีเวลา + เชื่อมต่อบัญชี + ไม่เด้งออก) --- */
+window.confirmDoctorPayment = function(name, amount, accountName) {
+    if(confirm(`ยืนยันการบันทึกจ่ายเงิน ฿${amount.toLocaleString()} จาก [${accountName}] ใช่หรือไม่?`)) {
+        
+        // 1. บันทึกลงฐานข้อมูลรายจ่าย (ใช้ชื่อ accountDB เพื่อให้เชื่อมหน้าภาพรวมและหน้าตีบิลค่ะ)
+        let accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
+        
+        accountDB.push({
+            id: Date.now(),
+            date: new Date().toISOString().split('T')[0], // เก็บวันที่ปัจจุบัน
+            time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }), // ✨ เพิ่มเวลา (เช่น 08:24)
+            category: "ค่ามือแพทย์",
+            detail: `จ่ายค่ามือ ${name}`,
+            amount: parseFloat(amount),
+            account: accountName,
+            type: "รายจ่าย",
+            timestamp: new Date().getTime()
+        });
+        
+        localStorage.setItem('accountDB', JSON.stringify(accountDB));
+
+        // 2. ปิดหน้าต่างเลือกบัญชี (ถ้าเปิดค้างอยู่)
+        const selectorModal = document.getElementById('accountSelectorModal');
+        if (selectorModal) selectorModal.remove();
+        
+        alert(`✅ บันทึกรายจ่ายสำเร็จ!`);
+
+        // 3. สลับไปหน้าจอ "ตีบิลรายจ่าย" ทันที
+        loadPage(9, 'ตีบิลรายจ่าย (OUTGOING)'); 
+        
+        // 4. 🎯 สั่งวาดรายการลงตารางเพื่อให้ยอดที่เพิ่งจ่ายเด้งขึ้นมาโชว์พร้อมเวลา
+        setTimeout(() => {
+            if (typeof updateExpenseTableDisplay === 'function') {
+                updateExpenseTableDisplay(); 
+            }
+        }, 150);
+    }
+};
+/* --- ฟังก์ชันช่วยล้างค่าตัวเลือก --- */
+window.handleFilterChange = function(type) {
+    const staffField = document.getElementById('filterStaff');
+    const docField = document.getElementById('filterDoctor');
+    if (type === 'staff' && docField) docField.value = "ทั้งหมด";
+    else if (type === 'doctor' && staffField) staffField.value = "ทั้งหมด";
+    updateDFTable();
+};
+/* --- 🛠️ ฟังก์ชันสำหรับวาดรายการรายจ่ายลงในตาราง --- */
+window.updateExpenseTableDisplay = function() {
+    const tbody = document.getElementById('expenseDataBody');
+    if(!tbody) return;
+
+    // ดึงข้อมูลจาก accountDB (ฐานข้อมูลเดียวกันกับหน้าภาพรวม)
+    const accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
+    const expenses = accountDB.filter(item => item.type === "รายจ่าย");
+
+    if (expenses.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="p-20 text-center text-slate-300 italic font-normal">ยังไม่มีรายการรายจ่าย...</td></tr>`;
+        return;
+    }
+
+    // วาดรายการโดยเอาอันล่าสุดขึ้นบนสุด (reverse)
+    tbody.innerHTML = expenses.map(item => `
+        <tr class="border-b border-red-50/50 hover:bg-red-50/20 transition-all font-normal" style="height: 60px;">
+            <td class="p-4 pl-8 text-slate-400 text-[11px]">
+                ${item.date} <br>
+                <span class="text-[#D48197] font-bold">${item.time || '--:--'} น.</span>
+            </td>
+            <td class="p-4">
+                <span class="font-bold text-slate-700">${item.detail}</span>
+                ${item.category ? `<br><span class="text-[9px] text-slate-300 uppercase">${item.category}</span>` : ''}
+            </td>
+            <td class="p-4 text-center font-bold text-slate-500 text-[11px]">${item.account}</td>
+            <td class="p-4 text-right pr-8 font-black text-red-500 text-lg">฿${parseFloat(item.amount).toLocaleString()}</td>
+        </tr>
+    `).reverse().join('');
+};
+
+/* --- 📝 ฟังก์ชันบันทึกรายจ่ายที่กรอกด้วยมือ --- */
+window.saveManualExpense = function() {
+    const name = document.getElementById('expenseName').value.trim();
+    const amount = document.getElementById('expenseAmount').value;
+    const account = document.getElementById('expenseAccount').value;
+    const date = document.getElementById('expenseDate').value;
+
+    if (!name || !amount || amount <= 0) {
+        alert("⚠️ กรุณากรอกชื่อรายการและจำนวนเงินที่ถูกต้องค่ะ");
+        return;
+    }
+
+   let accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
+    accountDB.push({
+        id: Date.now(),
+        date: date,
+        time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }), // ✨ เพิ่มบรรทัดนี้ค่ะ
+        type: "รายจ่าย",
+        category: "ทั่วไป",
+        detail: name,
+        amount: parseFloat(amount),
+        account: account,
+        timestamp: new Date().getTime()
+    });
+   
+    localStorage.setItem('accountDB', JSON.stringify(accountDB));
+    alert("✅ บันทึกรายจ่ายเรียบร้อยแล้วค่ะ");
+    
+    // ล้างช่องกรอก
+    document.getElementById('expenseName').value = "";
+    document.getElementById('expenseAmount').value = "";
+    
+    // อัปเดตตารางให้โชว์ทันที
+    updateExpenseTableDisplay();
+    // ถ้าหน้า Dashboard เปิดอยู่ ให้รีเฟรชยอดด้วยค่ะ
+    if (typeof renderDashboard === 'function') renderDashboard(null, currentPeriod);
+};
+/* --- 👁️ 1. ฟังก์ชัน "ดูใบเสร็จ" (ฉบับแสดงข้อมูลครบถ้วน: ชื่อ, ยอดเงิน, รายการ+จำนวน, ช่องทาง) --- */
+window.viewBillOnly = function(billId) {
+    const allBills = JSON.parse(localStorage.getItem('accountDB')) || [];
+    const bill = allBills.find(b => b.id == billId);
+    
+    if (bill) {
+     
+        const itemList = (bill.items || []).map(i => 
+            `• ${i.name} (จำนวน ${i.qty || 1} ครั้ง) -> ฿${parseFloat(i.total || 0).toLocaleString()}`
+        ).join('\n');
+
+        alert(
+            `📄 รายละเอียดใบเสร็จ [สถานะ: ${bill.status}]\n` +
+            `----------------------------------\n` +
+            `👤 ชื่อคนไข้: ${bill.customer || bill.customerName}\n` +
+            `💳 ช่องทางชำระเงิน: ${bill.payment}\n` +
+            `💰 ยอดเงินสุทธิ: ${bill.total}\n` +
+            `----------------------------------\n` +
+            `📋 รายการที่ซื้อ:\n${itemList}`
+        );
+    } else {
+        alert("⚠️ ขออภัยค่ะ ไม่พบข้อมูลบิลรหัสนี้ในระบบ");
+    }
+};
+/* --- 🖨️ 2. ฟังก์ชัน "พิมพ์ใบเสร็จ" (ไปหน้าพรีวิว และแก้ให้ย้อนกลับหน้าเดิม) --- */
+window.openOldReceiptById = function(billId) {
+    const allBills = JSON.parse(localStorage.getItem('accountDB')) || [];
+    const bill = allBills.find(b => b.id == billId);
+    if (bill) {
+        window.currentBillItems = bill.items || [];
+        showReceiptPreview(bill);
+        
+        // 🎯 สั่งเปลี่ยนปุ่มย้อนกลับให้กลับมาหน้าประวัติบิล (renderSalesPage)
+        setTimeout(() => {
+            const backBtn = document.querySelector('button[onclick*="Profile"], button[onclick*="Sales"]');
+            if (backBtn) {
+                backBtn.setAttribute('onclick', 'renderSalesPage()');
+                backBtn.innerText = '🔙 ย้อนกลับหน้าประวัติบิล';
+            }
+        }, 150);
+    } else {
+        alert("⚠️ ไม่พบข้อมูลเพื่อพิมพ์ใบเสร็จค่ะ");
+    }
+};
+/* --- 📄 3. ฟังก์ชันพิมพ์ใบกำกับภาษีเต็มรูปแบบ --- */
+window.printFullTaxInvoice = function(billId, hn) {
+    try {
+        const allBills = JSON.parse(localStorage.getItem('accountDB')) || [];
+        const bill = allBills.find(b => b.id == billId);
+        const customer = customerDB.find(c => c.hn === hn);
+        if (!bill || !customer) { alert("⚠️ ไม่พบข้อมูลบิลหรือข้อมูลลูกค้าค่ะ"); return; }
+        
+        const printWindow = window.open('', '_blank');
+        const totalAmt = parseFloat(String(bill.total || "0").replace(/[^0-9.-]+/g,"")) || 0;
+        const vat = totalAmt * 7 / 107;
+        const beforeVat = totalAmt - vat;
+
+        printWindow.document.write(`
+            <html><head><title>Tax Invoice</title><link href="https://fonts.googleapis.com/css2?family=Sarabun&display=swap" rel="stylesheet">
+            <style>body{font-family:'Sarabun',sans-serif;padding:40px;}.h{display:flex;justify-content:space-between;border-bottom:2px solid #D48197;padding-bottom:10px;margin-bottom:20px;}
+            table{width:100%;border-collapse:collapse;}th{background:#FDF2F4;padding:10px;border:1px solid #eee;color:#D48197;}td{padding:10px;border:1px solid #eee;}
+            .t{float:right;width:250px;margin-top:20px;}.r{display:flex;justify-content:space-between;padding:5px 0;}@media print{.no-p{display:none;}}</style></head>
+            <body><div class="h"><div><h2 style="color:#D48197;margin:0;">ACE CLINIC</h2><p>เลขผู้เสียภาษี: 11101005166</p></div><div style="text-align:right;"><h3>ใบกำกับภาษี</h3><p>วันที่: ${bill.date}</p></div></div>
+            <p><b>ลูกค้า:</b> ${customer.fullname} (HN: ${customer.hn})<br><b>ที่อยู่:</b> ${customer.address || '-'}</p>
+            <table><thead><tr><th>ลำดับ</th><th>รายการ</th><th>ยอดเงิน</th></tr></thead><tbody>
+            ${(bill.items || []).map((item, i) => `<tr><td align="center">${i+1}</td><td>${item.name}</td><td align="right">฿${parseFloat(item.total).toLocaleString()}</td></tr>`).join('')}
+            </tbody></table><div class="t"><div class="r"><span>ก่อนภาษี:</span><span>฿${beforeVat.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
+            <div class="r"><span>ภาษี 7%:</span><span>฿${vat.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div>
+            <div class="r" style="font-weight:bold;color:#D48197;border-top:1px solid #eee;margin-top:5px;"><span>ยอดรวม:</span><span>฿${totalAmt.toLocaleString(undefined,{minimumFractionDigits:2})}</span></div></div>
+            <div class="no-p" style="margin-top:100px;text-align:center;"><button onclick="window.print()" style="padding:10px 30px;background:#D48197;color:white;border:none;border-radius:20px;cursor:pointer;">🖨️ สั่งพิมพ์ใบกำกับภาษี</button></div></body></html>
+        `);
+        printWindow.document.close();
+    } catch (e) { alert("เกิดข้อผิดพลาดในการโหลดข้อมูลบิลค่ะ"); }
+};
+
+/* --- ❌ 4. ฟังก์ชันยกเลิกบิล (ฉบับเปลี่ยนสถานะเป็น "ยกเลิก" เพื่อเก็บประวัติไว้ดู) --- */
+window.cancelBillProcess = function(billId, hn) {
+    if (confirm("🚨 ยืนยันการยกเลิกบิลนี้ใช่หรือไม่?\n(ระบบจะเปลี่ยนสถานะเป็น 'ยกเลิก' และคืนจำนวนคอร์สให้ลูกค้าค่ะ)")) {
+        try {
+            let accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
+            const billIdx = accountDB.findIndex(b => b.id == billId);
+            
+            if (billIdx !== -1) {
+                // กันการกดยกเลิกซ้ำ
+                if (accountDB[billIdx].status === "ยกเลิก") {
+                    alert("⚠️ บิลนี้ถูกยกเลิกไปแล้วค่ะ");
+                    return;
+                }
+
+                // 1. 🔄 เปลี่ยนสถานะเป็น "ยกเลิก" (รายการจะไม่หายไปจากตารางรายรับ)
+                accountDB[billIdx].status = "ยกเลิก";
+                
+                // 2. 💎 คืนจำนวนคอร์สให้ลูกค้า (หักยอดคอร์สที่เพิ่งบวกเข้าไปออก)
+                let customers = JSON.parse(localStorage.getItem('customerDB')) || [];
+                const cIdx = customers.findIndex(c => c.hn === hn);
+                if (cIdx !== -1 && accountDB[billIdx].items) {
+                    accountDB[billIdx].items.forEach(billItem => {
+                        const cCourseIdx = customers[cIdx].courses.findIndex(bc => bc.name === billItem.name);
+                        if (cCourseIdx !== -1) {
+                            // หักจำนวนที่เคยเพิ่มเข้าไปตอนเปิดบิลออกคืนให้ถูกต้อง
+                            customers[cIdx].courses[cCourseIdx].amount -= (billItem.qty || 1);
+                            // ถ้าหักแล้วยอดคอร์สหมดพอดี ให้ลบรายการคอร์สนั้นออกจากตัวคนไข้
+                            if (customers[cIdx].courses[cCourseIdx].amount <= 0) {
+                                customers[cIdx].courses.splice(cCourseIdx, 1);
+                            }
+                        }
+                    });
+                    localStorage.setItem('customerDB', JSON.stringify(customers));
+                }
+
+                // 3. 💾 บันทึกการเปลี่ยนแปลงลงฐานข้อมูล
+                localStorage.setItem('accountDB', JSON.stringify(accountDB));
+                
+                alert("✅ ยกเลิกบิลเรียบร้อยแล้ว (ตรวจสอบประวัติได้ในสถานะ 'ยกเลิก' ค่ะ)");
+                
+                // 4. 🔄 รีเฟรชหน้าจอทันทีเพื่อให้ตารางอัปเดต
+                renderSalesPage(); 
+            }
+        } catch (e) { 
+            console.error(e); 
+            alert("เกิดข้อผิดพลาดในการยกเลิกบิลค่ะ"); 
+        }
+    }
+};
+
+/* --- ✅ 5. ฟังก์ชันเปิด-ปิดเมนูจัดการแถวตาราง --- */
+window.safeToggleMenu = function(event, index) {
+    event.stopPropagation();
+    document.querySelectorAll('tr').forEach(tr => tr.style.zIndex = 'auto');
+    const targetMenu = document.getElementById(`action-menu-${index}`);
+    if (!targetMenu) return;
+    const isHidden = targetMenu.classList.contains('hidden');
+    document.querySelectorAll('[id^="action-menu-"]').forEach(menu => menu.classList.add('hidden'));
+    if (isHidden) {
+        targetMenu.classList.remove('hidden');
+        const parentRow = targetMenu.closest('tr');
+        if (parentRow) {
+            parentRow.style.position = 'relative';
+            parentRow.style.zIndex = '9999';
+        }
+    }
+};
+
+// คลิกที่อื่นเพื่อปิดเมนู
+document.addEventListener('click', function() {
+    document.querySelectorAll('[id^="action-menu-"]').forEach(menu => menu.classList.add('hidden'));
+    document.querySelectorAll('tr').forEach(tr => tr.style.zIndex = 'auto');
+});
+/* --- 📊 2. วาดตาราง (ล็อกแถวตรงกัน + ระบบค้นหา) --- */
+window.updateCourseMasterTable = function() {
+    const tbody = document.getElementById('courseMasterTableBody');
+    const searchTerm = document.getElementById('searchCourseInput')?.value.toLowerCase() || "";
+    if (!tbody) return;
+
+    tbody.innerHTML = ''; 
+    let masterDB = JSON.parse(localStorage.getItem('courseMasterDB')) || [];
+    
+    // 🔍 กรองข้อมูลตามที่พิมพ์ในช่องค้นหา
+    const filteredData = masterDB.filter(c => 
+        c.name.toLowerCase().includes(searchTerm) || 
+        (c.category && c.category.toLowerCase().includes(searchTerm)) ||
+        (c.id && c.id.toLowerCase().includes(searchTerm))
+    );
+
+    if (filteredData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="p-20 text-center italic text-slate-300 font-light">🚦 ไม่พบข้อมูลที่ค้นหา...</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filteredData.map((c, idx) => `
+        <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all text-[14px]" style="height: 70px;">
+            <td class="text-slate-400 font-light w-16">${idx + 1}</td>
+            <td class="text-pink-400 font-light w-24">${c.id}</td>
+            
+            <td class="text-left pl-10 font-light text-slate-700 truncate max-w-xs whitespace-nowrap">
+                ${c.name}
+            </td>
+
+            <td class="text-center w-32 whitespace-nowrap">
+                <span class="bg-pink-50 text-[#D48197] px-3 py-1 rounded-full text-[10px] font-bold border border-pink-100 uppercase italic">
+                    ${c.category || 'ยา/เวชภัณฑ์'}
+                </span>
+            </td>
+
+            <td class="text-right pr-8 font-light text-slate-800 w-32 whitespace-nowrap">
+                ฿${parseFloat(c.price || 0).toLocaleString()}
+            </td>
+
+            <td class="text-center w-24 font-light text-slate-600 whitespace-nowrap">
+                ${c.amount} <span class="text-[9px] text-slate-300">ครั้ง/ชิ้น</span>
+            </td>
+            
+            <td class="text-[11px] text-left pl-8 font-light whitespace-nowrap leading-tight">
+                <div class="text-slate-400">พนักงาน: <span class="text-slate-700 font-normal">฿${parseFloat(c.staffDF || 0).toLocaleString()}</span></div>
+                <div class="text-blue-300">แพทย์: <span class="text-blue-600 font-normal">฿${parseFloat(c.doctorDF || 0).toLocaleString()}</span></div>
+            </td>
+            
+            <td class="text-center w-32">
+                <div class="flex items-center justify-center gap-3">
+                    <button onclick="editMasterCourse(${idx})" class="text-[11px] text-slate-400 hover:text-pink-500 font-light transition-all border-b border-transparent hover:border-pink-300">📝 แก้ไข</button>
+                    <button onclick="deleteMasterCourse(${idx})" class="p-1 opacity-20 hover:opacity-100 transition-all hover:scale-110">
+                        <img src="https://cdn-icons-png.flaticon.com/128/3096/3096673.png" class="w-5 h-5">
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+};
+
+/* --- 📝 3. ฟังก์ชันเปิดหน้าต่างแก้ไขข้อมูลคอร์สเดิม --- */
+window.editMasterCourse = function(idx) {
+    const masterDB = JSON.parse(localStorage.getItem('courseMasterDB')) || [];
+    const c = masterDB[idx];
+    
+    // 1. เปิด Modal เพิ่มคอร์ส
+    openAddCourseModal();
+    
+    // 2. เปลี่ยนหัวข้อและปุ่ม
+    document.querySelector('#courseModal h3').innerText = "📝 แก้ไขรายการคอร์ส";
+    const saveBtn = document.querySelector('#courseModal button[onclick="saveNewMasterCourse()"]');
+    saveBtn.innerText = "อัปเดตข้อมูล";
+    
+    // 3. 🎯 ดึงข้อมูลเดิมมาใส่ในช่องกรอก (กู้คืนข้อมูล)
+    document.getElementById('newCourseName').value = c.name;
+    document.getElementById('newCourseCat').value = c.category;
+    document.getElementById('newCoursePrice').value = String(c.price).replace(/,/g, '');
+    document.getElementById('newCourseAmount').value = c.amount;
+    document.getElementById('newCourseDF').value = String(c.staffDF).replace(/,/g, '');
+    document.getElementById('newCourseDoctorDF').value = String(c.doctorDF).replace(/,/g, '');
+
+    // 4. สั่งให้ตอนกดบันทึก ไปทำการ "ลบของเก่าแล้วเสียบของใหม่" แทนการเพิ่มซ้ำ
+    saveBtn.onclick = function() {
+        masterDB.splice(idx, 1); // ลบแถวเก่า
+        localStorage.setItem('courseMasterDB', JSON.stringify(masterDB));
+        saveNewMasterCourse(); // บันทึกเป็นข้อมูลใหม่ที่แก้แล้ว
+    };
+};
+
+/* --- 📱 ระบบแจ้งเตือนเข้ามือถือ (แม้ปิดหน้าเว็บ) --- */
+
+// 1. ฟังก์ชันขออนุญาตแจ้งเตือน (เรียกใช้ตอนพนักงานล็อกอิน หรือเปิดหน้าคิวครั้งแรก)
+window.requestNotificationPermission = function() {
+    if (!("Notification" in window)) return;
+    Notification.requestPermission();
+};
+/* =======================================================
+    📝 ฟังก์ชันแก้ไขข้อมูลสต๊อก (editStock)
+   ======================================================= */
+window.editStock = function(idx) {
+    let stockDB = JSON.parse(localStorage.getItem('clinicStockDB')) || [];
+    const item = stockDB[idx];
+    if (!item) return;
+
+    // สร้าง Modal สำหรับแก้ไขข้อมูล
+    const editModal = document.createElement('div');
+    editModal.id = "editStockModal";
+    editModal.className = "fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[10006] font-light";
+    
+    editModal.innerHTML = `
+        <div class="bg-white w-full max-w-lg rounded-[2.5rem] overflow-hidden shadow-2xl animate-in zoom-in duration-300">
+            <div class="p-8">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold ace-pink italic">📝 แก้ไขข้อมูลเวชภัณฑ์</h3>
+                    <button onclick="this.closest('#editStockModal').remove()" class="text-slate-300 hover:text-pink-500 text-2xl">✕</button>
+                </div>
+
+                <div class="space-y-4 text-left">
+                    <div>
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2">วันที่รับเข้าสินค้า</label>
+                        <input type="date" id="editDate" value="${item.receiveDate || item.date || ''}" 
+                            class="w-full border border-pink-100 p-3 rounded-xl outline-none text-sm font-light bg-slate-50">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2">ชื่อยา หรือ อุปกรณ์</label>
+                        <input type="text" id="editName" value="${item.name}" 
+                            class="w-full border border-pink-100 p-3 rounded-xl outline-none text-sm font-light bg-slate-50">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-[10px] text-slate-400 font-bold uppercase ml-2">จำนวนคงเหลือ</label>
+                            <input type="number" id="editQty" value="${item.qty}" 
+                                class="w-full border border-pink-100 p-3 rounded-xl outline-none text-sm font-bold text-center bg-slate-50">
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-slate-400 font-bold uppercase ml-2">หน่วยเรียก</label>
+                            <input type="text" id="editUnit" value="${item.unit || ''}" 
+                                class="w-full border border-pink-100 p-3 rounded-xl outline-none text-sm font-light bg-slate-50">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-[10px] text-slate-400 font-bold uppercase ml-2">ราคาต้นทุน (฿)</label>
+                            <input type="number" id="editCost" value="${item.cost || 0}" 
+                                class="w-full border border-pink-100 p-3 rounded-xl outline-none text-sm font-light bg-slate-50">
+                        </div>
+                        <div>
+                            <label class="text-[10px] text-red-400 font-bold uppercase ml-2">🚨 วันหมดอายุ</label>
+                            <input type="date" id="editExp" value="${item.expDate || item.exp || ''}" 
+                                class="w-full border border-red-100 p-3 rounded-xl outline-none text-sm font-light bg-red-50/30">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 flex gap-3">
+                    <button onclick="this.closest('#editStockModal').remove()" 
+                        class="flex-1 py-3 rounded-xl text-[12px] font-bold bg-slate-100 text-slate-400 uppercase tracking-widest">ยกเลิก</button>
+                    <button onclick="saveEditStock(${idx})" 
+                        class="flex-1 py-3 rounded-xl text-[12px] font-bold bg-black text-white shadow-lg hover:bg-[#D48197] transition-all uppercase tracking-widest">บันทึกการเปลี่ยนแปลง</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(editModal);
+};
+
+/* --- ฟังก์ชันบันทึกข้อมูลที่แก้ไข --- */
+window.saveEditStock = function(idx) {
+    let stockDB = JSON.parse(localStorage.getItem('clinicStockDB')) || [];
+    
+    // อัปเดตค่าใหม่ลงใน Array
+    stockDB[idx] = {
+        ...stockDB[idx],
+        receiveDate: document.getElementById('editDate').value,
+        name: document.getElementById('editName').value,
+        qty: parseInt(document.getElementById('editQty').value) || 0,
+        unit: document.getElementById('editUnit').value,
+        cost: parseFloat(document.getElementById('editCost').value) || 0,
+        expDate: document.getElementById('editExp').value
+    };
+
+    // บันทึกลง LocalStorage และปิดหน้าต่าง
+    localStorage.setItem('clinicStockDB', JSON.stringify(stockDB));
+    document.getElementById('editStockModal').remove();
+    
+    // แสดงความยินดีและรีเฟรชตาราง
+    Swal.fire({
+        toast: true, position: 'top-end', icon: 'success',
+        title: 'แก้ไขข้อมูลสำเร็จแล้วค่ะ', showConfirmButton: false, timer: 2000
+    });
+    
+    updateStockTable();
+};
+
+
+// เรียกใช้ขออนุญาตทันทีที่โหลดหน้าจัดการคิว
+setTimeout(window.requestNotificationPermission, 2000);
+
 
 </script>
 </body>

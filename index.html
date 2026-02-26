@@ -7681,25 +7681,23 @@ window.renderAttendanceRecord = function() {
 </script>
 
 <style>
-  /* 1. จัดการโครงสร้างหลัก */
+  /* 1. ปรับแต่งโครงสร้างหลัก */
   #mainDashboard {
     display: flex !important;
     width: 100% !important;
     min-height: 100vh;
     transition: all 0.3s ease;
-    position: relative;
   }
 
-  /* 2. ตั้งค่าเมนูข้าง (Aside) */
+  /* 2. จัดการ Sidebar (Aside) */
   aside {
     width: 300px !important;
     min-width: 300px !important;
     flex-shrink: 0;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative; /* เพื่อให้ปุ่มอ้างอิงตำแหน่งได้ */
   }
 
-  /* 3. สไตล์เมื่อเมนูถูก "พับ" */
+  /* สไตล์เมื่อเมนูถูก "พับ" */
   .ace-collapsed aside {
     width: 0 !important;
     min-width: 0 !important;
@@ -7707,29 +7705,47 @@ window.renderAttendanceRecord = function() {
     pointer-events: none;
   }
 
-  /* 4. ปุ่มพับเมนู (ตำแหน่งตามลูกศร: เกาะขอบขวาของ Aside) */
+  /* 3. แก้ไข Header ให้ยืดหยุ่น (ป้องกันปุ่มตกบรรทัด) */
+  header {
+    display: flex !important;
+    flex-wrap: nowrap !important; /* ห้ามตกบรรทัด */
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 10px 20px !important;
+    gap: 10px !important;
+  }
+
+  /* จัดกลุ่มปุ่มใน Header ให้ชิดขวาและไม่เบียดกัน */
+  header .flex.items-center.gap-4 {
+    flex-shrink: 0 !important;
+    display: flex !important;
+    gap: 8px !important;
+  }
+
+  /* 4. ปุ่มพับเมนู (วางไว้ตำแหน่งรอยต่อ Sidebar ตามรูป) */
   #toggle-button-fixed {
     position: fixed;
-    top: 30px; /* ปรับระดับความสูงตามต้องการ */
-    left: 285px; /* วางให้เหลื่อมขอบเมนูออกมาเล็กน้อยตามรูป */
-    width: 35px;
-    height: 35px;
+    top: 32px; /* ระดับความสูงให้พอดีกับ Header */
+    left: 285px; 
+    width: 30px;
+    height: 30px;
     background: #D48197;
     color: white;
-    border-radius: 10px;
-    display: none; /* ซ่อนรอเช็ค Login */
+    border-radius: 8px;
+    display: none; /* ซ่อนรอ Login */
     align-items: center;
     justify-content: center;
     cursor: pointer;
     z-index: 1000001;
-    box-shadow: 4px 0 10px rgba(0,0,0,0.1);
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
     transition: all 0.3s ease;
     border: 2px solid white;
   }
 
-  /* เมื่อพับเมนู ให้ปุ่มย้ายไปชิดซ้ายสุด */
+  /* เมื่อพับเมนู ให้ปุ่มย้ายไปชิดซ้ายสุดของขอบจอ */
   .ace-collapsed #toggle-button-fixed {
-    left: 15px;
+    left: 10px;
+    top: 20px;
   }
 
   /* 5. เนื้อหาหลักขยายเต็มพื้นที่ */
@@ -7737,12 +7753,13 @@ window.renderAttendanceRecord = function() {
     flex-grow: 1;
     width: 100%;
     transition: all 0.3s ease;
+    overflow-x: hidden;
   }
 
   @media screen and (max-width: 768px) {
     aside { position: fixed !important; z-index: 9999; height: 100vh; }
-    .grid-cols-1.md\:grid-cols-4 { grid-template-columns: 1fr !important; }
-    #toggle-button-fixed { top: 20px; left: 20px; } /* ในมือถือให้วางตำแหน่งกดง่าย */
+    #toggle-button-fixed { display: flex !important; top: 15px; left: 15px; }
+    header { flex-wrap: wrap !important; } /* ในมือถืออนุญาตให้ตกได้เพื่อความสวยงาม */
   }
 </style>
 
@@ -7751,13 +7768,18 @@ window.renderAttendanceRecord = function() {
 </div>
 
 <script>
+  /**
+   * ฟังก์ชันสลับเมนู
+   */
   function toggleAceMenu() {
     const body = document.body;
     const isCollapsed = body.classList.toggle('ace-collapsed');
-    // เปลี่ยนลูกศรตามสถานะ: หุบใช้ ❯ / กางใช้ ❮
     document.getElementById('btn-icon-symbol').innerText = isCollapsed ? '❯' : '❮';
   }
 
+  /**
+   * ตรวจสอบความสมบูรณ์ของหน้าจอเมื่อเข้าระบบ
+   */
   function checkUIVisibility() {
     const loginPage = document.getElementById('loginPage');
     const toggleBtn = document.getElementById('toggle-button-fixed');
@@ -7768,16 +7790,20 @@ window.renderAttendanceRecord = function() {
     }
   }
 
+  // ใช้ MutationObserver เพื่อตรวจจับการ Login สำเร็จแบบ Real-time
   const observer = new MutationObserver(checkUIVisibility);
   window.addEventListener('load', () => {
     const loginPage = document.getElementById('loginPage');
     if (loginPage) observer.observe(loginPage, { attributes: true, attributeFilter: ['class', 'style'] });
     checkUIVisibility();
+    
+    // ตั้งค่า Mobile
     if (window.innerWidth <= 768) {
       document.body.classList.add('ace-collapsed');
       document.getElementById('btn-icon-symbol').innerText = '❯';
     }
   });
+
 </script>
 </body>
 </html>

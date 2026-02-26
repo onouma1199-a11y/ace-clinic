@@ -1949,75 +1949,89 @@ document.addEventListener("DOMContentLoaded", function(){
 
 });
 
-/* --- ฟังก์ชันสลับหน้า: เชื่อมต่อเมนูที่ 3 รายรับ-รายจ่าย ตีบิล --- */
-function loadPage(id, title) {
-    document.getElementById('pageTitle').innerText = title.toUpperCase();
-    document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active-menu'));
-    
-    const activeMenu = document.getElementById(`menu-${id}`);
-    if(activeMenu) activeMenu.classList.add('active-menu');
-    
-    const target = document.getElementById('dynamicContent');
-    
-    // --- เริ่มต้นตรวจสอบ ID ---
-    if(id === 1) {
-        renderDashboard(target);
-    } 
-    else if(id === 2) {
-        renderCustomerList(target);
-    } 
-    else if(id === 3) {
-        renderSalesPage();
-    } 
-    else if(id === 4) {
-        renderAppointmentPage();
-    }
-    else if(id === 6) {
-        renderReportPage();
-    }
-    // --- 🎯 วางส่วนนี้เพิ่มเข้าไปค่ะ ---
-    else if(id === 7) {
-        renderStaffManagement(); 
-    }
-    // ----------------------------
-    else if(id === 66) {
-        renderDFReportPage(); 
-    }    else if(id === 9) {
-        renderExpensePage();
-    }
-    else if(id === 51) {
-        renderCourseMasterPage();
-    }
-    else if(id === 52) {
-        renderQueuePage();
-    }
-    else if(id === 53) {
-        renderStockPage();
-    }
-    else {
-        target.innerHTML = `<div class="glass-card text-center py-32 font-bold ace-pink uppercase text-2xl">เมนู ${title} <br> กำลังพัฒนา...</div>`;
-    }
- }
-
-/* --- กู้คืนระบบ Login และฟังก์ชันสลับหน้า (ชุดสมบูรณ์) --- */
-
-// 1. ฟังก์ชันเข้าสู่ระบบ
+/* =======================================================
+   🔑 1. LOGIN SYSTEM (ซ่อมแซมส่วนที่ลบไป)
+   ======================================================= */
 window.doLogin = function() {
     const u = document.getElementById('uIn').value;
     const p = document.getElementById('pIn').value;
+    
+    // ตรวจสอบจากตัวแปร users ที่ประกาศไว้ด้านบน
     const user = users.find(x => x.email === u && x.pass === p);
     
     if (user) {
         document.getElementById('loginPage').classList.add('hidden');
         document.getElementById('mainDashboard').classList.remove('hidden');
         document.getElementById('userNameLabel').innerText = `${user.name}`;
-        renderMenuByRole(user.role);
+        
+        // วาดเมนูตามสิทธิ์
+        if (typeof renderMenuByRole === 'function') {
+            renderMenuByRole(user.role);
+        }
+        
+        // ไปหน้าแรก
         loadPage(1, 'Dashboard ภาพรวม');
     } else { 
-        alert("❌ รหัสผ่านไม่ถูกต้อง (ลองใช้ 1111 / 1111 นะคะ)"); 
+        Swal.fire({
+            icon: 'error',
+            title: 'รหัสผ่านไม่ถูกต้อง',
+            text: 'กรุณาลองใหม่อีกครั้งนะคะ (1111 / 1111)',
+            confirmButtonColor: '#D48197'
+        });
     }
 };
 
+/* =======================================================
+   🚀 2. CORE NAVIGATION: ระบบสลับหน้า ( loadPage )
+   ======================================================= */
+function loadPage(id, title) {
+    // 1. เปลี่ยนชื่อหัวข้อหน้าจอ
+    const titleEl = document.getElementById('pageTitle');
+    if (titleEl) titleEl.innerText = title.toUpperCase();
+    
+    // 2. จัดการสีเมนู Sidebar (Active Class)
+    document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active-menu'));
+    const allSidebarItems = document.querySelectorAll('.sidebar-item');
+    allSidebarItems.forEach(item => {
+        if(item.innerText.includes(title)) item.classList.add('active-menu');
+    });
+
+    const target = document.getElementById('dynamicContent');
+    if (!target) return;
+
+    // 3. เงื่อนไขการเลือกหน้า (ID Mapping)
+    if (id === 1) {
+        renderDashboard(target);
+    } else if (id === 2) {
+        renderCustomerList(target);
+    } else if (id === 3) {
+        renderSalesPage();
+    } else if (id === 4) {
+        renderAppointmentPage();
+    } else if (id === 6) {
+        renderReportPage();
+    } else if (id === 7) {
+        renderStaffManagement(); 
+    } else if (id === 9) {
+        renderExpensePage();
+    } else if (id === 11) {
+        renderPayrollSystem();     // จ่ายเงินเดือน
+    } else if (id === 12) {
+        renderAttendanceRecord();  // 📈 ขาด/ลา/สาย (ID ที่เพิ่มใหม่)
+    } else if (id === 51) {
+        renderCourseMasterPage();
+    } else if (id === 52) {
+        renderQueuePage();
+    } else if (id === 53) {
+        renderStockPage();
+    } else if (id === 66) {
+        renderDFReportPage();
+    } else if (id === 8) {
+        renderSettingsPage();
+    } else {
+        target.innerHTML = `<div class="glass-card py-32 text-center text-slate-300 font-bold uppercase text-xl italic">เมนู ${title} <br> กำลังพัฒนา...</div>`;
+    }
+}
 
 /* =======================================================
    💎 ระบบจัดการเมนู และ หน้าแสดงผล (View Detail / OPD)
@@ -7543,6 +7557,227 @@ window.sendPayrollEmailPrompt = function() {
         }
     });
 };
+/* =======================================================
+   📈 12. ATTENDANCE SUMMARY (ดึงข้อมูลจริงจากเงินเดือน รายเดือน/รายปี)
+   ======================================================= */
+window.renderAttendanceRecord = function() {
+    const target = document.getElementById('dynamicContent');
+    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
+    const payrollHistory = JSON.parse(localStorage.getItem('payrollHistoryDB')) || [];
+    const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+
+    // ตรวจสอบโหมดการดู (เริ่มต้นเป็นรายเดือน)
+    if (!window.attViewMode) window.attViewMode = 'monthly'; 
+    const selMonth = window.selectedAttMonth || String(new Date().getMonth() + 1).padStart(2, '0');
+    const selYearThai = window.selectedAttYear || "2569"; // ค่าปี พ.ศ.
+
+    let displayData = [];
+    let titleText = "";
+
+    if (window.attViewMode === 'monthly') {
+        // --- 📅 โหมดรายเดือน ---
+        const periodKey = `${parseInt(selMonth)}/${selYearThai}`;
+        titleText = `สรุปสถิติงวดเดือน ${monthNames[parseInt(selMonth)-1]} ${selYearThai}`;
+        
+        // ดึงข้อมูลรายบิลเงินเดือน และ Map ชื่อจาก staffDB ให้ถูกต้อง
+        displayData = payrollHistory.filter(p => p.period === periodKey).map(record => {
+            const staffInfo = staffDB.find(s => s.staffId === record.staffId);
+            return {
+                ...record,
+                displayName: staffInfo ? staffInfo.name : (record.name || 'ไม่ระบุชื่อ'),
+                lateMins: parseFloat(record.lateMins || record.lateCount || 0),
+                absDays: parseFloat(record.absDays || 0),
+                sickDays: parseFloat(record.sickDays || 0),
+                netAmount: parseFloat(record.netAmount || 0)
+            };
+        });
+    } else {
+        // --- 🗓️ โหมดรายปี (รวมข้อมูลทุกเดือนในปีที่เลือก) ---
+        titleText = `สรุปสถิติรวมทั้งปี พ.ศ. ${selYearThai}`;
+        
+        const yearlyMap = {};
+        payrollHistory.forEach(record => {
+            if (record.period && record.period.endsWith(selYearThai)) {
+                if (!yearlyMap[record.staffId]) {
+                    const staffInfo = staffDB.find(s => s.staffId === record.staffId);
+                    yearlyMap[record.staffId] = { 
+                        staffId: record.staffId,
+                        displayName: staffInfo ? staffInfo.name : (record.name || 'ไม่ระบุชื่อ'),
+                        lateMins: 0, absDays: 0, sickDays: 0, netAmount: 0, monthsCount: 0 
+                    };
+                }
+                yearlyMap[record.staffId].lateMins += parseFloat(record.lateMins || record.lateCount || 0);
+                yearlyMap[record.staffId].absDays += parseFloat(record.absDays || 0);
+                yearlyMap[record.staffId].sickDays += parseFloat(record.sickDays || 0);
+                yearlyMap[record.staffId].netAmount += parseFloat(record.netAmount || 0);
+                yearlyMap[record.staffId].monthsCount += 1;
+            }
+        });
+        displayData = Object.values(yearlyMap);
+    }
+
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 text-left pb-20 no-print font-normal">
+            <div class="bg-white p-8 rounded-[3rem] shadow-sm border border-pink-100 mb-8 flex flex-col md:flex-row justify-between items-center gap-6">
+                <div>
+                    <h2 class="text-2xl font-black text-slate-800 italic uppercase leading-none">ATTENDANCE SUMMARY</h2>
+                    <p class="text-[10px] text-[#D48197] font-black uppercase mt-2 italic tracking-widest text-left">${titleText}</p>
+                </div>
+                
+                <div class="flex flex-wrap items-center gap-3 bg-slate-50 p-3 rounded-3xl border border-pink-50">
+                    <div class="flex bg-white rounded-xl p-1 shadow-sm border border-pink-100 mr-2">
+                        <button onclick="window.attViewMode='monthly'; renderAttendanceRecord()" class="px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${window.attViewMode==='monthly' ? 'bg-[#D48197] text-white' : 'text-slate-400'}">รายเดือน</button>
+                        <button onclick="window.attViewMode='yearly'; renderAttendanceRecord()" class="px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${window.attViewMode==='yearly' ? 'bg-[#D48197] text-white' : 'text-slate-400'}">รายปี</button>
+                    </div>
+
+                    ${window.attViewMode === 'monthly' ? `
+                        <select onchange="window.selectedAttMonth = this.value; renderAttendanceRecord()" class="bg-white border border-pink-200 rounded-xl px-4 py-2 text-xs font-bold outline-none cursor-pointer">
+                            ${monthNames.map((m, i) => `<option value="${String(i+1).padStart(2,'0')}" ${selMonth == String(i+1).padStart(2,'0') ? 'selected' : ''}>${m}</option>`).join('')}
+                        </select>
+                    ` : ''}
+                    
+                    <select onchange="window.selectedAttYear = this.value; renderAttendanceRecord()" class="bg-white border border-pink-200 rounded-xl px-4 py-2 text-xs font-bold outline-none cursor-pointer">
+                        <option value="2568" ${selYearThai == '2568' ? 'selected' : ''}>2568</option>
+                        <option value="2569" ${selYearThai == '2569' ? 'selected' : ''}>2569</option>
+                    </select>
+
+                    <button onclick="window.print()" class="bg-slate-800 text-white px-6 py-2 rounded-xl text-[10px] font-black shadow-lg hover:bg-black transition-all uppercase">🖨️ พิมพ์</button>
+                </div>
+                <button onclick="loadPage(7, 'จัดการพนักงาน')" class="bg-pink-50 p-3 rounded-2xl text-[#D48197] font-bold shadow-sm hover:bg-pink-100 transition-all">🔙 กลับ</button>
+            </div>
+
+            <div class="glass-card overflow-hidden !p-0 shadow-2xl border-none">
+                <table class="w-full text-sm text-center">
+                    <thead class="bg-[#F9EBEF] text-[#D48197] font-black uppercase italic text-[10px]">
+                        <tr>
+                            <th class="p-5 text-left">ชื่อพนักงาน</th>
+                            <th class="p-5">สาย (นาที)</th>
+                            <th class="p-5">ขาด (วัน)</th>
+                            <th class="p-5">ลาป่วย (วัน)</th>
+                            <th class="p-5">สุทธิที่จ่าย</th>
+                            <th class="p-5 bg-pink-100/30 text-blue-600">ประเมิน (%)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="font-bold text-slate-600">
+                        ${displayData.length > 0 ? displayData.map(record => `
+                            <tr class="border-b border-pink-50 hover:bg-pink-50/10 transition-all">
+                                <td class="p-5 text-left">${record.displayName}</td>
+                                <td class="p-5">${record.lateMins} น.</td>
+                                <td class="p-5">${record.absDays} ว.</td>
+                                <td class="p-5">${record.sickDays} ว.</td>
+                                <td class="p-5 text-[#D48197]">฿${record.netAmount.toLocaleString()}</td>
+                                <td class="p-5 bg-pink-50/20 text-blue-600">5.0%</td>
+                            </tr>`).join('') : `<tr><td colspan="6" class="p-20 text-slate-300 italic">❌ ไม่พบประวัติ</td></tr>`}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+};
+
+/* =======================================================
+   📱 ส่วนปรับปรุง Mobile & Responsive (ACE CLINIC LUXURY)
+   ======================================================= */
+</script>
+
+<style>
+  /* 1. จัดการโครงสร้างหลัก */
+  #mainDashboard {
+    display: flex !important;
+    width: 100% !important;
+    min-height: 100vh;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+
+  /* 2. ตั้งค่าเมนูข้าง (Aside) */
+  aside {
+    width: 300px !important;
+    min-width: 300px !important;
+    flex-shrink: 0;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative; /* เพื่อให้ปุ่มอ้างอิงตำแหน่งได้ */
+  }
+
+  /* 3. สไตล์เมื่อเมนูถูก "พับ" */
+  .ace-collapsed aside {
+    width: 0 !important;
+    min-width: 0 !important;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* 4. ปุ่มพับเมนู (ตำแหน่งตามลูกศร: เกาะขอบขวาของ Aside) */
+  #toggle-button-fixed {
+    position: fixed;
+    top: 30px; /* ปรับระดับความสูงตามต้องการ */
+    left: 285px; /* วางให้เหลื่อมขอบเมนูออกมาเล็กน้อยตามรูป */
+    width: 35px;
+    height: 35px;
+    background: #D48197;
+    color: white;
+    border-radius: 10px;
+    display: none; /* ซ่อนรอเช็ค Login */
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 1000001;
+    box-shadow: 4px 0 10px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    border: 2px solid white;
+  }
+
+  /* เมื่อพับเมนู ให้ปุ่มย้ายไปชิดซ้ายสุด */
+  .ace-collapsed #toggle-button-fixed {
+    left: 15px;
+  }
+
+  /* 5. เนื้อหาหลักขยายเต็มพื้นที่ */
+  main {
+    flex-grow: 1;
+    width: 100%;
+    transition: all 0.3s ease;
+  }
+
+  @media screen and (max-width: 768px) {
+    aside { position: fixed !important; z-index: 9999; height: 100vh; }
+    .grid-cols-1.md\:grid-cols-4 { grid-template-columns: 1fr !important; }
+    #toggle-button-fixed { top: 20px; left: 20px; } /* ในมือถือให้วางตำแหน่งกดง่าย */
+  }
+</style>
+
+<div id="toggle-button-fixed" onclick="toggleAceMenu()">
+  <span id="btn-icon-symbol">❮</span>
+</div>
+
+<script>
+  function toggleAceMenu() {
+    const body = document.body;
+    const isCollapsed = body.classList.toggle('ace-collapsed');
+    // เปลี่ยนลูกศรตามสถานะ: หุบใช้ ❯ / กางใช้ ❮
+    document.getElementById('btn-icon-symbol').innerText = isCollapsed ? '❯' : '❮';
+  }
+
+  function checkUIVisibility() {
+    const loginPage = document.getElementById('loginPage');
+    const toggleBtn = document.getElementById('toggle-button-fixed');
+    if (loginPage && (loginPage.classList.contains('hidden') || loginPage.style.display === 'none')) {
+      toggleBtn.style.display = 'flex';
+    } else {
+      toggleBtn.style.display = 'none';
+    }
+  }
+
+  const observer = new MutationObserver(checkUIVisibility);
+  window.addEventListener('load', () => {
+    const loginPage = document.getElementById('loginPage');
+    if (loginPage) observer.observe(loginPage, { attributes: true, attributeFilter: ['class', 'style'] });
+    checkUIVisibility();
+    if (window.innerWidth <= 768) {
+      document.body.classList.add('ace-collapsed');
+      document.getElementById('btn-icon-symbol').innerText = '❯';
+    }
+  });
 </script>
 </body>
 </html>

@@ -13,6 +13,7 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
 
@@ -561,17 +562,32 @@ tbody tr:hover{background:#FAFAFF!important;}
 <script>
 
 /* =======================================================
-   🌟 ZONE 1: DATABASE & CONFIG (ตัวแปรหลัก & ข้อมูลระบบ)
+   🚀 ZONE 1: SUPABASE + CORE CONFIG (NEW SYSTEM)
    ======================================================= */
 
-// 1.1 Project Deployment Config
+// 🔑 1. ตั้งค่า Supabase
+const SUPABASE_URL = "https://shmoayoeyxicuofwwjhl.supabase.co";
+const SUPABASE_KEY = "sb_publishable_TFl3kxbt7dFXnwyS225K9Q_RYoiDRDU";
+
+window.supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// 🔥 2. App Config ใหม่
 const APP_CONFIG = {
-    env: 'development',
-    apiUrl: '',
-    storageUrl: '',
-    version: '2.5.0'
+    env: 'production',
+    version: '3.0.0',
+    database: 'supabase'
 };
 
+/* -------------------- UNIVERSAL ID -------------------- */
+// ใช้แทน HN ทุกระบบ
+window.generateID = function(prefix = 'ID') {
+    return `${prefix}_${crypto.randomUUID()}`;
+};
+
+/* -------------------- DATE HELPER -------------------- */
+window.nowISO = function() {
+    return new Date().toISOString();
+};
 /* -------------------- ID HELPERS -------------------- */
 window.generateUID = function(prefix = 'ID') {
     const timestamp = Date.now().toString(36);

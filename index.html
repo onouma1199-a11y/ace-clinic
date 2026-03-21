@@ -257,7 +257,7 @@ tbody tr:hover{background:#FAFAFF!important;}
             <h2 id="modalTitle" class="text-2xl font-bold text-slate-800 uppercase tracking-tight">เพิ่มลูกค้าใหม่</h2>
             <div class="flex gap-2">
                 <button onclick="alert('อ่านข้อมูลบัตร...')" class="bg-[#D48197] text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:brightness-110 transition-all uppercase shadow-md">อ่านข้อมูลบัตร</button>
-                <button onclick="saveCustomer()" class="bg-[#D48197] text-white px-8 py-2.5 rounded-xl text-xs font-bold hover:brightness-110 transition-all uppercase shadow-md">บันทึกข้อมูล</button>
+                <button onclick="saveCustomerWithAlert()" class="bg-[#D48197] text-white px-8 py-2.5 rounded-xl text-xs font-bold hover:brightness-110 transition-all uppercase shadow-md">บันทึกข้อมูล</button>
                 <button onclick="closeModal()" class="bg-[#888] text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:bg-slate-700 transition-all uppercase shadow-md">ยกเลิก</button>
             </div>
         </div>
@@ -2003,6 +2003,29 @@ window.saveCustomerWithAlert = function() {
         timer: 1500,
         showConfirmButton: false
     });
+};
+window.saveCustomer = async function () {
+  const firstName = document.getElementById("modalFirstName")?.value || "";
+  const lastName = document.getElementById("modalLastName")?.value || "";
+  const phone = document.getElementById("modalPhone")?.value || "";
+  const branch = document.getElementById("modalBranch")?.value || "บางพลี";
+
+  const { error } = await window.supabaseClient
+    .from("customers")
+    .insert([{
+      first_name: firstName,
+      last_name: lastName,
+      phone: phone,
+      branch: branch
+    }]);
+
+  if (error) {
+    console.error(error);
+    alert("❌ บันทึกไม่สำเร็จ");
+    return;
+  }
+
+  console.log("✅ บันทึก Supabase สำเร็จ");
 };
 
 function applyCustomerFilter() {
@@ -11100,6 +11123,33 @@ window.showBirthdayNotifications = function() {
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(window.updateNotificationBadges, 800);
 });
+
+window.saveCustomerToSupabase = async function() {
+  const first_name = document.getElementById("first_name")?.value || "";
+  const last_name = document.getElementById("last_name")?.value || "";
+  const phone = document.getElementById("phone")?.value || "";
+
+  const { error } = await window.supabaseClient
+    .from("customers")
+    .insert([{
+      first_name,
+      last_name,
+      phone,
+      branch: "บางพลี",
+      status: "active"
+    }]);
+
+  if (error) {
+    console.error(error);
+    alert("❌ บันทึกไม่สำเร็จ");
+    return;
+  }
+
+  alert("✅ บันทึกสำเร็จ");
+
+  window.closeModal();
+  location.reload();
+};
 
 </script>
 

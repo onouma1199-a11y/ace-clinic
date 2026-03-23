@@ -174,7 +174,9 @@ h1,h2,h3{letter-spacing:-.02em!important;}
 /* Make UI clearer (less decorative) */
 .italic{font-style:normal!important;}
 .uppercase{text-transform:none!important;}
-.tracking-widest,.tracking-[0\.2em],.tracking-tighter{letter-spacing:normal!important;}
+.tracking-widest,.tracking-tighter{
+  letter-spacing:normal!important;
+}
 
 /* Sidebar */
 aside{
@@ -571,6 +573,8 @@ const SUPABASE_KEY = "sb_publishable_TFl3kxbt7dFXnwyS225K9Q_RYoiDRDU";
 
 window.supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+console.log("✅ Supabase connected", window.supabaseClient);
+
 // 🔥 2. App Config ใหม่
 const APP_CONFIG = {
     env: 'production',
@@ -588,6 +592,7 @@ window.generateID = function(prefix = 'ID') {
 window.nowISO = function() {
     return new Date().toISOString();
 };
+
 /* -------------------- ID HELPERS -------------------- */
 window.generateUID = function(prefix = 'ID') {
     const timestamp = Date.now().toString(36);
@@ -652,10 +657,81 @@ window.filterByBranch = function(list = [], getBranchFn = null) {
     });
 };
 
+/* -------------------- SUPABASE: CUSTOMERS -------------------- */
+// ดึงลูกค้าจาก Supabase ตามสาขาที่กำลังดู
+window.getCustomersFromSupabase = async function() {
+    try {
+        if (!window.supabaseClient) {
+            console.error('ยังไม่พบ supabaseClient');
+            return [];
+        }
+
+        const { data, error } = await window.supabaseClient
+            .from('customers')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('โหลด customer จาก Supabase ไม่สำเร็จ:', error);
+            return [];
+        }
+
+        return data || [];
+    } catch (e) {
+        console.error('getCustomersFromSupabase error:', e);
+        return [];
+    }
+};
+
+// เพิ่มลูกค้าลง Supabase
+window.saveCustomerToSupabase = async function(payload = {}) {
+    try {
+        const safePayload = {
+            hn: payload.hn || null,
+            first_name: payload.first_name || '',
+            last_name: payload.last_name || '',
+            fullname: payload.fullname || `${payload.first_name || ''} ${payload.last_name || ''}`.trim(),
+            nickname: payload.nickname || '',
+            phone: payload.phone || '',
+            line_id: payload.line_id || '',
+            birth_date: payload.birth_date || null,
+            gender: payload.gender || '',
+            note: payload.note || '',
+            branch: window.normalizeBranch(
+                payload.branch ||
+                window.currentBranch ||
+                window.currentUser?.branch ||
+                'สาขาบางพลี'
+            )
+        };
+
+        const { data, error } = await window.supabaseClient
+            .from('customers')
+            .insert([safePayload])
+            .select()
+            .single();
+
+        if (error) {
+            console.error('saveCustomerToSupabase error:', error);
+            alert('บันทึกลูกค้าไม่สำเร็จ');
+            return null;
+        }
+
+        return data;
+    } catch (e) {
+        console.error('saveCustomerToSupabase exception:', e);
+        alert('บันทึกลูกค้าไม่สำเร็จ');
+        return null;
+    }
+};
+
 /* -------------------- DATA HELPERS -------------------- */
+// ตอนนี้ยังคงอ่าน customer จาก localStorage ก่อน เพื่อไม่ให้ทั้งระบบพัง
+// แต่เริ่มมี helper ฝั่ง Supabase เพิ่มไว้แล้วด้านบน
 window.getCustomerByHN = function(hn) {
     const db = window.getCustomers();
-    return db.find(c => String(c.hn) === String(hn));
+    if (!Array.isArray(db)) return null;
+    return db.find(c => String(c.hn) === String(hn)) || null;
 };
 
 window.getStaffByID = function(id) {
@@ -679,6 +755,9 @@ window.getQueueByID = function(id) {
 };
 
 /* -------------------- DATA LAYER -------------------- */
+// หมายเหตุ:
+// ตอนนี้ยังเก็บ localStorage layer เดิมไว้ก่อน เพื่อให้โมดูลอื่นยังทำงานต่อได้
+// เราจะค่อย ๆ ย้าย customer module ไปใช้ Supabase ทีละจุด
 window.getCustomers = function() {
     try {
         return JSON.parse(localStorage.getItem('customerDB')) || [];
@@ -1282,10 +1361,6 @@ window.getCurrentUserSafe = function() {
     }
 };
 
-window.getCurrentViewingBranch = function() {
-    const currentUser = window.getCurrentUserSafe();
-    return window.normalizeBranch(currentUser.branch || 'ทุกสาขา');
-};
 
 window.getUserHomeBranch = function() {
     const currentUser = window.getCurrentUserSafe();
@@ -1450,7 +1525,7 @@ window.renderDashboard = function(target, period = 'day') {
                         ${appsToday.length > 0 ? appsToday.map((ap, idx) => `
                             <tr>
                                 <td class="p-3">${idx + 1}</td>
-                                <td class="p-3">${ap.hn || '-'}</td>
+                                <td class="p-3">${cInfo?.hn || '-'}</td>
                                 <td class="p-3">${ap.time || '--:--'}</td>
                                 <td class="p-3">${ap.phone || '-'}</td>
                                 <td class="p-3">${ap.customerName || '-'}</td>
@@ -2010,54 +2085,122 @@ window.saveCustomerWithAlert = async function() {
 };
 
 window.saveCustomer = async function () {
-  const firstName = document.getElementById("modalFirstName")?.value || "";
-  const lastName = document.getElementById("modalLastName")?.value || "";
-  const phone = document.getElementById("modalPhone")?.value || "";
-  const branch = document.getElementById("modalBranch")?.value || "บางพลี";
+    const firstName = document.getElementById("modalFirstName")?.value.trim() || "";
+    const lastName = document.getElementById("modalLastName")?.value.trim() || "";
+    const nickname = document.getElementById("modalNickname")?.value.trim() || "";
+    const phone = document.getElementById("modalPhone")?.value.trim() || "";
+    const lineId = document.getElementById("modalLine")?.value.trim() || "";
+    const note = document.getElementById("modalNote")?.value.trim() || "";
+    const birthDate = document.getElementById("modalBirthDate")?.value || null;
+    const gender = document.getElementById("modalGender")?.value || "";
+    const branchRaw = document.getElementById("modalBranch")?.value || window.currentBranch || window.currentUser?.branch || "สาขาบางพลี";
+    const branch = window.normalizeBranch(branchRaw);
 
-  const { error } = await window.supabaseClient
-    .from("customers")
-    .insert([{
-      first_name: firstName,
-      last_name: lastName,
-      phone: phone,
-      branch: branch
-    }]);
+    if (!firstName) {
+        Swal.fire({
+            icon: 'error',
+            title: 'ข้อมูลไม่ครบ',
+            text: 'กรุณากรอกชื่อจริงอย่างน้อยหนึ่งชื่อนะคะ',
+            confirmButtonColor: '#D48197'
+        });
+        return false;
+    }
 
-  if (error) {
-    console.error(error);
-    Swal.fire({
-      icon: 'error',
-      title: 'บันทึกไม่สำเร็จ',
-      text: error.message || 'เกิดข้อผิดพลาด'
-    });
-    return false;
-  }
+    const hn = `HN${Date.now()}`;
+    const fullname = `${firstName} ${lastName}`.trim();
 
-  console.log("✅ บันทึก Supabase สำเร็จ");
-  return true;
+    const payload = {
+        hn: hn,
+        first_name: firstName,
+        last_name: lastName,
+        fullname: fullname,
+        nickname: nickname,
+        phone: phone,
+        line_id: lineId,
+        birth_date: birthDate,
+        gender: gender,
+        note: note,
+        branch: branch
+    };
+
+    const { data, error } = await window.supabaseClient
+        .from("customers")
+        .insert([payload])
+        .select()
+        .single();
+
+    if (error) {
+        console.error("saveCustomer error:", error);
+        Swal.fire({
+            icon: 'error',
+            title: 'บันทึกไม่สำเร็จ',
+            text: error.message || 'เกิดข้อผิดพลาด',
+            confirmButtonColor: '#D48197'
+        });
+        return false;
+    }
+
+    try {
+        const customerDB = JSON.parse(localStorage.getItem("customerDB")) || [];
+
+        customerDB.unshift({
+            id: data.id,
+            hn: data.hn || hn,
+            first_name: data.first_name || firstName,
+            last_name: data.last_name || lastName,
+            fullname: data.fullname || fullname,
+            nickname: data.nickname || nickname,
+            phone: data.phone || phone,
+            line_id: data.line_id || lineId,
+            birth_date: data.birth_date || birthDate,
+            gender: data.gender || gender,
+            note: data.note || note,
+            branch: data.branch || branch,
+            created_at: data.created_at || new Date().toISOString(),
+            updated_at: data.updated_at || new Date().toISOString()
+        });
+
+        localStorage.setItem("customerDB", JSON.stringify(customerDB));
+    } catch (e) {
+        console.error("localStorage sync customerDB error:", e);
+    }
+
+    console.log("✅ บันทึก Supabase สำเร็จ", data);
+    return true;
 };
 
-function applyCustomerFilter() {
-    const keyword = document.getElementById("searchInput").value.toLowerCase();
-    const branch = document.getElementById("branchFilter").value;
-    const customerDB = window.getCustomers() || [];
+async function applyCustomerFilter() {
+    const keyword = document.getElementById("searchInput")?.value.toLowerCase() || "";
+    const branch = document.getElementById("branchFilter")?.value || "ทั้งหมด";
+
+    let customerDB = [];
+
+    try {
+        customerDB = await window.getCustomersFromSupabase();
+    } catch (e) {
+        console.error("getCustomersFromSupabase error:", e);
+        customerDB = window.getCustomers() || [];
+    }
 
     let filtered = customerDB.filter(c => {
+        const fullName = String(c.fullname || `${c.first_name || ''} ${c.last_name || ''}`.trim()).toLowerCase();
+        const hn = String(c.hn || "").toLowerCase();
+        const phone = String(c.phone || "").toLowerCase();
+        const customerBranch = window.normalizeBranch(c.branch || "");
+
         const matchKeyword =
-            c.fullname?.toLowerCase().includes(keyword) ||
-            c.hn?.toLowerCase().includes(keyword) ||
-            c.phone?.includes(keyword);
+            fullName.includes(keyword) ||
+            hn.includes(keyword) ||
+            phone.includes(keyword);
 
         const matchBranch =
-            branch === "ทั้งหมด" || c.branch === branch;
+            branch === "ทั้งหมด" || customerBranch === window.normalizeBranch(branch);
 
         return matchKeyword && matchBranch;
     });
 
     renderCustomerTable(filtered);
 }
-
 function showCustomerDetail(hn) {
     const customerDB = window.getCustomers() || [];
     const c = customerDB.find(item => String(item.hn) === String(hn));
@@ -2342,9 +2485,11 @@ window.handleOPDPrint = function() {
         const notes = document.getElementById('treatmentNotesSkin');
         document.getElementById('printNotesSkin').innerText = notes ? notes.value : '';
     }
-    window.print();
 };
 
+window.printOPDPage = function() {
+    window.print();
+};
 window.saveTreatmentHistory = function(hn) {
     const typeSelect = document.getElementById('opdTypeSelector');
     const selectedType = typeSelect ? typeSelect.value : 'general';
@@ -2893,14 +3038,14 @@ document.getElementById("profileOPDBtn").onclick = () => {
 };
 
 document.getElementById("profileReceiptBtn").onclick = () => {
-    const hn = wrap.dataset.hn; // เปลี่ยนจาก index เป็น hn
-    if (hn) {
+    const customerId = wrap.dataset.customerId;
+    if (customerId) {
         const customerDB = window.getCustomers() || [];
-        const cust = customerDB.find(c => String(c.hn) === String(hn));
+        const cust = customerDB.find(c => String(c.id) === String(customerId));
         if (cust) {
             wrap.classList.add("hidden");
             wrap.classList.remove("flex");
-            window.openBillingTab(cust.fullname, true); 
+            window.openBillingTab(cust.fullname, true, cust.id);
         }
     }
 };
@@ -2923,15 +3068,15 @@ wrap.addEventListener("click", (e) => {
     // 📌 กรณีหน้าอื่นๆ (คงเดิมหรือปรับปรุงตามความเหมาะสม)
     if (tab === "appointments") {
         const appointmentDB = JSON.parse(localStorage.getItem("appointmentDB")) || [];
-        const items = appointmentDB.filter(a => a.hn === c.hn || a.customerName === c.fullname);
+        const items = appointmentDB.filter(a => String(a.customer_id) === String(c.id));
         box.innerHTML = items.length ? `<div class="space-y-2">${items.map(x => `<div class="border border-pink-50 rounded-2xl p-4 bg-white flex justify-between items-center shadow-sm"><div><div class="font-bold text-slate-700 text-sm">${x.date} | ${x.time}</div><div class="text-[10px] text-slate-400 uppercase font-bold mt-1">รายการ: ${x.course || '-'}</div></div><span class="px-3 py-1 rounded-full text-[9px] font-bold bg-blue-50 text-blue-500 border border-blue-100">${x.status}</span></div>`).join("")}</div>` : `<div class="text-center py-10 text-slate-300 italic text-sm">ไม่มีประวัตินัดหมายค่ะ</div>`;
     }
 
     if (tab === "receipts") {
-        const accountDB = JSON.parse(localStorage.getItem("accountDB")) || [];
-        const items = accountDB.filter(x => x.hn === c.hn || x.customer === c.fullname);
-        box.innerHTML = items.length ? `<div class="space-y-2">${items.map((x, i) => `<div class="border border-pink-50 rounded-2xl p-4 bg-white flex items-center justify-between shadow-sm"><div><div class="font-bold text-slate-700 text-sm">วันที่ ${x.date} | ฿${parseFloat(String(x.total).replace(/[^0-9.-]+/g,"")).toLocaleString()}</div><div class="text-[10px] text-slate-400 font-bold uppercase mt-1">วิธีชำระ: ${x.payment}</div></div><button onclick="window.printReceipt('${x.id}', '${c.hn}', 'A5')" class="px-4 py-2 rounded-xl bg-[#D48197] text-white text-[10px] font-bold shadow-sm hover:bg-black transition-all">พิมพ์ใบเสร็จ</button></div>`).join("")}</div>` : `<div class="text-center py-10 text-slate-300 italic text-sm">ไม่มีประวัติใบเสร็จค่ะ</div>`;
-    }
+    const accountDB = JSON.parse(localStorage.getItem("accountDB")) || [];
+    const items = accountDB.filter(x => String(x.customer_id) === String(c.id));
+    box.innerHTML = items.length ? `<div class="space-y-2">${items.map((x, i) => `<div class="border border-pink-50 rounded-2xl p-4 bg-white flex items-center justify-between shadow-sm"><div><div class="font-bold text-slate-700 text-sm">วันที่ ${x.date} | ฿${parseFloat(String(x.total).replace(/[^0-9.-]+/g,"")).toLocaleString()}</div><div class="text-[10px] text-slate-400 font-bold uppercase mt-1">วิธีชำระ: ${x.payment}</div></div><button onclick="window.printReceipt('${x.id}', '${c.id}', 'A5')" class="px-4 py-2 rounded-xl bg-[#D48197] text-white text-[10px] font-bold shadow-sm hover:bg-black transition-all">พิมพ์ใบเสร็จ</button></div>`).join("")}</div>` : `<div class="text-center py-10 text-slate-300 italic text-sm">ไม่มีประวัติใบเสร็จค่ะ</div>`;
+}
 
     if (tab === "files") {
         const items = c.files || [];
@@ -3089,9 +3234,8 @@ window.renderProfileTab = function(tab, hn) {
         return;
     }
 
-    if (tab === "appointments" || tab === "appointment") {
-        const appointmentDB = JSON.parse(localStorage.getItem("appointmentDB")) || [];
-        const items = appointmentDB.filter(a => String(a.hn || '').trim() === String(c.hn).trim());
+   if (tab === "appointments" || tab === "appointment") {
+    const appointmentDB = JSON.parse(localStorage.getItem("appointmentDB")) || [];
 
         contentArea.innerHTML = items.length
             ? `<div class="space-y-3 p-4">
@@ -3453,17 +3597,17 @@ window.getNextCourseLabel = function(hn, courseName) {
 
     // หา total จาก customer
     const customerDB = window.getCustomers() || [];
-    const customer = customerDB.find(c => String(c.hn) === String(hn));
+const customer = customerDB.find(c => String(c.id) === String(customerId));
 
-    let total = 1;
-    if (customer && Array.isArray(customer.courses)) {
-        const found = customer.courses.find(c =>
-            window.normalizeCourseName(c.name) === normalizedName
-        );
-        if (found) {
-            total = parseInt(found.totalAmount || found.amount || 1) || 1;
-        }
+let total = 1;
+if (customer && Array.isArray(customer.courses)) {
+    const found = customer.courses.find(c =>
+        window.normalizeCourseName(c.name) === normalizedName
+    );
+    if (found) {
+        total = parseInt(found.totalAmount || found.amount || 1) || 1;
     }
+}
 
     const nextRound = usedCount + 1;
 
@@ -3688,9 +3832,9 @@ window.canWriteToBranch = function(targetBranch) {
     return branch === homeBranch;
 };
 
-window.getCustomerRemainingCourses = function(hn) {
+window.getCustomerRemainingCourses = function(customerId) {
     const customerDB = window.getCustomers() || [];
-    const customer = customerDB.find(c => c.hn === hn);
+    const customer = customerDB.find(c => String(c.id) === String(customerId));
     if (!customer || !Array.isArray(customer.courses)) return [];
 
     const courseMasterDB = JSON.parse(localStorage.getItem('courseMasterDB')) || [];
@@ -3721,11 +3865,11 @@ window.getCustomerRemainingCourses = function(hn) {
 };
 
 // 1. ฟังก์ชันหาป้ายชื่อคอร์สพร้อมตัวเลขครั้งที่ทำ (แสดงผลเป็น 3/10)
-window.getCustomerCourseDisplayLabel = function(hn, courseName) {
-    if (!hn || hn === "ทั่วไป" || hn === "Walk-in") return courseName;
+window.getCustomerCourseDisplayLabel = function(customerId, courseName) {
+    if (!customerId) return courseName;
 
     const customerDB = window.getCustomers() || [];
-    const customer = customerDB.find(c => String(c.hn || '') === String(hn || ''));
+    const customer = customerDB.find(c => String(c.id) === String(customerId));
     if (!customer || !Array.isArray(customer.courses)) return courseName;
 
     const found = customer.courses.find(c =>
@@ -3800,21 +3944,21 @@ window.searchCustomerForApp = function(val) {
     const db = window.getCustomers(); 
     
     const matches = db.filter(c => {
-        const k = val.toLowerCase();
-        return (c.fullname && c.fullname.toLowerCase().includes(k)) || 
-               (c.hn && c.hn.toLowerCase().includes(k)) ||
-               (c.phone && String(c.phone).includes(k));
-    });
+    const k = val.toLowerCase();
+    return (c.fullname && c.fullname.toLowerCase().includes(k)) ||
+           (c.id && String(c.id).toLowerCase().includes(k)) ||
+           (c.phone && String(c.phone).includes(k));
+});
 
     if (matches.length > 0) {
         resDiv.innerHTML = matches.map(c => `
-            <div onclick="window.selectCustForApp('${String(c.fullname || '').replace(/'/g, "\\'")}', '${String(c.hn || '').replace(/'/g, "\\'")}')"
+    <div onclick="window.selectCustForApp('${String(c.fullname || '').replace(/'/g, "\\'")}', '${String(c.id || '').replace(/'/g, "\\'")}')"
                  class="p-4 hover:bg-pink-50 cursor-pointer border-b border-pink-100 flex justify-between font-normal bg-white transition-colors">
                 <div class="text-left">
                     <span class="text-sm font-bold text-slate-700">${c.fullname || '-'}</span>
                     <p class="text-[9px] text-[#D48197] font-bold uppercase italic">📍 สาขาต้นสังกัด: ${c.branch || 'ไม่ระบุ'}</p>
                 </div>
-                <span class="text-[10px] bg-slate-100 px-3 py-1 rounded-full uppercase font-bold h-max">${c.hn || '-'}</span>
+                <span class="text-[10px] bg-slate-100 px-3 py-1 rounded-full uppercase font-bold h-max">${c.hn || c.id || '-'}</span>
             </div>
         `).join('');
         resDiv.classList.remove('hidden');
@@ -3825,11 +3969,14 @@ window.searchCustomerForApp = function(val) {
 };
 
 // 6. ฟังก์ชันเลือกลูกค้า (เชื่อม window)
-window.selectCustForApp = function(name, hn) {
+window.selectCustForApp = function(name, customerId) {
     const inp = document.getElementById('appCustSearch');
     if (!inp) return;
+
     inp.value = name;
-    inp.dataset.hn = hn;
+    inp.dataset.customerId = customerId;
+    delete inp.dataset.hn;
+
     document.getElementById('appCustResults')?.classList.add('hidden');
     window.selectedCoursesForApp = [];
     window.renderSelectedCourses();
@@ -3838,11 +3985,16 @@ window.selectCustForApp = function(name, hn) {
 // 7. ฟังก์ชันค้นหาคอร์ส (เชื่อม window)
 window.searchCourseForApp = function() {
     const resDiv = document.getElementById('appCourseResults');
-    const hn = document.getElementById('appCustSearch')?.dataset?.hn;
-    if (!resDiv) return;
-    if (!hn) { alert("⚠️ กรุณาเลือกชื่อลูกค้าก่อนค่ะ"); return; }
+    const customerId = document.getElementById('appCustSearch')?.dataset?.customerId;
 
-    const courses = window.getCustomerRemainingCourses(hn);
+    if (!resDiv) return;
+    if (!customerId) {
+        alert("⚠️ กรุณาเลือกลูกค้าก่อนค่ะ");
+        return;
+    }
+
+    const courses = window.getCustomerRemainingCourses(customerId);
+
     if (courses.length > 0) {
         resDiv.innerHTML = courses.map(c => {
             const isSelected = window.selectedCoursesForApp.includes(c.name);
@@ -3858,7 +4010,7 @@ window.searchCourseForApp = function() {
         }).join('');
         resDiv.classList.remove('hidden');
     } else {
-        resDiv.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs font-normal">ไม่มีคอร์สคงเหลือ</div>`;
+        resDiv.innerHTML = '<div class="p-4 text-center text-slate-300 text-xs font-normal">ไม่มีคอร์สคงเหลือ</div>';
         resDiv.classList.remove('hidden');
     }
 };
@@ -3963,8 +4115,8 @@ const formatDateTH = (dateStr) => {
         const matchBranch = (viewingBranch === 'ทุกสาขา' && isAdmin) || (apBranch === viewingBranch);
         
         const matchSearch =
-            String(ap.customerName || '').toLowerCase().includes(currentSearch.toLowerCase()) ||
-            String(ap.hn || '').toLowerCase().includes(currentSearch.toLowerCase());
+    String(ap.customerName || '').toLowerCase().includes(currentSearch.toLowerCase()) ||
+    String(ap.customer_id || '').toLowerCase().includes(currentSearch.toLowerCase());
 
         const matchStatus = statusFilter === "ทั้งหมด" || ap.status === statusFilter;
         const matchDate = !dateFilter || ap.date === dateFilter;
@@ -4068,19 +4220,18 @@ const formatDateTH = (dateStr) => {
                     </tr>
                 </thead>
                 <tbody id="appointmentTableBody" class="text-slate-500 font-extralight">
-                    ${paginatedData.length > 0 ? paginatedData.map((ap, i) => {
-                        const realId = ap.createdAt;
-                        const customers = window.getCustomers() || [];
-                        const customerInfo = customers.find(c => c.hn === ap.hn) || customers.find(c => c.fullname === ap.customerName);
-                        
-                        const safeHN = customerInfo ? (customerInfo.hn || '-') : (ap.hn && ap.hn !== 'ทั่วไป' ? ap.hn : '-');
-                        const safeNickname = customerInfo ? (customerInfo.nickname || ap.nickname || '-') : (ap.nickname || '-');
-                        const sellerName = customerInfo ? (customerInfo.sellerName || customerInfo.seller || '-') : '-';
+    ${paginatedData.length > 0 ? paginatedData.map((ap, i) => {
+        const realId = ap.id;
+        const customers = window.getCustomers() || [];
+        const customerInfo = customers.find(c => String(c.id) === String(ap.customer_id));
+        const safeHN = customerInfo?.hn || '-';
+        const safeNickname = customerInfo?.nickname || ap.nickname || '-';
+        const sellerName = customerInfo?.sellerName || customerInfo?.seller || '-';
 
-                       const rawCourseNames = String(ap.course || '-')
-    .split(',')
-    .map(x => x.trim())
-    .filter(Boolean);
+        const rawCourseNames = String(ap.course || '-')
+            .split(',')
+            .map(x => x.trim())
+            .filter(Boolean);
 
 const savedLabels = Array.isArray(ap.courseLabels) ? ap.courseLabels : [];
 
@@ -4412,9 +4563,10 @@ const courseLabels = courseNames.map(name =>
 );
 
 const newApp = {
-    hn: hnValue,
-    customerName: name,
-    name: name,
+    id: crypto.randomUUID(),
+    customer_id: selectedCustomer.id,
+    customer_name: selectedCustomer.fullname,
+    hn: selectedCustomer.hn,
     date: selectedDate,
     time: document.getElementById('appHour').value + ":" + document.getElementById('appMin').value,
     doctor: document.getElementById('appDoc').value || "-",
@@ -4586,7 +4738,7 @@ window.printAppointmentCardById = function(appId) {
                 <div class="card">
                     <div class="header">ACE CLINIC</div>
                     <div class="info-row"><span class="label">ชื่อลูกค้า / CUSTOMER</span><b>${ap.customerName || '-'}</b></div>
-                    <div class="info-row"><span class="label">รหัส / HN</span><b>${ap.hn || '-'}</b></div>
+                    <div class="info-row"><span class="label">รหัส / HN</span><b>${cInfo?.hn || '-'}</b></div>
                     <div class="info-row"><span class="label">วันเวลานัด / DATE & TIME</span><b>${formattedDate} @ ${ap.time || '-'} น.</b></div>
                     <div class="info-row"><span class="label">รายการ / TREATMENT</span><b>${ap.course || '-'}</b></div>
                     <div class="footer">กรุณามาก่อนเวลานัด 10 นาที ขอบคุณค่ะ ❤️</div>
@@ -4686,9 +4838,8 @@ window.printDailyReport = function() {
                         <tbody>
                             ${dailyList.map((ap, i) => {
                                 const customers = window.getCustomers() || [];
-                                const cInfo = customers.find(c => c.hn === ap.hn) || customers.find(c => c.fullname === ap.customerName);
-                                const safeHN = cInfo ? (cInfo.hn || '-') : (ap.hn && ap.hn !== 'ทั่วไป' ? ap.hn : '-');
-                                const phone = cInfo ? (cInfo.phone || ap.phone || '-') : (ap.phone || '-');
+                                const cInfo = customers.find(c => c.id === ap.customer_id);
+                                const safeHN = cInfo?.hn || '-';                                const phone = cInfo ? (cInfo.phone || ap.phone || '-') : (ap.phone || '-');
                                 const nickname = cInfo ? (cInfo.nickname || ap.nickname || '-') : (ap.nickname || '-');
                                 
                                 // 🎯 ส่วนที่แก้ไข: ดึงชื่อคอร์สพร้อมครั้งที่ (เช่น 2/12)
@@ -5492,12 +5643,12 @@ if (custIdx !== -1) {
     selectedCourses.forEach(selected => {
         let courseIdx = -1;
 
-        // ✅ หาโดย courseId ก่อน
-        if (selected.courseId) {
-            courseIdx = customers[custIdx].courses.findIndex(c =>
-                String(c.courseId || c.id || '').trim() === selected.courseId
-            );
-        }
+       // ✅ หาโดย course_id
+if (selected.course_id) {
+    courseIdx = customers[custIdx].courses.findIndex(c =>
+        String(c.id) === String(selected.course_id)
+    );
+}
 
         // ✅ fallback: ถ้าไม่มี courseId ค่อยหาโดยชื่อคอร์ส
         if (courseIdx === -1) {
@@ -6927,8 +7078,8 @@ window.openNewExpenseModal = function() {
     });
 };
 
-// 3. ฟังก์ชัน Save (บันทึกและสั่งโหลดหน้าซ้ำ) — ล็อกสาขาตามผู้บันทึก
-window.saveExpense = function(data) {
+// 3. ฟังก์ชัน Save (บันทึกและสั่งโหลดหน้าซ้ำ) — เวอร์ชันปลอดภัย ไม่พังระบบเดิม
+window.saveExpense = async function(data) {
     let accountDB = [];
     try {
         accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
@@ -6947,22 +7098,51 @@ window.saveExpense = function(data) {
     const amountNumber = Number(data.amount || 0);
 
     const newEntry = {
-        id: "EXP" + Date.now(),
-        date: data.date,
-        detail: data.detail,
-        category: data.category,
+        id: "EXP-" + Date.now(),
+        date: data.date || new Date().toISOString().split('T')[0],
+        detail: data.detail || "",
+        category: data.category || "ทั่วไป",
         amount: amountNumber,
         total: amountNumber,
-        account: data.account,
+        account: data.account || "เงินสด",
         type: "รายจ่าย",
         status: "เสร็จสิ้น",
         branch: staffBranch,
         createdBy: user.name || user.fullName || '-',
-        timestamp: new Date().getTime()
+        timestamp: Date.now()
     };
 
+    // ✅ บันทึก localStorage ก่อน เพื่อให้ระบบเดิมยังใช้ได้
     accountDB.push(newEntry);
     localStorage.setItem('accountDB', JSON.stringify(accountDB));
+
+    // ✅ ถ้ามี Supabase ค่อย sync ขึ้นไป
+    try {
+        if (window.supabaseClient) {
+            const { error } = await window.supabaseClient
+                .from('account')
+                .insert([{
+                    id: newEntry.id,
+                    date: newEntry.date,
+                    detail: newEntry.detail,
+                    category: newEntry.category,
+                    amount: newEntry.amount,
+                    total: newEntry.total,
+                    account: newEntry.account,
+                    type: newEntry.type,
+                    status: newEntry.status,
+                    branch: newEntry.branch,
+                    createdBy: newEntry.createdBy,
+                    timestamp: newEntry.timestamp
+                }]);
+
+            if (error) {
+                console.error('saveExpense supabase error:', error);
+            }
+        }
+    } catch (e) {
+        console.error('saveExpense supabase catch:', e);
+    }
 
     Swal.fire({
         icon: 'success',
@@ -6972,7 +7152,9 @@ window.saveExpense = function(data) {
         timer: 1500
     });
 
-    window.renderExpensePage();
+    if (typeof window.renderExpensePage === 'function') {
+        window.renderExpensePage();
+    }
 };
 
 // 4. ฟังก์ชันลบ — กันลบข้ามสาขา
@@ -7188,14 +7370,13 @@ window.updateCourseMasterTable = function() {
     }
 
     const filteredData = masterDB.filter(c => {
-        const matchSearch =
-            String(c.name || "").toLowerCase().includes(searchTerm) ||
-            String(c.id || "").toLowerCase().includes(searchTerm);
+    const matchSearch =
+        String(c.name || "").toLowerCase().includes(searchTerm) ||
+        String(c.id || "").toLowerCase().includes(searchTerm);
 
-        const matchCat = (catFilter === "ทั้งหมด") || (c.category === catFilter);
-        return matchSearch && matchCat;
-    });
-
+    const matchCat = (catFilter === "ทั้งหมด") || (c.category === catFilter);
+    return matchSearch && matchCat;
+});
     const totalPages = Math.ceil(filteredData.length / pageSize) || 1;
     if (window.currentCoursePage > totalPages) window.currentCoursePage = totalPages;
     if (window.currentCoursePage < 1) window.currentCoursePage = 1;
@@ -9997,9 +10178,6 @@ window.getCurrentUserSafe = function() {
     return JSON.parse(localStorage.getItem('currentUser')) || {};
 };
 
-window.normalizeBranch = function(branch = '') {
-    return String(branch).replace(/^สาขา/, '').trim();
-};
 
 window.getCurrentViewingBranch = function() {
     const currentUser = window.getCurrentUserSafe();

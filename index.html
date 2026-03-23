@@ -658,7 +658,7 @@ window.filterByBranch = function(list = [], getBranchFn = null) {
 };
 
 /* -------------------- SUPABASE: CUSTOMERS -------------------- */
-// ดึงลูกค้าจาก Supabase
+// ดึงลูกค้าจาก Supabase ตามสาขาที่กำลังดู
 window.getCustomersFromSupabase = async function() {
     try {
         if (!window.supabaseClient) {
@@ -676,7 +676,7 @@ window.getCustomersFromSupabase = async function() {
             return [];
         }
 
-        return Array.isArray(data) ? data : [];
+        return data || [];
     } catch (e) {
         console.error('getCustomersFromSupabase error:', e);
         return [];
@@ -686,30 +686,23 @@ window.getCustomersFromSupabase = async function() {
 // เพิ่มลูกค้าลง Supabase
 window.saveCustomerToSupabase = async function(payload = {}) {
     try {
-        if (!window.supabaseClient) {
-            console.error('ยังไม่พบ supabaseClient');
-            alert('ยังไม่สามารถเชื่อมต่อฐานข้อมูลได้');
-            return null;
-        }
-
         const safePayload = {
-            id: payload.id || crypto.randomUUID(),
             hn: payload.hn || null,
             first_name: payload.first_name || '',
             last_name: payload.last_name || '',
             fullname: payload.fullname || `${payload.first_name || ''} ${payload.last_name || ''}`.trim(),
             nickname: payload.nickname || '',
             phone: payload.phone || '',
-            email: payload.email || '',
             line_id: payload.line_id || '',
             birth_date: payload.birth_date || null,
-            address: payload.address || '',
-            allergy: payload.allergy || '',
-            branch: payload.branch || 'สาขาบางพลี',
-            status: payload.status || 'ปกติ',
-            photo: payload.photo || '',
-            avatar_url: payload.avatar_url || payload.photo || '',
-            created_at: payload.created_at || new Date().toISOString()
+            gender: payload.gender || '',
+            note: payload.note || '',
+            branch: window.normalizeBranch(
+                payload.branch ||
+                window.currentBranch ||
+                window.currentUser?.branch ||
+                'สาขาบางพลี'
+            )
         };
 
         const { data, error } = await window.supabaseClient
@@ -724,7 +717,7 @@ window.saveCustomerToSupabase = async function(payload = {}) {
             return null;
         }
 
-        return data || null;
+        return data;
     } catch (e) {
         console.error('saveCustomerToSupabase exception:', e);
         alert('บันทึกลูกค้าไม่สำเร็จ');
@@ -734,7 +727,7 @@ window.saveCustomerToSupabase = async function(payload = {}) {
 
 /* -------------------- DATA HELPERS -------------------- */
 // ตอนนี้ยังคงอ่าน customer จาก localStorage ก่อน เพื่อไม่ให้ทั้งระบบพัง
-// แต่มี helper ฝั่ง Supabase เพิ่มไว้แล้วด้านบน
+// แต่เริ่มมี helper ฝั่ง Supabase เพิ่มไว้แล้วด้านบน
 window.getCustomerByHN = function(hn) {
     const db = window.getCustomers();
     if (!Array.isArray(db)) return null;
@@ -743,29 +736,28 @@ window.getCustomerByHN = function(hn) {
 
 window.getStaffByID = function(id) {
     const db = window.getStaff();
-    return db.find(s => String(s.staffId) === String(id)) || null;
+    return db.find(s => String(s.staffId) === String(id));
 };
 
 window.getReceiptByID = function(id) {
     const db = window.getBills();
-    return db.find(r => String(r.id) === String(id)) || null;
+    return db.find(r => String(r.id) === String(id));
 };
 
 window.getAppointmentByID = function(id) {
     const db = window.getAppointments();
-    return db.find(a => String(a.createdAt) === String(id) || String(a.appointmentId) === String(id)) || null;
+    return db.find(a => String(a.createdAt) === String(id) || String(a.appointmentId) === String(id));
 };
 
 window.getQueueByID = function(id) {
     const db = window.getQueue();
-    return db.find(q => String(q.queueId) === String(id)) || null;
+    return db.find(q => String(q.queueId) === String(id));
 };
 
 /* -------------------- DATA LAYER -------------------- */
 // หมายเหตุ:
 // ตอนนี้ยังเก็บ localStorage layer เดิมไว้ก่อน เพื่อให้โมดูลอื่นยังทำงานต่อได้
 // เราจะค่อย ๆ ย้าย customer module ไปใช้ Supabase ทีละจุด
-
 window.getCustomers = function() {
     try {
         return JSON.parse(localStorage.getItem('customerDB')) || [];
@@ -825,6 +817,7 @@ window.getStaff = function() {
 window.saveStaff = function(data = []) {
     localStorage.setItem('staffDB', JSON.stringify(data));
 };
+
 // 1.2 menu config
 const menuConfig = [
     { id: '1', n: 'Dashboard ภาพรวม', i: '📊', roles: ['admin', 'accounting'] },
@@ -8684,10 +8677,10 @@ window.showStaffModal = function(mode, idx = null) {
     document.body.appendChild(modal);
 };
 
-window.saveStaffComplete = async function(idx, mode) {
+window.saveStaffComplete = function(idx, mode) {
     const name = document.getElementById('newName')?.value;
     const phone = document.getElementById('newPhone')?.value;
-    const status = document.getElementById('newStatus')?.value;
+    const status = document.getElementById('newStatus')?.value; // ดึงค่าสถานะ ลาออก/ทำงาน
 
     if (!name || !phone) return alert("กรุณากรอกชื่อและเบอร์โทรศัพท์ด้วยค่ะ");
 
@@ -8696,103 +8689,54 @@ window.saveStaffComplete = async function(idx, mode) {
     const imgData = imgElement ? imgElement.src : '';
 
     const data = {
-        name: name,
-        fullname: name,
-        nickname: document.getElementById('newNickname')?.value || '',
-        role: document.getElementById('newRole')?.value || '',
-        branch: document.getElementById('newBranch')?.value || 'บางพลี',
-        status: status || 'ทำงาน',
-        bankName: document.getElementById('newBank')?.value || '',
-        bankAcc: document.getElementById('newAcc')?.value || '',
-        phone: phone,
-        startDate: document.getElementById('newStart')?.value || '',
-        address: document.getElementById('newAddress')?.value || '',
-        salary: parseFloat(document.getElementById('newSalary')?.value || 0),
+        name: name, 
+        nickname: document.getElementById('newNickname').value,
+        role: document.getElementById('newRole').value, 
+        branch: document.getElementById('newBranch').value || 'บางพลี', 
+        status: status, // เก็บสถานะลาออก
+        bankName: document.getElementById('newBank').value, 
+        bankAcc: document.getElementById('newAcc').value, 
+        phone: phone, 
+        startDate: document.getElementById('newStart').value,
+        address: document.getElementById('newAddress').value, 
+        salary: parseFloat(document.getElementById('newSalary').value || 0),
         img: imgData.startsWith('data:') ? imgData : (mode === 'edit' && staffDB[idx] ? staffDB[idx].img : ''),
         updatedAt: new Date().toLocaleDateString('th-TH')
     };
 
+    // 🎯 จุดสำคัญ: ระบบตรวจสอบการระงับสิทธิ์อัตโนมัติ
     if (status === 'ออก') {
-        data.isLocked = true;
+        data.isLocked = true; // ถ้าเลือกสถานะลาออก ให้ระงับสิทธิ์การล็อกอินทันที
     } else {
+        // ถ้าเป็นโหมดแก้ไข และคนเดิมเคยถูกปลดล็อกไว้ ก็ให้คงค่าเดิม หรือถ้าเป็นพนักงานใหม่ก็ให้ใช้งานได้
         data.isLocked = (mode === 'edit' && staffDB[idx]) ? (staffDB[idx].isLocked || false) : false;
     }
 
-    if (mode === 'edit' && idx !== null && staffDB[idx]) {
-        data.staffId = staffDB[idx].staffId;
-        data.id = staffDB[idx].id || crypto.randomUUID();
-        staffDB[idx] = { ...staffDB[idx], ...data };
+    if (mode === 'edit' && idx !== null) {
+        // รักษา ID เดิมไว้
+        data.staffId = staffDB[idx].staffId; 
+        staffDB[idx] = data;
     } else {
         const branchCode = data.branch === 'บางพลี' ? 'P' : (data.branch === 'ชลบุรี' ? 'S' : 'O');
         const thaiYear = (new Date().getFullYear() + 543).toString().slice(-2);
         data.staffId = branchCode + thaiYear + String(staffDB.length + 1).padStart(4, '0');
-        data.id = crypto.randomUUID();
         staffDB.push(data);
     }
 
-    // ✅ บันทึก localStorage ก่อน เพื่อไม่ให้ระบบเดิมพัง
     localStorage.setItem('staffDB', JSON.stringify(staffDB));
-
-    // ✅ ค่อย sync ขึ้น Supabase ถ้ามี client และมี table staff
-    try {
-        if (window.supabaseClient) {
-            const safePayload = {
-                id: data.id,
-                staff_id: data.staffId,
-                name: data.name || '',
-                fullname: data.fullname || data.name || '',
-                nickname: data.nickname || '',
-                role: data.role || '',
-                branch: data.branch || 'บางพลี',
-                status: data.status || 'ทำงาน',
-                bank_name: data.bankName || '',
-                bank_acc: data.bankAcc || '',
-                phone: data.phone || '',
-                start_date: data.startDate || null,
-                address: data.address || '',
-                salary: Number(data.salary || 0),
-                img: data.img || '',
-                is_locked: !!data.isLocked,
-                updated_at: new Date().toISOString()
-            };
-
-            if (mode === 'edit' && idx !== null) {
-                const { error } = await window.supabaseClient
-                    .from('staff')
-                    .update(safePayload)
-                    .eq('id', data.id);
-
-                if (error) {
-                    console.error('update staff supabase error:', error);
-                }
-            } else {
-                const { error } = await window.supabaseClient
-                    .from('staff')
-                    .insert([safePayload]);
-
-                if (error) {
-                    console.error('insert staff supabase error:', error);
-                }
-            }
-        }
-    } catch (e) {
-        console.error('saveStaffComplete supabase catch:', e);
-    }
-
-    document.getElementById('staffModalContainer')?.remove();
-
+    document.getElementById('staffModalContainer').remove();
+    
     Swal.fire({
         icon: 'success',
         title: 'บันทึกเรียบร้อย',
-        text: status === 'ออก'
-            ? 'ย้ายข้อมูลไปแฟ้มพนักงานลาออก และระงับสิทธิ์เข้าใช้งานแล้วค่ะ'
-            : 'อัปเดตข้อมูลพนักงานสำเร็จค่ะ',
+        text: status === 'ออก' ? 'ย้ายข้อมูลไปแฟ้มพนักงานลาออก และระงับสิทธิ์เข้าใช้งานแล้วค่ะ' : 'อัปเดตข้อมูลพนักงานสำเร็จค่ะ',
         timer: 2000,
         showConfirmButton: false
     });
 
-    if (typeof renderStaffProfileList === 'function') renderStaffProfileList();
+    if(typeof renderStaffProfileList === 'function') renderStaffProfileList();
 };
+
 /* --- 3. ฟังก์ชันดูประวัติ (ล็อกสิทธิ์ให้เห็นเฉพาะข้อมูลตัวเองถ้าเป็นพนักงาน) --- */
 window.viewStaffDetail = function(idx) {
     const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
@@ -11393,6 +11337,70 @@ window.saveCustomerToSupabase = async function() {
 
   window.closeModal();
   location.reload();
+};
+window.saveCustomerWithAlert = async function() {
+    const firstName = document.getElementById("modalFirstName")?.value?.trim();
+    const lastName = document.getElementById("modalLastName")?.value?.trim();
+    const phone = document.getElementById("modalPhone")?.value?.trim();
+
+    if (!firstName || !phone) {
+        return Swal.fire({
+            icon: 'warning',
+            title: 'กรอกข้อมูลไม่ครบ',
+            text: 'กรุณากรอกชื่อและเบอร์โทรศัพท์'
+        });
+    }
+
+    const data = {
+        id: crypto.randomUUID(),
+        hn: document.getElementById("modalHN")?.value || null,
+        first_name: firstName,
+        last_name: lastName,
+        fullname: `${firstName} ${lastName}`.trim(),
+        nickname: document.getElementById("modalNickname")?.value || "",
+        phone: phone,
+        email: document.getElementById("modalEmail")?.value || "",
+        line_id: document.getElementById("modalLine")?.value || "",
+        birth_date: document.getElementById("modalBirthDate")?.value || null,
+        address: document.getElementById("modalAddress")?.value || "",
+        allergy: document.getElementById("modalAllergy")?.value || "ไม่มี",
+        branch: document.getElementById("modalBranch")?.value || "สาขาบางพลี",
+        status: document.getElementById("modalStatus")?.value || "ปกติ",
+        photo: window.currentPhotoData || "",
+        created_at: new Date().toISOString()
+    };
+
+    try {
+        const { error } = await window.supabaseClient
+            .from('customers')
+            .insert([data]);
+
+        if (error) {
+            console.error(error);
+            return Swal.fire({
+                icon: 'error',
+                title: 'บันทึกไม่สำเร็จ',
+                text: error.message
+            });
+        }
+
+        Swal.fire({
+            icon: 'success',
+            title: 'บันทึกสำเร็จ',
+            timer: 1200,
+            showConfirmButton: false
+        });
+
+        closeModal();
+
+    } catch (e) {
+        console.error(e);
+        Swal.fire({
+            icon: 'error',
+            title: 'ระบบผิดพลาด',
+            text: 'เชื่อมต่อ Supabase ไม่ได้'
+        });
+    }
 };
 
 </script>

@@ -658,7 +658,7 @@ window.filterByBranch = function(list = [], getBranchFn = null) {
 };
 
 /* -------------------- SUPABASE: CUSTOMERS -------------------- */
-// ดึงลูกค้าจาก Supabase ตามสาขาที่กำลังดู
+// ดึงลูกค้าจาก Supabase
 window.getCustomersFromSupabase = async function() {
     try {
         if (!window.supabaseClient) {
@@ -676,7 +676,7 @@ window.getCustomersFromSupabase = async function() {
             return [];
         }
 
-        return data || [];
+        return Array.isArray(data) ? data : [];
     } catch (e) {
         console.error('getCustomersFromSupabase error:', e);
         return [];
@@ -686,23 +686,30 @@ window.getCustomersFromSupabase = async function() {
 // เพิ่มลูกค้าลง Supabase
 window.saveCustomerToSupabase = async function(payload = {}) {
     try {
+        if (!window.supabaseClient) {
+            console.error('ยังไม่พบ supabaseClient');
+            alert('ยังไม่สามารถเชื่อมต่อฐานข้อมูลได้');
+            return null;
+        }
+
         const safePayload = {
+            id: payload.id || crypto.randomUUID(),
             hn: payload.hn || null,
             first_name: payload.first_name || '',
             last_name: payload.last_name || '',
             fullname: payload.fullname || `${payload.first_name || ''} ${payload.last_name || ''}`.trim(),
             nickname: payload.nickname || '',
             phone: payload.phone || '',
+            email: payload.email || '',
             line_id: payload.line_id || '',
             birth_date: payload.birth_date || null,
-            gender: payload.gender || '',
-            note: payload.note || '',
-            branch: window.normalizeBranch(
-                payload.branch ||
-                window.currentBranch ||
-                window.currentUser?.branch ||
-                'สาขาบางพลี'
-            )
+            address: payload.address || '',
+            allergy: payload.allergy || '',
+            branch: payload.branch || 'สาขาบางพลี',
+            status: payload.status || 'ปกติ',
+            photo: payload.photo || '',
+            avatar_url: payload.avatar_url || payload.photo || '',
+            created_at: payload.created_at || new Date().toISOString()
         };
 
         const { data, error } = await window.supabaseClient
@@ -717,7 +724,7 @@ window.saveCustomerToSupabase = async function(payload = {}) {
             return null;
         }
 
-        return data;
+        return data || null;
     } catch (e) {
         console.error('saveCustomerToSupabase exception:', e);
         alert('บันทึกลูกค้าไม่สำเร็จ');
@@ -727,7 +734,7 @@ window.saveCustomerToSupabase = async function(payload = {}) {
 
 /* -------------------- DATA HELPERS -------------------- */
 // ตอนนี้ยังคงอ่าน customer จาก localStorage ก่อน เพื่อไม่ให้ทั้งระบบพัง
-// แต่เริ่มมี helper ฝั่ง Supabase เพิ่มไว้แล้วด้านบน
+// แต่มี helper ฝั่ง Supabase เพิ่มไว้แล้วด้านบน
 window.getCustomerByHN = function(hn) {
     const db = window.getCustomers();
     if (!Array.isArray(db)) return null;
@@ -736,28 +743,29 @@ window.getCustomerByHN = function(hn) {
 
 window.getStaffByID = function(id) {
     const db = window.getStaff();
-    return db.find(s => String(s.staffId) === String(id));
+    return db.find(s => String(s.staffId) === String(id)) || null;
 };
 
 window.getReceiptByID = function(id) {
     const db = window.getBills();
-    return db.find(r => String(r.id) === String(id));
+    return db.find(r => String(r.id) === String(id)) || null;
 };
 
 window.getAppointmentByID = function(id) {
     const db = window.getAppointments();
-    return db.find(a => String(a.createdAt) === String(id) || String(a.appointmentId) === String(id));
+    return db.find(a => String(a.createdAt) === String(id) || String(a.appointmentId) === String(id)) || null;
 };
 
 window.getQueueByID = function(id) {
     const db = window.getQueue();
-    return db.find(q => String(q.queueId) === String(id));
+    return db.find(q => String(q.queueId) === String(id)) || null;
 };
 
 /* -------------------- DATA LAYER -------------------- */
 // หมายเหตุ:
 // ตอนนี้ยังเก็บ localStorage layer เดิมไว้ก่อน เพื่อให้โมดูลอื่นยังทำงานต่อได้
 // เราจะค่อย ๆ ย้าย customer module ไปใช้ Supabase ทีละจุด
+
 window.getCustomers = function() {
     try {
         return JSON.parse(localStorage.getItem('customerDB')) || [];
@@ -817,7 +825,6 @@ window.getStaff = function() {
 window.saveStaff = function(data = []) {
     localStorage.setItem('staffDB', JSON.stringify(data));
 };
-
 // 1.2 menu config
 const menuConfig = [
     { id: '1', n: 'Dashboard ภาพรวม', i: '📊', roles: ['admin', 'accounting'] },

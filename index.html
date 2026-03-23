@@ -2058,30 +2058,83 @@ window.initStaffAutocomplete = function() {
 };
 
 window.saveCustomerWithAlert = async function() {
-  const fName = document.getElementById("modalFirstName").value.trim();
-  if (!fName) {
-    Swal.fire({
-      icon: 'error',
-      title: 'ข้อมูลไม่ครบ',
-      text: 'กรุณากรอกชื่อจริงอย่างน้อยหนึ่งชื่อนะคะ',
-      confirmButtonColor: '#D48197'
-    });
-    return;
-  }
+    try {
+        const firstName = document.getElementById("modalFirstName")?.value?.trim();
+        const lastName = document.getElementById("modalLastName")?.value?.trim();
+        const phone = document.getElementById("modalPhone")?.value?.trim();
 
-  if (typeof window.saveCustomer === 'function') {
-    const ok = await window.saveCustomer();
+        if (!firstName || !phone) {
+            return Swal.fire({
+                icon: 'warning',
+                title: 'กรอกข้อมูลไม่ครบ',
+                text: 'กรุณากรอกชื่อและเบอร์โทรศัพท์'
+            });
+        }
 
-    if (!ok) return;
-  }
+        // ✅ เช็ค supabase ก่อน
+        if (!window.supabaseClient) {
+            console.error("❌ supabaseClient ยังไม่พร้อม");
+            return Swal.fire({
+                icon: 'error',
+                title: 'ระบบยังไม่พร้อม',
+                text: 'Supabase ยังไม่เชื่อมต่อ'
+            });
+        }
 
-  Swal.fire({
-    icon: 'success',
-    title: 'บันทึกสำเร็จ!',
-    text: 'ข้อมูลลูกค้าถูกเก็บเข้าฐานข้อมูลเรียบร้อยแล้วค่ะ',
-    timer: 1500,
-    showConfirmButton: false
-  });
+        const data = {
+            id: crypto.randomUUID(),
+            hn: document.getElementById("modalHN")?.value || null,
+            first_name: firstName,
+            last_name: lastName,
+            fullname: `${firstName} ${lastName}`.trim(),
+            nickname: document.getElementById("modalNickname")?.value || "",
+            phone: phone,
+            email: document.getElementById("modalEmail")?.value || "",
+            line_id: document.getElementById("modalLine")?.value || "",
+            birth_date: document.getElementById("modalBirthDate")?.value || null,
+            address: document.getElementById("modalAddress")?.value || "",
+            allergy: document.getElementById("modalAllergy")?.value || "ไม่มี",
+            branch: document.getElementById("modalBranch")?.value || "สาขาบางพลี",
+            status: document.getElementById("modalStatus")?.value || "ปกติ",
+            photo: window.currentPhotoData || "",
+            created_at: new Date().toISOString()
+        };
+
+        const { error } = await window.supabaseClient
+            .from('customers')
+            .insert([data]);
+
+        if (error) {
+            console.error("❌ Supabase error:", error);
+            return Swal.fire({
+                icon: 'error',
+                title: 'บันทึกไม่สำเร็จ',
+                text: error.message
+            });
+        }
+
+        Swal.fire({
+            icon: 'success',
+            title: 'บันทึกสำเร็จ',
+            timer: 1200,
+            showConfirmButton: false
+        });
+
+        // ✅ ปิด modal แบบ safe
+        if (typeof closeModal === 'function') {
+            closeModal();
+        } else {
+            document.querySelector('.modal')?.remove();
+        }
+
+    } catch (e) {
+        console.error("🔥 ERROR:", e);
+        Swal.fire({
+            icon: 'error',
+            title: 'ระบบผิดพลาด',
+            text: 'ดู console เพิ่มเติม'
+        });
+    }
 };
 
 window.saveCustomer = async function () {

@@ -8684,10 +8684,10 @@ window.showStaffModal = function(mode, idx = null) {
     document.body.appendChild(modal);
 };
 
-window.saveStaffComplete = function(idx, mode) {
+window.saveStaffComplete = async function(idx, mode) {
     const name = document.getElementById('newName')?.value;
     const phone = document.getElementById('newPhone')?.value;
-    const status = document.getElementById('newStatus')?.value; // ดึงค่าสถานะ ลาออก/ทำงาน
+    const status = document.getElementById('newStatus')?.value;
 
     if (!name || !phone) return alert("กรุณากรอกชื่อและเบอร์โทรศัพท์ด้วยค่ะ");
 
@@ -8696,54 +8696,103 @@ window.saveStaffComplete = function(idx, mode) {
     const imgData = imgElement ? imgElement.src : '';
 
     const data = {
-        name: name, 
-        nickname: document.getElementById('newNickname').value,
-        role: document.getElementById('newRole').value, 
-        branch: document.getElementById('newBranch').value || 'บางพลี', 
-        status: status, // เก็บสถานะลาออก
-        bankName: document.getElementById('newBank').value, 
-        bankAcc: document.getElementById('newAcc').value, 
-        phone: phone, 
-        startDate: document.getElementById('newStart').value,
-        address: document.getElementById('newAddress').value, 
-        salary: parseFloat(document.getElementById('newSalary').value || 0),
+        name: name,
+        fullname: name,
+        nickname: document.getElementById('newNickname')?.value || '',
+        role: document.getElementById('newRole')?.value || '',
+        branch: document.getElementById('newBranch')?.value || 'บางพลี',
+        status: status || 'ทำงาน',
+        bankName: document.getElementById('newBank')?.value || '',
+        bankAcc: document.getElementById('newAcc')?.value || '',
+        phone: phone,
+        startDate: document.getElementById('newStart')?.value || '',
+        address: document.getElementById('newAddress')?.value || '',
+        salary: parseFloat(document.getElementById('newSalary')?.value || 0),
         img: imgData.startsWith('data:') ? imgData : (mode === 'edit' && staffDB[idx] ? staffDB[idx].img : ''),
         updatedAt: new Date().toLocaleDateString('th-TH')
     };
 
-    // 🎯 จุดสำคัญ: ระบบตรวจสอบการระงับสิทธิ์อัตโนมัติ
     if (status === 'ออก') {
-        data.isLocked = true; // ถ้าเลือกสถานะลาออก ให้ระงับสิทธิ์การล็อกอินทันที
+        data.isLocked = true;
     } else {
-        // ถ้าเป็นโหมดแก้ไข และคนเดิมเคยถูกปลดล็อกไว้ ก็ให้คงค่าเดิม หรือถ้าเป็นพนักงานใหม่ก็ให้ใช้งานได้
         data.isLocked = (mode === 'edit' && staffDB[idx]) ? (staffDB[idx].isLocked || false) : false;
     }
 
-    if (mode === 'edit' && idx !== null) {
-        // รักษา ID เดิมไว้
-        data.staffId = staffDB[idx].staffId; 
-        staffDB[idx] = data;
+    if (mode === 'edit' && idx !== null && staffDB[idx]) {
+        data.staffId = staffDB[idx].staffId;
+        data.id = staffDB[idx].id || crypto.randomUUID();
+        staffDB[idx] = { ...staffDB[idx], ...data };
     } else {
         const branchCode = data.branch === 'บางพลี' ? 'P' : (data.branch === 'ชลบุรี' ? 'S' : 'O');
         const thaiYear = (new Date().getFullYear() + 543).toString().slice(-2);
         data.staffId = branchCode + thaiYear + String(staffDB.length + 1).padStart(4, '0');
+        data.id = crypto.randomUUID();
         staffDB.push(data);
     }
 
+    // ✅ บันทึก localStorage ก่อน เพื่อไม่ให้ระบบเดิมพัง
     localStorage.setItem('staffDB', JSON.stringify(staffDB));
-    document.getElementById('staffModalContainer').remove();
-    
+
+    // ✅ ค่อย sync ขึ้น Supabase ถ้ามี client และมี table staff
+    try {
+        if (window.supabaseClient) {
+            const safePayload = {
+                id: data.id,
+                staff_id: data.staffId,
+                name: data.name || '',
+                fullname: data.fullname || data.name || '',
+                nickname: data.nickname || '',
+                role: data.role || '',
+                branch: data.branch || 'บางพลี',
+                status: data.status || 'ทำงาน',
+                bank_name: data.bankName || '',
+                bank_acc: data.bankAcc || '',
+                phone: data.phone || '',
+                start_date: data.startDate || null,
+                address: data.address || '',
+                salary: Number(data.salary || 0),
+                img: data.img || '',
+                is_locked: !!data.isLocked,
+                updated_at: new Date().toISOString()
+            };
+
+            if (mode === 'edit' && idx !== null) {
+                const { error } = await window.supabaseClient
+                    .from('staff')
+                    .update(safePayload)
+                    .eq('id', data.id);
+
+                if (error) {
+                    console.error('update staff supabase error:', error);
+                }
+            } else {
+                const { error } = await window.supabaseClient
+                    .from('staff')
+                    .insert([safePayload]);
+
+                if (error) {
+                    console.error('insert staff supabase error:', error);
+                }
+            }
+        }
+    } catch (e) {
+        console.error('saveStaffComplete supabase catch:', e);
+    }
+
+    document.getElementById('staffModalContainer')?.remove();
+
     Swal.fire({
         icon: 'success',
         title: 'บันทึกเรียบร้อย',
-        text: status === 'ออก' ? 'ย้ายข้อมูลไปแฟ้มพนักงานลาออก และระงับสิทธิ์เข้าใช้งานแล้วค่ะ' : 'อัปเดตข้อมูลพนักงานสำเร็จค่ะ',
+        text: status === 'ออก'
+            ? 'ย้ายข้อมูลไปแฟ้มพนักงานลาออก และระงับสิทธิ์เข้าใช้งานแล้วค่ะ'
+            : 'อัปเดตข้อมูลพนักงานสำเร็จค่ะ',
         timer: 2000,
         showConfirmButton: false
     });
 
-    if(typeof renderStaffProfileList === 'function') renderStaffProfileList();
+    if (typeof renderStaffProfileList === 'function') renderStaffProfileList();
 };
-
 /* --- 3. ฟังก์ชันดูประวัติ (ล็อกสิทธิ์ให้เห็นเฉพาะข้อมูลตัวเองถ้าเป็นพนักงาน) --- */
 window.viewStaffDetail = function(idx) {
     const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];

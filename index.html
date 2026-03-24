@@ -2393,36 +2393,41 @@ window.generateHN = function () {
     }
 };
 	window.getNextHNFromSupabase = async function() {
-    const thaiYear = (new Date().getFullYear() + 543).toString().slice(-2);
+    try {
+        const thaiYear = (new Date().getFullYear() + 543).toString().slice(-2);
 
-    if (!window.supabaseClient) {
-        return `HN${thaiYear}0001`;
-    }
-
-    const { data, error } = await window.supabaseClient
-        .from('customers')
-        .select('hn')
-        .not('hn', 'is', null);
-
-    if (error) {
-        console.error('getNextHNFromSupabase error:', error);
-        return `HN${thaiYear}0001`;
-    }
-
-    const sameYearHN = (data || [])
-        .map(x => String(x.hn || '').trim())
-        .filter(hn => hn.startsWith(`HN${thaiYear}`));
-
-    let maxRunning = 0;
-
-    sameYearHN.forEach(hn => {
-        const runningPart = parseInt(hn.replace(`HN${thaiYear}`, ''), 10);
-        if (!isNaN(runningPart) && runningPart > maxRunning) {
-            maxRunning = runningPart;
+        if (!window.supabaseClient) {
+            return `HN${thaiYear}0001`;
         }
-    });
 
-    return `HN${thaiYear}${String(maxRunning + 1).padStart(4, '0')}`;
+        const { data, error } = await window.supabaseClient
+            .from('customers')
+            .select('hn');
+
+        if (error) {
+            console.error('getNextHNFromSupabase error:', error);
+            return `HN${thaiYear}0001`;
+        }
+
+        const sameYearHN = (data || [])
+            .map(x => String(x.hn || '').trim())
+            .filter(hn => /^HN\d{6}$/.test(hn) && hn.startsWith(`HN${thaiYear}`));
+
+        let maxRunning = 0;
+
+        sameYearHN.forEach(hn => {
+            const runningPart = parseInt(hn.slice(-4), 10);
+            if (!isNaN(runningPart) && runningPart > maxRunning) {
+                maxRunning = runningPart;
+            }
+        });
+
+        return `HN${thaiYear}${String(maxRunning + 1).padStart(4, '0')}`;
+    } catch (e) {
+        console.error('getNextHNFromSupabase catch:', e);
+        const thaiYear = (new Date().getFullYear() + 543).toString().slice(-2);
+        return `HN${thaiYear}0001`;
+    }
 };
 
 window.openModalForAdd = async function () {
@@ -2442,36 +2447,24 @@ window.openModalForAdd = async function () {
     }
 
     window.clearModal();
-    window.generateHN();
 
     const hnInput = document.getElementById("modalHN");
     if (hnInput) {
-        hnInput.value = await window.getNextHNFromSupabase();
-    }
-};
-window.openModalForAdd = function () {
-    ensureCustomerEnhancements();
-
-    // ✅ ใช้ ID แทน HN
-    window.editingCustomerId = null;
-
-    const modal = document.getElementById("customerModal");
-    if (!modal) return;
-
-    modal.classList.remove("hidden");
-    modal.classList.add("flex");
-
-    const title = document.getElementById("modalTitle");
-    if (title) {
-        title.innerText = "เพิ่มลูกค้าใหม่";
-        title.className = "text-2xl font-bold text-slate-800 tracking-tight";
+        hnInput.value = "กำลังโหลด...";
     }
 
-    window.clearModal();
-    window.generateHN();
+    try {
+        const nextHN = await window.getNextHNFromSupabase();
+        if (hnInput) {
+            hnInput.value = nextHN || "";
+        }
+    } catch (e) {
+        console.error("openModalForAdd HN error:", e);
+        if (hnInput) {
+            hnInput.value = "";
+        }
+    }
 };
-
-
   // 🎯 เปิด modal แก้ไขลูกค้าแบบ ID-based
 window.openModalForEdit = function (customerId) {
     ensureCustomerEnhancements();

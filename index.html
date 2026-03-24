@@ -3141,33 +3141,34 @@ window.renderCustomerTable = function (data) {
     const rowStart = (currentPage - 1) * rowsPerPage;
 
     data.forEach((c, index) => {
-      const safeId = String(c.id || '').replace(/'/g, "\\'");
-const safeHN = String(c.hn || '').replace(/'/g, "\\'");
+        const safeId = String(c.id || '').replace(/'/g, "\\'");
+        const safeHN = String(c.hn || '').replace(/'/g, "\\'");
+        const safeName = String(c.fullname || '').replace(/'/g, "\\'");
 
-      tbody.innerHTML += `
+        tbody.innerHTML += `
         <tr class="border-b hover:bg-pink-50 transition">
           <td class="p-3 text-[10px]">${rowStart + index + 1}</td>
           <td class="p-3 text-center">
-            <img src="${c.photo || "https://via.placeholder.com/150"}" class="shadow-sm mx-auto"
+            <img src="${c.photo || c.avatar_url || "https://via.placeholder.com/150"}" class="shadow-sm mx-auto"
               style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid #D48197;">
           </td>
-          <td class="p-3 text-slate-400 font-bold">${c.createdAt || "-"}</td>
-          <td class="p-3 font-bold text-slate-700">${c.hn}</td>
+          <td class="p-3 text-slate-400 font-bold">${c.createdAt || c.created_at || "-"}</td>
+          <td class="p-3 font-bold text-slate-700">${c.hn || "-"}</td>
           <td class="p-3 font-bold">${c.fullname || "-"}</td>
           <td class="p-3 italic text-slate-500">${c.nickname || "-"}</td>
           <td class="p-3 font-mono">${c.phone || "-"}</td>
           <td class="p-3"><span class="bg-pink-50 text-[#D48197] px-2 py-1 rounded-lg text-[9px] font-black">${c.branch || "-"}</span></td>
           <td class="p-3 text-center min-w-[160px] relative">
             <div class="inline-flex items-center bg-[#D48197] text-white rounded-full p-1 shadow-md relative">
-              <button onclick="window.openModalForEdit('${c.id}')" class="px-4 py-1 text-[11px] font-bold border-r border-white/30 hover:bg-white/10 rounded-l-full">แก้ไข</button>
-              <button onclick="window.safeToggleMenu(event, '${safeId}')" class="px-2 py-1 text-[11px] hover:bg-white/10 rounded-r-full transition-all">▼</button>
-              
-              <div id="action-menu-${c.id}" class="hidden absolute right-0 top-10 w-52 bg-white border border-pink-100 rounded-2xl shadow-2xl z-[999] overflow-hidden text-left font-bold italic">
-    <button onclick="window.viewCustomerDetailById('${c.id}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-pink-50 border-b flex items-center gap-2">👁️ ดูข้อมูลลูกค้า</button>
-    <button onclick="window.printOPD('${c.id}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-pink-50 border-b flex items-center gap-2">📄 พิมพ์ OPD Card</button>
-    <button onclick="window.printLatestReceipt('${String(c.fullname || '').replace(/'/g, "\\'")}', '${safeHN}', '${c.id}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-blue-50 border-b flex items-center gap-2 font-bold">🖨️ พิมพ์ใบเสร็จล่าสุด</button>
-    <button onclick="window.deleteCustomer('${c.id}')" class="w-full p-4 text-[11px] text-red-500 hover:bg-red-50 flex items-center gap-2 font-bold">🗑️ ลบข้อมูลคนไข้</button>
-</div>
+              <button onclick="window.openModalForEdit('${safeId}')" class="px-4 py-1 text-[11px] font-bold border-r border-white/30 hover:bg-white/10 rounded-l-full">แก้ไข</button>
+              <button onclick="window.toggleActionMenu(event, '${safeId}')" class="px-2 py-1 text-[11px] hover:bg-white/10 rounded-r-full transition-all">▼</button>
+
+              <div id="action-menu-${safeId}" class="hidden absolute right-0 top-10 w-52 bg-white border border-pink-100 rounded-2xl shadow-2xl z-[999] overflow-hidden text-left font-bold italic">
+                <button onclick="window.viewCustomerDetailById('${safeId}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-pink-50 border-b flex items-center gap-2">👁️ ดูข้อมูลลูกค้า</button>
+                <button onclick="window.printOPD('${safeId}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-pink-50 border-b flex items-center gap-2">📄 พิมพ์ OPD Card</button>
+                <button onclick="window.printLatestReceipt('${safeName}', '${safeHN}', '${safeId}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-blue-50 border-b flex items-center gap-2 font-bold">🖨️ พิมพ์ใบเสร็จล่าสุด</button>
+                <button onclick="window.deleteCustomer('${safeId}')" class="w-full p-4 text-[11px] text-red-500 hover:bg-red-50 flex items-center gap-2 font-bold">🗑️ ลบข้อมูลคนไข้</button>
+              </div>
             </div>
           </td>
         </tr>
@@ -3175,36 +3176,37 @@ const safeHN = String(c.hn || '').replace(/'/g, "\\'");
     });
 };
 
- window.applyCustomerFilter = function () {
+window.applyCustomerFilter = function () {
     const keyword = (document.getElementById("customerSearchInput")?.value || "").toLowerCase().trim();
     const tableBranchSelect = document.getElementById("branchFilterSelect")?.value || "ทั้งหมด";
     const pageSize = Number(document.getElementById("pageSizeSelect")?.value || "10");
-    
-    // 🎯 ใช้ข้อมูลที่ผ่านการกรองสิทธิ์เบื้องต้นมาแล้ว
-    const db = window.getCustomerDBByBranch(); 
+
+    const db = window.getCustomerDBByBranch();
 
     const filtered = db.filter((c) => {
         const k = (c.fullname || "").toLowerCase().includes(keyword) ||
                   (c.hn || "").toLowerCase().includes(keyword) ||
                   String(c.phone || "").includes(keyword);
-        
-        // 🎯 แก้ไข Logic: ถ้าเลือก "ทั้งหมด" หรือ "ทุกสาขา" ในตาราง ให้ปล่อยผ่านข้อมูลที่ db ส่งมา
-        const b = tableBranchSelect === "ทั้งหมด" || 
-                  tableBranchSelect === "ทุกสาขา" || 
-                  c.branch === tableBranchSelect || 
+
+        const b = tableBranchSelect === "ทั้งหมด" ||
+                  tableBranchSelect === "ทุกสาขา" ||
+                  c.branch === tableBranchSelect ||
                   c.branch === `สาขา${tableBranchSelect}`;
-        
+
         return k && b;
     });
 
-    currentCustomerFilteredData = filtered;
-    // ... ส่วนที่เหลือคงเดิม ...
+    window.currentCustomerFilteredData = filtered;
+
     const totalPages = Math.ceil(filtered.length / pageSize) || 1;
-    const start = (currentCustomerPage - 1) * pageSize;
+    if ((window.currentCustomerPage || 1) > totalPages) {
+        window.currentCustomerPage = 1;
+    }
+
+    const start = ((window.currentCustomerPage || 1) - 1) * pageSize;
     window.renderCustomerTable(filtered.slice(start, start + pageSize));
     renderCustomerPagination(filtered.length, pageSize);
 };
-
   function renderCustomerPagination(totalItems, pageSize) {
     const container = document.getElementById("customerPagination");
     if (!container) return;

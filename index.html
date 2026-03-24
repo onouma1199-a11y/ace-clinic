@@ -677,6 +677,31 @@ window.getCustomersFromSupabase = async function() {
     }
 };
 
+window.startCustomerRealtime = function() {
+    if (!window.supabaseClient) return;
+
+    if (window.customerRealtimeChannel) {
+        window.supabaseClient.removeChannel(window.customerRealtimeChannel);
+    }
+
+    window.customerRealtimeChannel = window.supabaseClient
+        .channel('customers-live')
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'customers'
+            },
+            async function() {
+                if (typeof window.applyCustomerFilter === 'function') {
+                    await window.applyCustomerFilter();
+                }
+            }
+        )
+        .subscribe();
+};
+
 
 
 /* -------------------- DATA HELPERS (ID BASED) -------------------- */
@@ -861,9 +886,13 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     function showLoginPage() {
-        document.getElementById('loginPage')?.classList.remove('hidden');
-        document.getElementById('mainDashboard')?.classList.add('hidden');
-    }
+        document.getElementById('loginPage')?.classList.add('hidden');
+document.getElementById('mainDashboard')?.classList.remove('hidden');
+}
+// ✅ เพิ่มตรงนี้
+if (typeof window.startCustomerRealtime === 'function') {
+    window.startCustomerRealtime();
+}
 
     secureInit();
     setTimeout(window.initAccountSuggestion, 300);

@@ -2343,8 +2343,19 @@ window.closeModal = function () {
     modal.classList.remove("flex");
     window.clearModal();
 };
+	
+window.generateHN = function () {
+    const el = document.getElementById("modalHN");
+    if (el && !window.editingCustomerId) {
+        el.value = `กำลังโหลด...`;
+    }
+};
 	window.getNextHNFromSupabase = async function() {
     const thaiYear = (new Date().getFullYear() + 543).toString().slice(-2);
+
+    if (!window.supabaseClient) {
+        return `HN${thaiYear}0001`;
+    }
 
     const { data, error } = await window.supabaseClient
         .from('customers')
@@ -2357,7 +2368,7 @@ window.closeModal = function () {
     }
 
     const sameYearHN = (data || [])
-        .map(x => String(x.hn || ''))
+        .map(x => String(x.hn || '').trim())
         .filter(hn => hn.startsWith(`HN${thaiYear}`));
 
     let maxRunning = 0;
@@ -2370,13 +2381,6 @@ window.closeModal = function () {
     });
 
     return `HN${thaiYear}${String(maxRunning + 1).padStart(4, '0')}`;
-};
-
-window.generateHN = function () {
-    const el = document.getElementById("modalHN");
-    if (el && !window.editingCustomerId) {
-        el.value = `กำลังโหลด...`;
-    }
 };
 
 window.openModalForAdd = async function () {
@@ -2396,13 +2400,13 @@ window.openModalForAdd = async function () {
     }
 
     window.clearModal();
+    window.generateHN();
 
     const hnInput = document.getElementById("modalHN");
     if (hnInput) {
         hnInput.value = await window.getNextHNFromSupabase();
     }
 };
-
 window.openModalForAdd = function () {
     ensureCustomerEnhancements();
 

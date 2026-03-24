@@ -750,7 +750,7 @@ window.currentBillPage = 1;
 window.currentQDateFilter = new Date().toLocaleDateString('th-TH');
 
 /* =======================================================
-    🚀 ZONE 2: CORE SYSTEM (ระบบล็อกอิน & สลับหน้าเมนู)
+   🚀 ZONE 2: CORE SYSTEM (ระบบล็อกอิน & สลับหน้าเมนู)
    ======================================================= */
 
 // --- 1. ระบบ Suggestion บัญชีที่บันทึกไว้ ---
@@ -778,17 +778,18 @@ window.initAccountSuggestion = function() {
     uInput.addEventListener('focus', () => {
         const savedList = JSON.parse(localStorage.getItem('ace_saved_accounts')) || [];
         if (savedList.length === 0) return;
-        
+
         suggestionBox.innerHTML = savedList.map(acc => `
-            <div onclick="window.selectAccount('${acc.user}', '${acc.pass}')" class="flex items-center gap-3 p-3 hover:bg-pink-50 cursor-pointer border-b border-pink-50 last:border-0">
+            <div onclick="window.selectAccount('${String(acc.user || '').replace(/'/g, "\\'")}', '')" class="flex items-center gap-3 p-3 hover:bg-pink-50 cursor-pointer border-b border-pink-50 last:border-0">
                 <div class="w-8 h-8 bg-[#D48197] text-white rounded-full flex items-center justify-center font-bold text-xs">${acc.name ? acc.name.substring(0,1) : '👤'}</div>
                 <div class="flex-1">
-                    <p class="text-[11px] font-bold text-slate-700 m-0">${acc.name}</p>
-                    <p class="text-[9px] text-slate-400 uppercase m-0">${acc.role} | ${acc.branch || ''}</p>
+                    <p class="text-[11px] font-bold text-slate-700 m-0">${acc.name || '-'}</p>
+                    <p class="text-[9px] text-slate-400 uppercase m-0">${acc.role || '-'} | ${acc.branch || ''}</p>
                 </div>
-                <button onclick="event.stopPropagation(); window.removeSavedAccount('${acc.user}')" class="text-slate-300 hover:text-red-500 p-1 text-xs">✕</button>
+                <button onclick="event.stopPropagation(); window.removeSavedAccount('${String(acc.user || '').replace(/'/g, "\\'")}')" class="text-slate-300 hover:text-red-500 p-1 text-xs">✕</button>
             </div>
         `).join('');
+
         suggestionBox.style.display = 'block';
     });
 
@@ -799,194 +800,247 @@ window.initAccountSuggestion = function() {
     });
 };
 
-window.selectAccount = function(u, p) {
-    document.getElementById('uIn').value = u;
-    document.getElementById('pIn').value = p;
+window.selectAccount = function(u) {
+    document.getElementById('uIn').value = u || '';
+    document.getElementById('pIn').value = '';
     document.getElementById('rememberMe').checked = true;
-    document.getElementById('accountSuggestionBox').style.display = 'none';
+    const box = document.getElementById('accountSuggestionBox');
+    if (box) box.style.display = 'none';
 };
 
 window.removeSavedAccount = function(u) {
     let savedList = JSON.parse(localStorage.getItem('ace_saved_accounts')) || [];
     savedList = savedList.filter(acc => acc.user !== u);
     localStorage.setItem('ace_saved_accounts', JSON.stringify(savedList));
-    document.getElementById('uIn').focus();
+    document.getElementById('uIn')?.focus();
 };
 
-// 🎯 1. เริ่มต้นระบบเมื่อโหลดหน้า (รองรับระบบ Session จาก Supabase)
-window.addEventListener('DOMContentLoaded', () => { 
+// 🎯 เริ่มต้นระบบเมื่อโหลดหน้า (ใช้ Supabase Session เป็นหลัก)
+window.addEventListener('DOMContentLoaded', () => {
     async function secureInit() {
-        if (!window.supabaseClient) return;
-        const { data: { session } } = await window.supabaseClient.auth.getSession();
+        try {
+            if (!window.supabaseClient) {
+                console.error('ยังไม่พบ supabaseClient');
+                showLoginPage();
+                return;
+            }
 
-        if (!session) {
-            showLoginPage();
-        } else {
-            const user = session.user;
-            // ✅ ใช้ ID จริงจากระบบ Auth
-            window.currentUser = {
-                id: user.id,
-                email: user.email,
-                name: user.user_metadata?.full_name || 'User',
-                role: user.user_metadata?.role || 'staff'
+            const { data, error } = await window.supabaseClient.auth.getSession();
+            if (error) {
+                console.error('getSession error:', error);
+                showLoginPage();
+                return;
+            }
+
+            const session = data?.session || null;
+
+            if (!session || !session.user) {
+                showLoginPage();
+                return;
+            }
+
+            const authUser = session.user;
+
+            const user = {
+                id: authUser.id,
+                email: authUser.email || '',
+                username: authUser.email || '',
+                name: authUser.user_metadata?.full_name || authUser.email || 'User',
+                role: authUser.user_metadata?.role || 'แอดมินหลัก',
+                branch: authUser.user_metadata?.branch || 'ทุกสาขา',
+                homeBranch: authUser.user_metadata?.homeBranch || authUser.user_metadata?.branch || 'ทุกสาขา',
+                viewingBranch: authUser.user_metadata?.viewingBranch || authUser.user_metadata?.branch || 'ทุกสาขา',
+                phone: authUser.phone || ''
             };
-            showDashboardPage();
+
+            window.executeLogin(user, user.email || user.username || '', '');
+        } catch (e) {
+            console.error('secureInit exception:', e);
+            showLoginPage();
         }
     }
 
     function showLoginPage() {
-        document.getElementById('loginPage').classList.remove('hidden');
-        document.getElementById('mainDashboard').classList.add('hidden');
-    }
-
-    function showDashboardPage() {
-        document.getElementById('loginPage').classList.add('hidden');
-        document.getElementById('mainDashboard').classList.remove('hidden');
+        document.getElementById('loginPage')?.classList.remove('hidden');
+        document.getElementById('mainDashboard')?.classList.add('hidden');
     }
 
     secureInit();
-    setTimeout(window.initAccountSuggestion, 300); 
-
-    const savedUser = localStorage.getItem('currentUser');
-    if (savedUser) {
-        const userObj = JSON.parse(savedUser);
-        window.executeLogin(userObj, userObj.phone || userObj.staffId, ''); 
-    }
+    setTimeout(window.initAccountSuggestion, 300);
 });
 
 // --- 2. ฟังก์ชันเปิด/ปิดตาดูรหัสผ่าน ---
 window.togglePasswordVisibility = function() {
     const pIn = document.getElementById('pIn');
     const eye = document.getElementById('eyeIcon');
-    if (pIn.type === 'password') { 
-        pIn.type = 'text'; 
-        eye.innerText = '🙈'; 
-    } else { 
-        pIn.type = 'password'; 
-        eye.innerText = '👁️'; 
+    if (!pIn || !eye) return;
+
+    if (pIn.type === 'password') {
+        pIn.type = 'text';
+        eye.innerText = '🙈';
+    } else {
+        pIn.type = 'password';
+        eye.innerText = '👁️';
     }
 };
 
 // --- 3. ฟังก์ชันเข้าสู่ระบบ (Login) ---
-window.doLogin = function() {
-    const u = document.getElementById('uIn').value.trim();
-    const p = document.getElementById('pIn').value.trim();
+window.doLogin = async function() {
+    const u = document.getElementById('uIn')?.value?.trim() || '';
+    const p = document.getElementById('pIn')?.value?.trim() || '';
 
     if (!u || !p) {
-        Swal.fire({ icon: 'warning', text: 'กรุณากรอกชื่อผู้ใช้และรหัสผ่านค่ะ', confirmButtonColor: '#D48197' });
+        Swal.fire({
+            icon: 'warning',
+            text: 'กรุณากรอกอีเมลและรหัสผ่านค่ะ',
+            confirmButtonColor: '#D48197'
+        });
         return;
     }
 
-    /* 🔒 Admin หลัก */
-    if (u === 'onouma39' && p === 'Onouma2539') {
-        const superUser = {
-            id: 'SUPER-ADMIN-ID',
-            userId: 'SUPER-ADMIN-001',
-            username: u,
-            name: 'คุณอรอุมา (Owner)',
-            role: 'แอดมินหลัก',
-            branch: 'ทุกสาขา',
-            homeBranch: 'ทุกสาขา',
-            viewingBranch: 'ทุกสาขา'
+    if (!window.supabaseClient) {
+        Swal.fire({
+            icon: 'error',
+            title: 'ระบบยังไม่พร้อม',
+            text: 'ยังไม่พบการเชื่อมต่อ Supabase',
+            confirmButtonColor: '#D48197'
+        });
+        return;
+    }
+
+    const loginBtn = document.querySelector('button[onclick="doLogin()"]');
+    if (loginBtn) loginBtn.disabled = true;
+
+    try {
+        const { data, error } = await window.supabaseClient.auth.signInWithPassword({
+            email: u,
+            password: p
+        });
+
+        if (error || !data?.user) {
+            console.error('login error:', error);
+            Swal.fire({
+                icon: 'error',
+                title: 'เข้าสู่ระบบไม่สำเร็จ',
+                text: error?.message || 'อีเมลหรือรหัสผ่านไม่ถูกต้องค่ะ',
+                confirmButtonColor: '#D48197'
+            });
+            return;
+        }
+
+        const authUser = data.user;
+
+        const user = {
+            id: authUser.id,
+            email: authUser.email || '',
+            username: authUser.email || '',
+            name: authUser.user_metadata?.full_name || authUser.email || 'User',
+            role: authUser.user_metadata?.role || 'แอดมินหลัก',
+            branch: authUser.user_metadata?.branch || 'ทุกสาขา',
+            homeBranch: authUser.user_metadata?.homeBranch || authUser.user_metadata?.branch || 'ทุกสาขา',
+            viewingBranch: authUser.user_metadata?.viewingBranch || authUser.user_metadata?.branch || 'ทุกสาขา',
+            phone: authUser.phone || ''
         };
-        const perms = JSON.parse(localStorage.getItem('ace_permissions')) || {};
-        perms['แอดมินหลัก'] = ['1', '2', '3', '9', '4', '52', '51', '53', '6', '7', '8', '10'];
-        localStorage.setItem('ace_permissions', JSON.stringify(perms));
-        executeLogin(superUser, u, p);
-        return;
-    }
 
-    /* 🔑 CEO / Doctor */
-    const masterPass = JSON.parse(localStorage.getItem('ace_master_pass')) || { admin: '', ceo: '', doctor: '' };
-    if (masterPass.ceo && u === 'ceo' && p === masterPass.ceo) {
-        executeLogin({ id: 'CEO-ID', name: 'ผู้บริหาร (CEO)', role: 'CEO', branch: 'ทุกสาขา', homeBranch: 'ทุกสาขา' }, u, p);
-        return;
+        window.executeLogin(user, u, '');
+    } catch (e) {
+        console.error('doLogin exception:', e);
+        Swal.fire({
+            icon: 'error',
+            title: 'เข้าสู่ระบบไม่สำเร็จ',
+            text: 'เกิดข้อผิดพลาดในการเชื่อมต่อระบบ',
+            confirmButtonColor: '#D48197'
+        });
+    } finally {
+        if (loginBtn) loginBtn.disabled = false;
     }
-
-    /* 👥 Staff */
-    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
-    const staffUser = staffDB.find(s => (s.phone === u || s.staffId === u) && s.status !== 'ออก');
-
-    if (staffUser) {
-        if (staffUser.isLocked) {
-            Swal.fire({ icon: 'error', title: 'บัญชีถูกระงับ', text: 'กรุณาติดต่อแอดมินค่ะ', confirmButtonColor: '#D48197' });
-            return;
-        }
-        const validPass = staffUser.password || (staffUser.phone ? staffUser.phone.slice(-4) : '9999');
-        if (p === validPass) { 
-            executeLogin({ 
-                id: staffUser.id || staffUser.staffId, // ✅ ใช้ ID จาก Database
-                staffId: staffUser.staffId, 
-                name: staffUser.name, 
-                role: staffUser.role || 'พนักงานทรีทเม้นท์', 
-                branch: staffUser.branch || 'บางพลี',
-                homeBranch: staffUser.branch || 'บางพลี'
-            }, u, p);
-            return;
-        }
-    }
-    Swal.fire({ icon: 'error', title: 'เข้าสู่ระบบไม่สำเร็จ', text: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้องค่ะ', confirmButtonColor: '#D48197' });
 };
 
 window.executeLogin = function(user, loginUserStr, loginPassStr) {
     const remember = document.getElementById('rememberMe')?.checked;
+
     if (remember) {
         let savedList = JSON.parse(localStorage.getItem('ace_saved_accounts')) || [];
         savedList = savedList.filter(acc => acc.user !== loginUserStr);
-        savedList.unshift({ user: loginUserStr, pass: loginPassStr, name: user.name, role: user.role });
-        if(savedList.length > 3) savedList.pop();
+        savedList.unshift({
+            user: loginUserStr,
+            pass: '', // ไม่เก็บรหัสผ่านจริง
+            name: user.name || '',
+            role: user.role || '',
+            branch: user.branch || ''
+        });
+        if (savedList.length > 3) savedList.pop();
         localStorage.setItem('ace_saved_accounts', JSON.stringify(savedList));
     }
 
-    window.currentUser = user; 
+    window.currentUser = user;
     localStorage.setItem('currentUser', JSON.stringify(user));
 
-    document.getElementById('loginPage').classList.add('hidden');
-    document.getElementById('mainDashboard').classList.remove('hidden');
-    
-    if(document.getElementById('userNameLabel')) document.getElementById('userNameLabel').innerText = `${user.name} (${user.role})`;
-    if(document.getElementById('userBranchBadge')) document.getElementById('userBranchBadge').innerText = `สาขา: ${user.branch}`;
-    if(document.getElementById('userInitial')) document.getElementById('userInitial').innerText = user.name.substring(0, 2);
+    document.getElementById('loginPage')?.classList.add('hidden');
+    document.getElementById('mainDashboard')?.classList.remove('hidden');
+
+    if (document.getElementById('userNameLabel')) {
+        document.getElementById('userNameLabel').innerText = `${user.name} (${user.role})`;
+    }
+    if (document.getElementById('userBranchBadge')) {
+        document.getElementById('userBranchBadge').innerText = `สาขา: ${user.branch || 'ทุกสาขา'}`;
+    }
+    if (document.getElementById('userInitial')) {
+        document.getElementById('userInitial').innerText = (user.name || 'U').substring(0, 2);
+    }
 
     const initialStr = user.name ? user.name.substring(0, 2).toUpperCase() : 'ON';
-    if(document.getElementById('topProfileInitial')) document.getElementById('topProfileInitial').innerText = initialStr;
-    if(document.getElementById('dropProfileInitial')) document.getElementById('dropProfileInitial').innerText = initialStr;
-    if(document.getElementById('dropProfileName')) document.getElementById('dropProfileName').innerText = user.name;
-    if(document.getElementById('dropProfileRole')) document.getElementById('dropProfileRole').innerText = user.role;
-    if(document.getElementById('dropProfileContact')) document.getElementById('dropProfileContact').innerText = user.phone || 'พนักงานคลินิก';
+    if (document.getElementById('topProfileInitial')) document.getElementById('topProfileInitial').innerText = initialStr;
+    if (document.getElementById('dropProfileInitial')) document.getElementById('dropProfileInitial').innerText = initialStr;
+    if (document.getElementById('dropProfileName')) document.getElementById('dropProfileName').innerText = user.name || 'User';
+    if (document.getElementById('dropProfileRole')) document.getElementById('dropProfileRole').innerText = user.role || 'แอดมินหลัก';
+    if (document.getElementById('dropProfileContact')) document.getElementById('dropProfileContact').innerText = user.phone || user.email || 'พนักงานคลินิก';
 
-    if (typeof renderMenuByRole === 'function') renderMenuByRole(user.role);
-    if(typeof renderBranchDropdown === 'function') renderBranchDropdown();
-    
-    const viewingBranch = (user.branch || '').replace('สาขา', '').trim();
-    const homeBranch = (user.homeBranch || user.branch || '').replace('สาขา', '').trim();
-    const isAdmin = ['แอดมินหลัก', 'CEO'].includes(user.role);
+    if (typeof renderMenuByRole === 'function') renderMenuByRole(user.role || 'แอดมินหลัก');
+    if (typeof renderBranchDropdown === 'function') renderBranchDropdown();
+
     const urlParams = new URLSearchParams(window.location.search);
-
     if (urlParams.get('target') === 'ceo_board') {
         loadPage(10, 'บอร์ดรวมทุกสาขา');
         window.history.replaceState({}, document.title, window.location.pathname);
-    } 
-    else if (!isAdmin && viewingBranch !== homeBranch) {
-        loadPage(2, 'จัดการลูกค้า/ประวัติ');
-    } 
-    else if (user.role === 'พนักงานทรีทเม้นท์') { 
-        loadPage(52, 'ห้องจัดการคิว'); 
-    } 
-    else { 
-        loadPage(1, 'Dashboard ภาพรวม'); 
+    } else {
+        loadPage(1, 'Dashboard ภาพรวม');
     }
-    
-    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: `ยินดีต้อนรับ ${user.name}`, showConfirmButton: false, timer: 1500 });
+
+    Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: `ยินดีต้อนรับ ${user.name || 'User'}`,
+        showConfirmButton: false,
+        timer: 1500
+    });
 };
 
 // --- 4. ออกจากระบบ ---
-window.logout = function() {
+window.logout = async function() {
+    try {
+        if (window.supabaseClient) {
+            await window.supabaseClient.auth.signOut();
+        }
+    } catch (e) {
+        console.error('logout error:', e);
+    }
+
     localStorage.removeItem('currentUser');
     window.currentUser = null;
-    document.getElementById('mainDashboard').classList.add('hidden');
-    document.getElementById('loginPage').classList.remove('hidden');
-    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'ออกจากระบบเรียบร้อย', showConfirmButton: false, timer: 1500 });
+
+    document.getElementById('mainDashboard')?.classList.add('hidden');
+    document.getElementById('loginPage')?.classList.remove('hidden');
+
+    Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: 'ออกจากระบบเรียบร้อย',
+        showConfirmButton: false,
+        timer: 1500
+    });
 };
 
 // --- 5. ระบบสลับสาขา ---

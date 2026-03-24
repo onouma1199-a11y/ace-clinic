@@ -1807,9 +1807,21 @@ window.saveCustomer = async function () {
         return false;
     }
 
+    const hn = (document.getElementById("modalHN")?.value || "").trim();
+    if (!hn || hn === "กำลังโหลด...") {
+        Swal.fire({
+            icon: 'warning',
+            title: 'กรุณารอสักครู่',
+            text: 'ระบบกำลังสร้างรหัส HN'
+        });
+        return false;
+    }
+
+    const isEdit = !!window.editingCustomerId;
+
     const payload = {
-        id: crypto.randomUUID(),
-        hn: document.getElementById("modalHN")?.value || `HN${Date.now()}`,
+        id: window.editingCustomerId || crypto.randomUUID(),
+        hn: hn,
         first_name: firstName,
         last_name: lastName,
         fullname: `${firstName} ${lastName}`.trim(),
@@ -1825,7 +1837,9 @@ window.saveCustomer = async function () {
         status: document.getElementById("modalStatus")?.value || "ปกติ",
         photo: window.currentPhotoData || "",
         avatar_url: window.currentPhotoData || "",
-        created_at: new Date().toISOString()
+        created_at: isEdit
+            ? (window.activeCustomer?.created_at || new Date().toISOString())
+            : new Date().toISOString()
     };
 
     if (!window.supabaseClient) {
@@ -1839,7 +1853,10 @@ window.saveCustomer = async function () {
 
     const { data, error } = await window.supabaseClient
         .from("customers")
-        .insert([payload])
+        .upsert([{
+            ...payload,
+            updated_at: new Date().toISOString()
+        }], { onConflict: 'id' })
         .select()
         .single();
 
@@ -1853,13 +1870,38 @@ window.saveCustomer = async function () {
         return false;
     }
 
-    // ✅ sync ลง localStorage เพื่อให้ระบบเดิมยังทำงานได้
-    const customerDB = window.getCustomers() || [];
-    customerDB.unshift(data);
+    // sync ลง localStorage เพื่อให้ระบบเดิมยังทำงานได้
+    let customerDB = [];
+    try {
+        customerDB = window.getCustomers() || [];
+    } catch (e) {
+        customerDB = [];
+    }
+
+    const existingIndex = customerDB.findIndex(c => String(c.id || '') === String(data.id || ''));
+    if (existingIndex !== -1) {
+        customerDB[existingIndex] = { ...customerDB[existingIndex], ...data };
+    } else {
+        customerDB.unshift(data);
+    }
+
     localStorage.setItem("customerDB", JSON.stringify(customerDB));
 
-    // ✅ เก็บลูกค้าคนล่าสุดไว้ใช้งานต่อ
     window.activeCustomer = data;
+    window.editingCustomerId = null;
+
+    Swal.fire({
+        icon: 'success',
+        title: 'บันทึกสำเร็จ!',
+        text: isEdit ? 'อัปเดตข้อมูลลูกค้าเรียบร้อยแล้วค่ะ' : 'เพิ่มลูกค้าใหม่เรียบร้อยแล้วค่ะ',
+        timer: 1500,
+        showConfirmButton: false
+    });
+
+    if (typeof window.closeModal === 'function') window.closeModal();
+    if (typeof window.applyCustomerFilter === 'function') {
+        await window.applyCustomerFilter();
+    }
 
     return true;
 };
@@ -11319,28 +11361,39 @@ window.saveCustomerWithAlert = async function() {
 
     const isEdit = !!window.editingCustomerId;
 
-   const payload = {
-    id: window.editingCustomerId || crypto.randomUUID(),
-    hn: document.getElementById("modalHN")?.value || `HN${Date.now()}`,
-    first_name: firstName,
-    last_name: lastName,
-    fullname: `${firstName} ${lastName}`.trim(),
-    nickname: document.getElementById("modalNickname")?.value?.trim() || "",
-    phone: phone,
-    email: document.getElementById("modalEmail")?.value?.trim() || "",
-    line_id: document.getElementById("modalLine")?.value?.trim() || "",
-    birth_date: convertThaiDateToISO(document.getElementById("modalBirthDate")?.value),
-    citizen_id: document.getElementById("modalCitizenId")?.value?.trim() || "",
-    address: document.getElementById("modalAddress")?.value?.trim() || "",
-    allergy: document.getElementById("modalAllergy")?.value?.trim() || "ไม่มี",
-    branch: document.getElementById("modalBranch")?.value || "สาขาบางพลี",
-    status: document.getElementById("modalStatus")?.value || "ปกติ",
-    photo: window.currentPhotoData || "",
-    avatar_url: window.currentPhotoData || "",
-    created_at: isEdit
-        ? (window.activeCustomer?.created_at || new Date().toISOString())
-        : new Date().toISOString()
-};
+    const hn = (document.getElementById("modalHN")?.value || "").trim();
+    if (!hn || hn === "กำลังโหลด...") {
+        Swal.fire({
+            icon: 'warning',
+            title: 'กรุณารอสักครู่',
+            text: 'ระบบกำลังสร้างรหัส HN',
+            confirmButtonColor: '#D48197'
+        });
+        return;
+    }
+
+    const payload = {
+        id: window.editingCustomerId || crypto.randomUUID(),
+        hn: hn,
+        first_name: firstName,
+        last_name: lastName,
+        fullname: `${firstName} ${lastName}`.trim(),
+        nickname: document.getElementById("modalNickname")?.value?.trim() || "",
+        phone: phone,
+        email: document.getElementById("modalEmail")?.value?.trim() || "",
+        line_id: document.getElementById("modalLine")?.value?.trim() || "",
+        birth_date: convertThaiDateToISO(document.getElementById("modalBirthDate")?.value),
+        citizen_id: document.getElementById("modalCitizenId")?.value?.trim() || "",
+        address: document.getElementById("modalAddress")?.value?.trim() || "",
+        allergy: document.getElementById("modalAllergy")?.value?.trim() || "ไม่มี",
+        branch: document.getElementById("modalBranch")?.value || "สาขาบางพลี",
+        status: document.getElementById("modalStatus")?.value || "ปกติ",
+        photo: window.currentPhotoData || "",
+        avatar_url: window.currentPhotoData || "",
+        created_at: isEdit
+            ? (window.activeCustomer?.created_at || new Date().toISOString())
+            : new Date().toISOString()
+    };
 
     const saved = await window.saveCustomerToSupabase(payload);
     if (!saved) return;

@@ -886,13 +886,9 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     function showLoginPage() {
-        document.getElementById('loginPage')?.classList.add('hidden');
-document.getElementById('mainDashboard')?.classList.remove('hidden');
-}
-// ✅ เพิ่มตรงนี้
-if (typeof window.startCustomerRealtime === 'function') {
-    window.startCustomerRealtime();
-}
+        document.getElementById('loginPage')?.classList.remove('hidden');
+        document.getElementById('mainDashboard')?.classList.add('hidden');
+    }
 
     secureInit();
     setTimeout(window.initAccountSuggestion, 300);
@@ -993,7 +989,7 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
         savedList = savedList.filter(acc => acc.user !== loginUserStr);
         savedList.unshift({
             user: loginUserStr,
-            pass: '', // ไม่เก็บรหัสผ่านจริง
+            pass: '',
             name: user.name || '',
             role: user.role || '',
             branch: user.branch || ''
@@ -1007,6 +1003,11 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
 
     document.getElementById('loginPage')?.classList.add('hidden');
     document.getElementById('mainDashboard')?.classList.remove('hidden');
+
+    // ✅ วางตรงนี้
+    if (typeof window.startCustomerRealtime === 'function') {
+        window.startCustomerRealtime();
+    }
 
     if (document.getElementById('userNameLabel')) {
         document.getElementById('userNameLabel').innerText = `${user.name} (${user.role})`;
@@ -3355,22 +3356,30 @@ window.renderCustomerTable = function (data) {
     });
 };
 
-window.applyCustomerFilter = function () {
+window.applyCustomerFilter = async function () {
     const keyword = (document.getElementById("customerSearchInput")?.value || "").toLowerCase().trim();
     const tableBranchSelect = document.getElementById("branchFilterSelect")?.value || "ทั้งหมด";
     const pageSize = Number(document.getElementById("pageSizeSelect")?.value || "10");
 
-    const db = window.getCustomerDBByBranch();
+    // ✅ ดึงจาก Supabase โดยตรง
+    const db = await window.getCustomersFromSupabase();
 
     const filtered = db.filter((c) => {
-        const k = (c.fullname || "").toLowerCase().includes(keyword) ||
-                  (c.hn || "").toLowerCase().includes(keyword) ||
-                  String(c.phone || "").includes(keyword);
+        const fullName = String(c.fullname || `${c.first_name || ''} ${c.last_name || ''}`.trim()).toLowerCase();
+        const hn = String(c.hn || '').toLowerCase();
+        const phone = String(c.phone || '');
+        const branch = String(c.branch || '').trim();
 
-        const b = tableBranchSelect === "ทั้งหมด" ||
-                  tableBranchSelect === "ทุกสาขา" ||
-                  c.branch === tableBranchSelect ||
-                  c.branch === `สาขา${tableBranchSelect}`;
+        const k =
+            fullName.includes(keyword) ||
+            hn.includes(keyword) ||
+            phone.includes(keyword);
+
+        const b =
+            tableBranchSelect === "ทั้งหมด" ||
+            tableBranchSelect === "ทุกสาขา" ||
+            branch === tableBranchSelect ||
+            branch === `สาขา${tableBranchSelect}`;
 
         return k && b;
     });
@@ -3386,6 +3395,8 @@ window.applyCustomerFilter = function () {
     window.renderCustomerTable(filtered.slice(start, start + pageSize));
     renderCustomerPagination(filtered.length, pageSize);
 };
+
+
   function renderCustomerPagination(totalItems, pageSize) {
     const container = document.getElementById("customerPagination");
     if (!container) return;
@@ -3413,44 +3424,42 @@ window.applyCustomerFilter = function () {
     container.innerHTML = html;
   }
 
-  window.changeCustomerPage = function (page) {
+  window.changeCustomerPage = async function (page) {
     currentCustomerPage = page;
-    window.applyCustomerFilter();
-  };
+    await window.applyCustomerFilter();
+};
 
   function bindCustomerPageEvents(target) {
     if (!target || target.__boundCustomer) return;
     target.__boundCustomer = true;
 
-    target.addEventListener("click", (e) => {
-      if (e.target.closest("#btnAddCustomer")) {
-        window.openModalForAdd();
-        return;
-      }
-      if (e.target.closest("#btnCustomerSearch")) {
-        currentCustomerPage = 1;
-        window.applyCustomerFilter();
-        return;
-      }
+    target.addEventListener("click", async (e) => {
+        if (e.target.closest("#btnAddCustomer")) {
+            window.openModalForAdd();
+            return;
+        }
+        if (e.target.closest("#btnCustomerSearch")) {
+            currentCustomerPage = 1;
+            await window.applyCustomerFilter();
+            return;
+        }
     });
 
-    target.addEventListener("keydown", (e) => {
-      if (e.target.matches("#customerSearchInput") && e.key === "Enter") {
-        currentCustomerPage = 1;
-        window.applyCustomerFilter();
-      }
+    target.addEventListener("keydown", async (e) => {
+        if (e.target.matches("#customerSearchInput") && e.key === "Enter") {
+            currentCustomerPage = 1;
+            await window.applyCustomerFilter();
+        }
     });
 
-    target.addEventListener("change", (e) => {
-      if (e.target.matches("#pageSizeSelect, #branchFilterSelect")) {
-        currentCustomerPage = 1;
-        window.applyCustomerFilter();
-      }
+    target.addEventListener("change", async (e) => {
+        if (e.target.matches("#pageSizeSelect, #branchFilterSelect")) {
+            currentCustomerPage = 1;
+            await window.applyCustomerFilter();
+        }
     });
-  }
-
-  syncCustomerDB(getCustomerDB());
-  ensureCustomerEnhancements();
+}
+  
 })();
 
 /* =======================================================

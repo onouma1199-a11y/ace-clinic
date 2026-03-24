@@ -1817,7 +1817,7 @@ window.saveCustomer = async function () {
         phone: phone,
         email: document.getElementById("modalEmail")?.value?.trim() || "",
         line_id: document.getElementById("modalLine")?.value?.trim() || "",
-        birth_date: document.getElementById("modalBirthDate")?.value?.trim() || null,
+        birth_date: convertThaiDateToISO(document.getElementById("modalBirthDate")?.value),
         citizen_id: document.getElementById("modalCitizenId")?.value?.trim() || "",
         address: document.getElementById("modalAddress")?.value?.trim() || "",
         allergy: document.getElementById("modalAllergy")?.value?.trim() || "ไม่มี",
@@ -11215,6 +11215,29 @@ window.saveCustomerToSupabase = async function(payload = {}) {
         return null;
     }
 };
+	function convertThaiDateToISO(dateStr) {
+    if (!dateStr) return null;
+
+    const raw = String(dateStr).trim();
+
+    // ถ้าเป็น format อยู่แล้ว เช่น 1996-11-29
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        return raw;
+    }
+
+    // รองรับ 29/11/2539 หรือ 29-11-2539
+    const parts = raw.split(/[\/-]/);
+    if (parts.length !== 3) return null;
+
+    let [day, month, year] = parts.map(x => String(x).trim());
+
+    if (!day || !month || !year) return null;
+
+    let y = parseInt(year, 10);
+    if (y > 2500) y -= 543; // พ.ศ. -> ค.ศ.
+
+    return `${String(y).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
 
 window.saveCustomerWithAlert = async function() {
     const firstName = document.getElementById("modalFirstName")?.value?.trim() || "";
@@ -11233,28 +11256,28 @@ window.saveCustomerWithAlert = async function() {
 
     const isEdit = !!window.editingCustomerId;
 
-    const payload = {
-        id: window.editingCustomerId || crypto.randomUUID(),
-        hn: document.getElementById("modalHN")?.value || `HN${Date.now()}`,
-        first_name: firstName,
-        last_name: lastName,
-        fullname: `${firstName} ${lastName}`.trim(),
-        nickname: document.getElementById("modalNickname")?.value || "",
-        phone: phone,
-        email: document.getElementById("modalEmail")?.value || "",
-        line_id: document.getElementById("modalLine")?.value || "",
-        birth_date: document.getElementById("modalBirthDate")?.value || null,
-        citizen_id: document.getElementById("modalCitizenId")?.value || "",
-        address: document.getElementById("modalAddress")?.value || "",
-        allergy: document.getElementById("modalAllergy")?.value || "ไม่มี",
-        branch: document.getElementById("modalBranch")?.value || "สาขาบางพลี",
-        status: document.getElementById("modalStatus")?.value || "ปกติ",
-        photo: window.currentPhotoData || "",
-        avatar_url: window.currentPhotoData || "",
-        created_at: isEdit
-            ? (window.activeCustomer?.created_at || new Date().toISOString())
-            : new Date().toISOString()
-    };
+   const payload = {
+    id: window.editingCustomerId || crypto.randomUUID(),
+    hn: document.getElementById("modalHN")?.value || `HN${Date.now()}`,
+    first_name: firstName,
+    last_name: lastName,
+    fullname: `${firstName} ${lastName}`.trim(),
+    nickname: document.getElementById("modalNickname")?.value?.trim() || "",
+    phone: phone,
+    email: document.getElementById("modalEmail")?.value?.trim() || "",
+    line_id: document.getElementById("modalLine")?.value?.trim() || "",
+    birth_date: convertThaiDateToISO(document.getElementById("modalBirthDate")?.value),
+    citizen_id: document.getElementById("modalCitizenId")?.value?.trim() || "",
+    address: document.getElementById("modalAddress")?.value?.trim() || "",
+    allergy: document.getElementById("modalAllergy")?.value?.trim() || "ไม่มี",
+    branch: document.getElementById("modalBranch")?.value || "สาขาบางพลี",
+    status: document.getElementById("modalStatus")?.value || "ปกติ",
+    photo: window.currentPhotoData || "",
+    avatar_url: window.currentPhotoData || "",
+    created_at: isEdit
+        ? (window.activeCustomer?.created_at || new Date().toISOString())
+        : new Date().toISOString()
+};
 
     const saved = await window.saveCustomerToSupabase(payload);
     if (!saved) return;

@@ -3,22 +3,20 @@
 <html lang="th">
 
 <head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACE Clinic | Management System</title>
+
 <script src="https://unpkg.com/lucide@latest"></script>
-
-    <meta charset="UTF-8">
-
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>ACE Clinic | Management System</title>
-
-    <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
+
 /* 🎯 [ส่วนสำคัญ] ป้องกันหน้าจอซ้อน: ล็อกหน้า Login ให้บังหน้าอื่น 100% */
 #loginPage {
     position: fixed;
@@ -253,18 +251,39 @@ tbody tr:hover{background:#FAFAFF!important;}
 <body>
 
 <div id="customerModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-[10000] animate-in fade-in duration-300">
-    <div class="bg-white w-full max-w-6xl rounded-[2rem] shadow-2xl overflow-hidden border-2 border-pink-200 font-normal">
+    <div class="relative z-10 bg-white w-full max-w-6xl rounded-[2rem] shadow-2xl overflow-hidden border-2 border-pink-200 font-normal flex flex-col max-h-[90vh] pointer-events-auto">
         
-        <div class="bg-white p-6 flex justify-between items-center border-b-2 border-pink-100">
+       <div class="bg-white p-6 flex justify-between items-center border-b-2 border-pink-100 relative z-[9999] shrink-0 pointer-events-auto">
             <h2 id="modalTitle" class="text-2xl font-bold text-slate-800 uppercase tracking-tight">เพิ่มลูกค้าใหม่</h2>
-            <div class="flex gap-2">
-                <button onclick="alert('อ่านข้อมูลบัตร...')" class="bg-[#D48197] text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:brightness-110 transition-all uppercase shadow-md">อ่านข้อมูลบัตร</button>
-                  <button type="button" onclick="window.saveCustomerWithAlert()" class="bg-[#D48197] text-white px-8 py-2.5 rounded-xl text-xs font-bold hover:brightness-110 transition-all uppercase shadow-md">บันทึกข้อมูล</button>
-                <button onclick="closeModal()" class="bg-[#888] text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:bg-slate-700 transition-all uppercase shadow-md">ยกเลิก</button>
+
+           <div class="relative z-[9999] flex gap-2 pointer-events-auto">
+                <button
+                    type="button"
+                    onclick="alert('อ่านข้อมูลบัตร...')"
+                    class="bg-[#D48197] text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:brightness-110 transition-all uppercase shadow-md"
+                >
+                    อ่านข้อมูลบัตร
+                </button>
+
+                <button
+    type="button"
+    onclick="window.saveCustomer()"
+    class="bg-[#D48197] text-white px-8 py-2.5 rounded-xl text-xs font-bold hover:brightness-110 transition-all uppercase shadow-md"
+>
+    บันทึกข้อมูล
+</button>
+
+<button
+    type="button"
+    onclick="window.closeModal()"
+    class="bg-[#888] text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:bg-slate-700 transition-all uppercase shadow-md"
+>
+    ยกเลิก
+</button>
             </div>
         </div>
 
-        <div class="p-8 max-h-[80vh] overflow-y-auto bg-[#FDF7F8] text-left">
+        <div class="relative z-10 p-8 overflow-y-auto bg-[#FDF7F8] text-left flex-1 min-h-0">
             <div class="flex flex-col lg:flex-row gap-10">
                 
                 <div class="w-full lg:w-[300px] space-y-4">
@@ -304,8 +323,7 @@ tbody tr:hover{background:#FAFAFF!important;}
                         <div class="col-span-2 space-y-1">
                             <label class="text-[11px] font-bold text-[#D48197] uppercase">รหัสลูกค้า (HN)</label>
                             <input id="modalHN" type="text" class="w-full bg-slate-50 border-2 border-slate-200 p-3 rounded-xl text-base font-black text-[#D48197]" readonly>
-                        </div>
- </div>
+         </div>
  <div class="col-span-2 space-y-1">
             <label class="text-[11px] font-bold text-[#D48197] uppercase">เลขบัตรประจำตัวประชาชน</label>
             <input id="modalCitizenId" type="text" inputmode="numeric" maxlength="13"
@@ -313,16 +331,19 @@ tbody tr:hover{background:#FAFAFF!important;}
                 class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900 outline-none focus:bg-pink-50 transition-all">
         </div>
 
-                        <div class="col-span-2 space-y-1">
-                            <label class="text-[11px] font-bold text-[#D48197] uppercase">👤 เซลล์ผู้ดูแล (พิมพ์ชื่อเพื่อล็อกคอมมิชชั่น)</label>
-                            <input type="text" id="modalSeller" 
-                                placeholder="ระบุชื่อพนักงานที่ดูแล..." 
-                                class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900 bg-white outline-none focus:border-[#D48197] disabled:bg-slate-100 disabled:text-slate-400 transition-all">
-                                               
-                        <div class="space-y-1">
-                            <label class="text-[11px] font-bold text-[#D48197] uppercase">ชื่อจริง *</label>
-                            <input id="modalFirstName" type="text" class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900 focus:bg-pink-50 outline-none transition-all">
-                        </div>
+   <div class="space-y-1">
+    <label class="text-[11px] font-bold text-[#D48197] uppercase">
+        👤 เซลล์ผู้ดูแล
+    </label>
+    <input type="text" id="modalSeller"
+        placeholder="ระบุชื่อเซลล์ที่ดูแล..."
+        class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900 bg-white outline-none focus:bg-pink-50 focus:border-[#D48197] transition-all">
+</div>
+
+<div class="space-y-1">
+    <label class="text-[11px] font-bold text-[#D48197] uppercase">ชื่อจริง *</label>
+    <input id="modalFirstName" type="text" class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900 focus:bg-pink-50 outline-none transition-all">
+</div>
                         <div class="space-y-1">
                             <label class="text-[11px] font-bold text-[#D48197] uppercase">นามสกุล *</label>
                             <input id="modalLastName" type="text" class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900 focus:bg-pink-50 outline-none transition-all">
@@ -332,12 +353,11 @@ tbody tr:hover{background:#FAFAFF!important;}
                             <input id="modalNickname" type="text" class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900 outline-none">
                         </div>
                          <div class="space-y-1">
-            <label class="text-[11px] font-bold text-[#D48197] uppercase">วันเดือนปีเกิด *</label>
-            <input id="modalBirthDate" type="text" inputmode="numeric"
-                placeholder="เช่น 12/03/2569"
-                class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900 outline-none focus:bg-pink-50 transition-all">
-            <p class="text-[10px] text-slate-400 font-bold">พิมพ์เองได้ เช่น 12/03/2569 (พ.ศ.)</p>
-        </div>
+    <label class="text-[11px] font-bold text-[#D48197] uppercase">วันเดือนปีเกิด</label>
+    <input id="modalBirthDate" type="text" inputmode="numeric"
+        placeholder="เช่น 12/03/2569"
+        class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900 outline-none focus:bg-pink-50 transition-all">
+</div>
 
                         <div class="col-span-2 space-y-1">
                             <label class="text-[11px] font-bold text-[#D48197] uppercase">เบอร์โทรศัพท์มือถือ *</label>
@@ -621,6 +641,15 @@ window.normalizeBranch = function(branch = '') {
     return `สาขา${raw}`;
 };
 
+window.getBranchCode = function(branch) {
+    const map = {
+        'สาขาบางพลี': 'BP',
+        'สาขาชลบุรี': 'CB',
+        'สาขาอุดมสุข': 'UD'
+    };
+    return map[branch] || 'OT'; // OT = other
+};
+
 window.getUserHomeBranch = function() {
     const user = window.getCurrentUserSafe();
     const raw = user.homeBranch || user.branch || 'สาขาบางพลี';
@@ -732,9 +761,6 @@ window.getCustomers = function() {
     }
 };
 
-window.saveCustomers = function(data = []) {
-    localStorage.setItem('customerDB', JSON.stringify(data));
-};
 
 // ส่วนอื่นของระบบยังคงเดิมตามเงื่อนไข
 const menuConfig = [
@@ -1876,6 +1902,10 @@ body.innerHTML = `
     if(typeof renderBillItems === 'function') renderBillItems();
 };
 
+window.saveCustomers = function(data = []) {
+    localStorage.setItem('customerDB', JSON.stringify(data));
+};
+
 // --- ฟังก์ชันบันทึกข้อมูลลูกค้า (เชื่อมต่อ Supabase & ใช้ UUID) ---
 window.saveCustomer = async function () {
     const firstName = document.getElementById("modalFirstName")?.value?.trim() || "";
@@ -1885,25 +1915,30 @@ window.saveCustomer = async function () {
     const branch = window.normalizeBranch ? window.normalizeBranch(branchRaw) : branchRaw;
 
     if (!firstName || !phone) {
-        Swal.fire({
-            icon: 'error',
+        await Swal.fire({
+            icon: 'warning',
             title: 'ข้อมูลไม่ครบ',
-            text: 'กรุณากรอกชื่อและเบอร์โทรศัพท์นะคะ'
+            text: 'กรุณากรอกชื่อจริงและเบอร์โทรศัพท์ค่ะ',
+            confirmButtonColor: '#D48197'
         });
         return false;
     }
 
     const hn = (document.getElementById("modalHN")?.value || "").trim();
     if (!hn || hn === "กำลังโหลด...") {
-        Swal.fire({
+        await Swal.fire({
             icon: 'warning',
             title: 'กรุณารอสักครู่',
-            text: 'ระบบกำลังสร้างรหัส HN'
+            text: 'ระบบกำลังสร้างรหัส HN',
+            confirmButtonColor: '#D48197'
         });
         return false;
     }
 
     const isEdit = !!window.editingCustomerId;
+
+    const oldPhoto = isEdit ? (window.activeCustomer?.photo || "") : "";
+    const oldAvatar = isEdit ? (window.activeCustomer?.avatar_url || window.activeCustomer?.photo || "") : "";
 
     const payload = {
         id: window.editingCustomerId || crypto.randomUUID(),
@@ -1915,48 +1950,81 @@ window.saveCustomer = async function () {
         phone: phone,
         email: document.getElementById("modalEmail")?.value?.trim() || "",
         line_id: document.getElementById("modalLine")?.value?.trim() || "",
-        birth_date: convertThaiDateToISO(document.getElementById("modalBirthDate")?.value),
+        birth_date: typeof convertThaiDateToISO === "function"
+            ? convertThaiDateToISO(document.getElementById("modalBirthDate")?.value)
+            : null,
         citizen_id: document.getElementById("modalCitizenId")?.value?.trim() || "",
         address: document.getElementById("modalAddress")?.value?.trim() || "",
         allergy: document.getElementById("modalAllergy")?.value?.trim() || "ไม่มี",
         branch: branch,
         status: document.getElementById("modalStatus")?.value || "ปกติ",
-        photo: window.currentPhotoData || "",
-        avatar_url: window.currentPhotoData || "",
+        photo: window.currentPhotoData || oldPhoto,
+        avatar_url: window.currentPhotoData || oldAvatar,
         created_at: isEdit
             ? (window.activeCustomer?.created_at || new Date().toISOString())
             : new Date().toISOString()
     };
 
     if (!window.supabaseClient) {
-        Swal.fire({
+        await Swal.fire({
             icon: 'error',
             title: 'ระบบยังไม่พร้อม',
-            text: 'ยังไม่พบการเชื่อมต่อ Supabase'
+            text: 'ยังไม่พบการเชื่อมต่อ Supabase',
+            confirmButtonColor: '#D48197'
         });
         return false;
     }
 
-    const { data, error } = await window.supabaseClient
-        .from("customers")
-        .upsert([{
-            ...payload,
-            updated_at: new Date().toISOString()
-        }], { onConflict: 'id' })
-        .select()
-        .single();
+    let data = null;
+    let error = null;
+
+    if (isEdit) {
+        ({ data, error } = await window.supabaseClient
+            .from("customers")
+            .update({
+                hn: payload.hn,
+                first_name: payload.first_name,
+                last_name: payload.last_name,
+                fullname: payload.fullname,
+                nickname: payload.nickname,
+                phone: payload.phone,
+                email: payload.email,
+                line_id: payload.line_id,
+                birth_date: payload.birth_date,
+                citizen_id: payload.citizen_id,
+                address: payload.address,
+                allergy: payload.allergy,
+                branch: payload.branch,
+                status: payload.status,
+                photo: payload.photo,
+                avatar_url: payload.avatar_url,
+                updated_at: new Date().toISOString()
+            })
+            .eq("id", payload.id)
+            .select()
+            .single());
+    } else {
+        ({ data, error } = await window.supabaseClient
+            .from("customers")
+            .insert([{
+                ...payload,
+                updated_at: new Date().toISOString()
+            }])
+            .select()
+            .single());
+    }
 
     if (error) {
-        console.error("saveCustomer error:", error);
-        Swal.fire({
-            icon: 'error',
-            title: 'บันทึกไม่สำเร็จ',
-            text: error.message
-        });
-        return false;
-    }
+    console.error("saveCustomer error:", error);
+    await Swal.fire({
+        icon: 'error',
+        title: 'บันทึกไม่สำเร็จ',
+        text: error.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล',
+        confirmButtonColor: '#D48197'
+    });
+    return false;
+}
 
-    // sync ลง localStorage เพื่อให้ระบบเดิมยังทำงานได้
     let customerDB = [];
     try {
         customerDB = window.getCustomers() || [];
@@ -1976,7 +2044,7 @@ window.saveCustomer = async function () {
     window.activeCustomer = data;
     window.editingCustomerId = null;
 
-    Swal.fire({
+    await Swal.fire({
         icon: 'success',
         title: 'บันทึกสำเร็จ!',
         text: isEdit ? 'อัปเดตข้อมูลลูกค้าเรียบร้อยแล้วค่ะ' : 'เพิ่มลูกค้าใหม่เรียบร้อยแล้วค่ะ',
@@ -1984,7 +2052,10 @@ window.saveCustomer = async function () {
         showConfirmButton: false
     });
 
-    if (typeof window.closeModal === 'function') window.closeModal();
+    if (typeof window.closeModal === 'function') {
+        window.closeModal();
+    }
+
     if (typeof window.applyCustomerFilter === 'function') {
         await window.applyCustomerFilter();
     }
@@ -2239,41 +2310,35 @@ window.prepareAndPrintOPD = function() {
     }
     window.print();
 };
+window.deleteTreatmentRecord = async function(customerId, recordId) {
+    if (!confirm("คุณต้องการลบบันทึกการรักษานี้ใช่หรือไม่?")) return;
 
-window.deleteTreatmentRecord = function(customerId, recordId) {
-    if (confirm("คุณต้องการลบบันทึกการรักษานี้ใช่หรือไม่?")) {
-        const customerDB = window.getCustomers() || [];
-        const cIdx = customerDB.findIndex(c => String(c.id || '') === String(customerId || ''));
+    try {
+        const { error } = await window.supabaseClient
+            .from('treatments')
+            .delete()
+            .eq('id', recordId)
+            .eq('customer_id', customerId);
 
-        if (cIdx !== -1 && customerDB[cIdx].treatments) {
-            const rIdx = customerDB[cIdx].treatments.findIndex(r => String(r.id) === String(recordId));
-            if (rIdx !== -1) {
-                customerDB[cIdx].treatments.splice(rIdx, 1);
-                window.saveCustomers(customerDB);
-
-                if (typeof window.viewCustomerDetailById === 'function') {
-                    window.viewCustomerDetailById(customerId);
-                }
-            }
+        if (error) {
+            console.error('deleteTreatmentRecord error:', error);
+            alert("❌ ไม่สามารถลบบันทึกการรักษาได้");
+            return;
         }
+
+        alert("✅ ลบบันทึกการรักษาเรียบร้อยแล้ว");
+
+        if (typeof window.viewCustomerDetailById === 'function') {
+            await window.viewCustomerDetailById(customerId);
+        }
+    } catch (e) {
+        console.error('deleteTreatmentRecord catch:', e);
+        alert("❌ เกิดข้อผิดพลาดในการลบข้อมูล");
     }
 };
 
 /* --- CLEAN CUSTOMER SYSTEM (IIFE) --- */
 (function () {
-  function syncCustomerDB(nextDb) {
-    window.customerDB = Array.isArray(nextDb) ? nextDb : [];
-    localStorage.setItem("customerDB", JSON.stringify(window.customerDB));
-    return window.customerDB;
-  }
-
-  function getCustomerDB() {
-  if (!Array.isArray(window.customerDB)) {
-    window.customerDB = JSON.parse(localStorage.getItem("customerDB")) || [];
-  }
-  return window.customerDB;
-}
-
   function escapeHtml(s) {
     return String(s ?? "")
       .replaceAll("&", "&amp;")
@@ -2283,30 +2348,8 @@ window.deleteTreatmentRecord = function(customerId, recordId) {
       .replaceAll("'", "&#039;");
   }
 
-window.editingCustomerId = null;
-let currentPhotoData = "";
-
-// ดึงตัวเลข Running ล่าสุด
-let hnRunning = localStorage.getItem("hnRunning")
-    ? parseInt(localStorage.getItem("hnRunning"), 10)
-    : 1;
-
-// สร้างรหัส HN (เช่น HN690001)
-function getNextHNString() {
-    const thaiYear = (new Date().getFullYear() + 543).toString().slice(-2);
-    const runningNumber = String(hnRunning).padStart(4, "0");
-    return "HN" + thaiYear + runningNumber;
-}
-
-
-
-  function commitHNRunning() {
-    // 🔒 รันเลข HN ต่อเมื่อเป็นการ "เพิ่มใหม่" เท่านั้น (editingHN ต้องเป็น null)
-    if (!window.editingCustomerId) {
-        hnRunning++;
-        localStorage.setItem("hnRunning", String(hnRunning));
-    }
-}
+  window.editingCustomerId = null;
+ window.currentPhotoData = "";
 
   function ensureCustomerEnhancements() {
     const modal = document.getElementById("customerModal");
@@ -2360,11 +2403,11 @@ function getNextHNString() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = function (e) {
-      currentPhotoData = e.target.result || "";
+      window.currentPhotoData = e.target.result || "";
       const preview = document.getElementById("photoPreview");
       const placeholder = document.getElementById("uploadPlaceholder");
       if (preview) {
-        preview.src = currentPhotoData;
+        preview.src = window.currentPhotoData;
         preview.classList.remove("hidden");
       }
       if (placeholder) placeholder.classList.add("hidden");
@@ -2414,101 +2457,60 @@ function getNextHNString() {
     }
   };
 
-  window.clearModal = function () {
+  
+window.clearModal = function () {
     const ids = [
-      "modalHN","modalFirstName","modalLastName","modalNickname","modalBirthDate",
-      "modalPhone","modalEmail","modalLine","modalAllergy","modalChronic",
-      "modalCitizenId","modalAddress","modalSeller"
+        "modalHN", "modalFirstName", "modalLastName", "modalNickname", "modalBirthDate",
+        "modalPhone", "modalEmail", "modalLine", "modalAllergy", "modalChronic",
+        "modalCitizenId", "modalAddress", "modalSeller"
     ];
+
     ids.forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) el.value = "";
+        const el = document.getElementById(id);
+        if (el) el.value = "";
     });
 
     const branch = document.getElementById("modalBranch");
     if (branch) branch.value = "สาขาบางพลี";
+
     const status = document.getElementById("modalStatus");
     if (status) status.value = "ปกติ";
 
     const seller = document.getElementById("modalSeller");
     if (seller) {
-      seller.disabled = false;
-      seller.classList.remove("bg-slate-100", "text-slate-400");
+        seller.disabled = false;
+        seller.classList.remove("bg-slate-100", "text-slate-400");
     }
 
     const preview = document.getElementById("photoPreview");
     const placeholder = document.getElementById("uploadPlaceholder");
     if (preview) {
-      preview.src = "";
-      preview.classList.add("hidden");
+        preview.src = "";
+        preview.classList.add("hidden");
     }
-    if (placeholder) placeholder.classList.remove("hidden");
+    if (placeholder) {
+        placeholder.classList.remove("hidden");
+    }
 
-     
- const photoInput = document.getElementById("modalPhotoInput");
-if (photoInput) photoInput.value = "";
+    const photoInput = document.getElementById("modalPhotoInput");
+    if (photoInput) photoInput.value = "";
 
-const parseBox = document.getElementById("parseBox");
-if (parseBox) parseBox.value = "";
+    const parseBox = document.getElementById("parseBox");
+    if (parseBox) parseBox.value = "";
 
-currentPhotoData = "";
-
-// ✅ ใช้ ID แทน HN
-window.editingCustomerId = null;
+    window.currentPhotoData = "";
+    window.editingCustomerId = null;
 };
 
 window.closeModal = function () {
     const modal = document.getElementById("customerModal");
     if (!modal) return;
+
     modal.classList.add("hidden");
     modal.classList.remove("flex");
-    window.clearModal();
-};
-	
-window.generateHN = function () {
-    const el = document.getElementById("modalHN");
-    if (!el) return;
 
-    if (!window.editingCustomerId) {
-        el.value = "HN" + Date.now();
-    }
-};
-
-	window.getNextHNFromSupabase = async function() {
-    try {
-        const thaiYear = (new Date().getFullYear() + 543).toString().slice(-2);
-
-        if (!window.supabaseClient) {
-            return `HN${thaiYear}0001`;
-        }
-
-        const { data, error } = await window.supabaseClient
-            .from('customers')
-            .select('hn');
-
-        if (error) {
-            console.error('getNextHNFromSupabase error:', error);
-            return `HN${thaiYear}0001`;
-        }
-
-        const sameYearHN = (data || [])
-            .map(x => String(x.hn || '').trim())
-            .filter(hn => /^HN\d{6}$/.test(hn) && hn.startsWith(`HN${thaiYear}`));
-
-        let maxRunning = 0;
-
-        sameYearHN.forEach(hn => {
-            const runningPart = parseInt(hn.slice(-4), 10);
-            if (!isNaN(runningPart) && runningPart > maxRunning) {
-                maxRunning = runningPart;
-            }
-        });
-
-        return `HN${thaiYear}${String(maxRunning + 1).padStart(4, '0')}`;
-    } catch (e) {
-        console.error('getNextHNFromSupabase catch:', e);
-        const thaiYear = (new Date().getFullYear() + 543).toString().slice(-2);
-        return `HN${thaiYear}0001`;
+    if (typeof window.clearModal === "function") {
+        window.clearModal();
     }
 };
 
@@ -2529,33 +2531,78 @@ window.openModalForAdd = async function () {
     }
 
     window.clearModal();
+    window.bindBranchHNChange();
 
     const hnInput = document.getElementById("modalHN");
     if (hnInput) {
-        hnInput.value = "กำลังโหลด...";
+        hnInput.value = "";
     }
 
-    try {
-        const nextHN = await window.getNextHNFromSupabase();
-        if (hnInput) {
-            hnInput.value = nextHN || "";
-        }
-    } catch (e) {
-        console.error("openModalForAdd HN error:", e);
-        if (hnInput) {
-            hnInput.value = "";
-        }
-    }
+    await window.generateHN();
 };
-  // 🎯 เปิด modal แก้ไขลูกค้าแบบ ID-based
+
+window.generateHN = async function () {
+    const el = document.getElementById("modalHN");
+    if (!el || window.editingCustomerId) return;
+
+    const branch = document.getElementById("modalBranch")?.value || "สาขาบางพลี";
+    const branchCode = window.getBranchCode(branch);
+    const thaiYear = (new Date().getFullYear() + 543).toString().slice(-2);
+
+    const { data, error } = await window.supabaseClient
+        .from("customers")
+        .select("hn")
+        .eq("branch", window.normalizeBranch(branch));
+
+    if (error) {
+        console.error("generateHN error:", error);
+        el.value = `HN-${branchCode}-${thaiYear}0001`;
+        return;
+    }
+
+    const list = Array.isArray(data) ? data : [];
+
+    const sameBranchSameYear = list
+        .map(x => String(x.hn || "").trim())
+        .filter(hn => hn.startsWith(`HN-${branchCode}-${thaiYear}`));
+
+    let maxRunning = 0;
+
+    sameBranchSameYear.forEach(hn => {
+        const runningPart = parseInt(hn.slice(-4), 10);
+        if (!isNaN(runningPart) && runningPart > maxRunning) {
+            maxRunning = runningPart;
+        }
+    });
+
+    const nextRunning = String(maxRunning + 1).padStart(4, "0");
+    el.value = `HN-${branchCode}-${thaiYear}${nextRunning}`;
+};
+
+window.bindBranchHNChange = function () {
+    const branchEl = document.getElementById("modalBranch");
+    if (!branchEl || branchEl.dataset.hnBound === "1") return;
+
+    branchEl.addEventListener("change", async function () {
+        if (!window.editingCustomerId) {
+            await window.generateHN();
+        }
+    });
+
+    branchEl.dataset.hnBound = "1";
+};
+
+ // 🎯 เปิด modal แก้ไขลูกค้าแบบ ID-based
 window.openModalForEdit = function (customerId) {
     ensureCustomerEnhancements();
 
-    const db = getCustomerDB();
+    const db = window.currentCustomerFilteredData?.length
+        ? window.currentCustomerFilteredData
+        : (typeof window.getCustomers === "function" ? window.getCustomers() : []);
+
     const c = db.find(item => String(item.id || "") === String(customerId || ""));
     if (!c) return;
 
-    // ✅ เก็บ ID ที่กำลังแก้ไขไว้
     window.editingCustomerId = c.id;
 
     const modal = document.getElementById("customerModal");
@@ -2570,21 +2617,36 @@ window.openModalForEdit = function (customerId) {
         title.className = "text-2xl font-bold text-slate-800 tracking-tight";
     }
 
-    document.getElementById("modalHN").value = c.hn || "";
-    document.getElementById("modalFirstName").value = c.first_name || c.firstName || (c.fullname || "").split(" ")[0] || "";
-    document.getElementById("modalLastName").value = c.last_name || c.lastName || (c.fullname || "").split(" ").slice(1).join(" ") || "";
-    document.getElementById("modalNickname").value = c.nickname || "";
+    const hn = document.getElementById("modalHN");
+    if (hn) hn.value = c.hn || "";
+
+    const firstName = document.getElementById("modalFirstName");
+    if (firstName) {
+        firstName.value = c.first_name || c.firstName || (c.fullname || "").split(" ")[0] || "";
+    }
+
+    const lastName = document.getElementById("modalLastName");
+    if (lastName) {
+        lastName.value = c.last_name || c.lastName || (c.fullname || "").split(" ").slice(1).join(" ") || "";
+    }
+
+    const nickname = document.getElementById("modalNickname");
+    if (nickname) nickname.value = c.nickname || "";
 
     const bd = document.getElementById("modalBirthDate");
     if (bd) bd.value = c.birth_date || c.birthDate || "";
 
-    document.getElementById("modalPhone").value = c.phone || "";
-    document.getElementById("modalEmail").value = c.email || "";
+    const phone = document.getElementById("modalPhone");
+    if (phone) phone.value = c.phone || "";
+
+    const email = document.getElementById("modalEmail");
+    if (email) email.value = c.email || "";
 
     const ln = document.getElementById("modalLine");
     if (ln) ln.value = c.line_id || c.line || "";
 
-    document.getElementById("modalAllergy").value = c.allergy || "";
+    const allergy = document.getElementById("modalAllergy");
+    if (allergy) allergy.value = c.allergy || "";
 
     const chronic = document.getElementById("modalChronic");
     if (chronic) chronic.value = c.chronic || "";
@@ -2592,7 +2654,8 @@ window.openModalForEdit = function (customerId) {
     const cid = document.getElementById("modalCitizenId");
     if (cid) cid.value = c.citizen_id || c.citizenId || "";
 
-    document.getElementById("modalAddress").value = c.address || "";
+    const address = document.getElementById("modalAddress");
+    if (address) address.value = c.address || "";
 
     const branch = document.getElementById("modalBranch");
     if (branch) branch.value = c.branch || "สาขาบางพลี";
@@ -2613,6 +2676,7 @@ window.openModalForEdit = function (customerId) {
     }
 
     window.currentPhotoData = c.photo || c.avatar_url || "";
+
     const preview = document.getElementById("photoPreview");
     const placeholder = document.getElementById("uploadPlaceholder");
 
@@ -2626,163 +2690,6 @@ window.openModalForEdit = function (customerId) {
             preview.classList.add("hidden");
             placeholder.classList.remove("hidden");
         }
-    }
-};
-
-window.saveCustomer = async function () {
-    if (!window.requirePermission(2, 'บันทึกข้อมูลลูกค้า')) return;
-
-    const db = getCustomerDB();
-    const firstName = document.getElementById("modalFirstName")?.value?.trim() || "";
-    const lastName = document.getElementById("modalLastName")?.value?.trim() || "";
-    const phone = document.getElementById("modalPhone")?.value?.trim() || "";
-
-    if (!firstName || !lastName || !phone) {
-        alert("กรุณากรอกข้อมูลที่มี *");
-        return;
-    }
-
-    // ✅ ใช้ ID เป็นหลัก
-    let cIdx = -1;
-    if (window.editingCustomerId) {
-        cIdx = db.findIndex(c => String(c.id || "") === String(window.editingCustomerId || ""));
-    }
-
-    let seller = document.getElementById("modalSeller")?.value?.trim() || "";
-    if (cIdx !== -1) {
-        seller = db[cIdx].seller || db[cIdx].sellerName || db[cIdx].seller_name || seller;
-    }
-
-    const payload = {
-        id: cIdx !== -1
-            ? (db[cIdx].id || window.editingCustomerId || crypto.randomUUID())
-            : crypto.randomUUID(),
-
-        hn: document.getElementById("modalHN")?.value || getNextHNString(),
-
-        first_name: firstName,
-        last_name: lastName,
-        fullname: `${firstName} ${lastName}`.trim(),
-
-        nickname: document.getElementById("modalNickname")?.value || "",
-        birth_date: document.getElementById("modalBirthDate")?.value || "",
-        phone: phone,
-        citizen_id: document.getElementById("modalCitizenId")?.value || "",
-        address: document.getElementById("modalAddress")?.value || "",
-        line_id: document.getElementById("modalLine")?.value || "",
-        email: document.getElementById("modalEmail")?.value || "",
-        branch: document.getElementById("modalBranch")?.value || "สาขาบางพลี",
-        status: document.getElementById("modalStatus")?.value || "ปกติ",
-        allergy: document.getElementById("modalAllergy")?.value || "ไม่มี",
-        chronic: document.getElementById("modalChronic")?.value || "",
-        seller: seller,
-        seller_name: seller,
-        photo: window.currentPhotoData || (cIdx !== -1 ? (db[cIdx].photo || db[cIdx].avatar_url || "") : ""),
-        avatar_url: window.currentPhotoData || (cIdx !== -1 ? (db[cIdx].avatar_url || db[cIdx].photo || "") : ""),
-
-        created_at: cIdx !== -1
-            ? (db[cIdx].created_at || db[cIdx].createdAt || new Date().toISOString())
-            : new Date().toISOString(),
-
-        courses: cIdx !== -1 ? (db[cIdx].courses || []) : [],
-        files: cIdx !== -1 ? (db[cIdx].files || []) : [],
-        treatments: cIdx !== -1 ? (db[cIdx].treatments || []) : []
-    };
-
-    try {
-        // 1) บันทึกลง Supabase ก่อน
-        if (!window.supabaseClient) {
-            Swal.fire('ข้อผิดพลาด', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
-            return;
-        }
-
-        let savedRow = null;
-
-        if (cIdx !== -1) {
-            const { data, error } = await window.supabaseClient
-                .from('customers')
-                .update({
-                    hn: payload.hn,
-                    first_name: payload.first_name,
-                    last_name: payload.last_name,
-                    fullname: payload.fullname,
-                    nickname: payload.nickname,
-                    birth_date: payload.birth_date || null,
-                    phone: payload.phone,
-                    citizen_id: payload.citizen_id,
-                    address: payload.address,
-                    line_id: payload.line_id,
-                    email: payload.email,
-                    branch: payload.branch,
-                    status: payload.status,
-                    allergy: payload.allergy,
-                    chronic: payload.chronic,
-                    seller: payload.seller,
-                    seller_name: payload.seller_name,
-                    photo: payload.photo,
-                    avatar_url: payload.avatar_url,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', payload.id)
-                .select()
-                .single();
-
-            if (error) {
-                console.error('update customer error:', error);
-                Swal.fire('บันทึกไม่สำเร็จ', error.message || 'ไม่สามารถอัปเดตข้อมูลลูกค้าได้', 'error');
-                return;
-            }
-
-            savedRow = data;
-        } else {
-            const { data, error } = await window.supabaseClient
-                .from('customers')
-                .insert([payload])
-                .select()
-                .single();
-
-            if (error) {
-                console.error('insert customer error:', error);
-                Swal.fire('บันทึกไม่สำเร็จ', error.message || 'ไม่สามารถเพิ่มข้อมูลลูกค้าได้', 'error');
-                return;
-            }
-
-            savedRow = data;
-            if (typeof commitHNRunning === "function") {
-                commitHNRunning();
-            }
-        }
-
-        // 2) sync localStorage เพื่อไม่ให้ระบบเดิมพัง
-        if (cIdx !== -1) {
-            db[cIdx] = { ...db[cIdx], ...savedRow };
-        } else {
-            db.push(savedRow);
-        }
-
-        syncCustomerDB(db);
-
-        // 3) reset state
-        window.activeCustomer = savedRow;
-        window.editingCustomerId = null;
-
-        window.closeModal();
-
-        Swal.fire({
-            icon: 'success',
-            title: 'บันทึกสำเร็จ',
-            text: cIdx !== -1 ? 'อัปเดตข้อมูลลูกค้าเรียบร้อยแล้วค่ะ' : 'เพิ่มลูกค้าใหม่เรียบร้อยแล้วค่ะ',
-            timer: 1500,
-            showConfirmButton: false
-        });
-
-        if (window.__customerLastTarget && typeof window.renderCustomerList === 'function') {
-            await window.renderCustomerList(window.__customerLastTarget);
-        }
-
-    } catch (e) {
-        console.error('saveCustomer catch:', e);
-        Swal.fire('ข้อผิดพลาด', e.message || 'ไม่สามารถบันทึกข้อมูลลูกค้าได้', 'error');
     }
 };
 
@@ -3329,8 +3236,7 @@ window.renderCustomerTable = function (data) {
         <tr class="border-b hover:bg-pink-50 transition">
           <td class="p-3 text-[10px]">${rowStart + index + 1}</td>
           <td class="p-3 text-center">
-            <img src="${c.photo || c.avatar_url || "https://via.placeholder.com/150"}" class="shadow-sm mx-auto"
-              style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid #D48197;">
+            <img src="${c.photo || c.avatar_url || "https://placehold.co/150"}" class="shadow-sm mx-auto"style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid #D48197;">
           </td>
           <td class="p-3 text-slate-400 font-bold">${c.createdAt || c.created_at || "-"}</td>
           <td class="p-3 font-bold text-slate-700">${c.hn || "-"}</td>
@@ -3517,16 +3423,10 @@ window.getNextCourseLabel = async function(customerId, courseName) {
 
 // 🎯 1. รายชื่อลูกค้าในตาราง (ID Based Security)
 window.getCustomerDBByBranch = function() {
-    let db = [];
-    try {
-        // ✅ ใช้ Helper ที่เราเตรียมไว้ใน Zone 1 เพื่อดึงข้อมูลจาก Cloud
-        db = window.getCustomers() || []; 
-    } catch (e) {
-        db = [];
-    }
+    let db = window.currentCustomerFilteredData || [];
 
     const user = window.getCurrentUserSafe();
-    // 🛡️ เช็คความปลอดภัยรายสาขาผ่าน ID พนักงาน
+
     if (user.role !== 'แอดมินหลัก' && !user.staffId && !user.id) {
         console.error("Security Breach: Missing Staff ID");
         return [];
@@ -3536,23 +3436,19 @@ window.getCustomerDBByBranch = function() {
     const homeBranch = window.getUserHomeBranch();
     const isAdmin = ['แอดมินหลัก', 'CEO'].includes(user.role);
 
-    // 1. ด่านความปลอดภัย: ห้ามดูข้ามสาขาถ้าไม่ใช่ Admin
     if (!isAdmin && viewingBranch !== homeBranch) {
         return [];
     }
 
-    // 2. แอดมิน/CEO ที่เลือก "ทุกสาขา"
     if (window.canViewAllBranches()) {
         return db;
     }
 
-    // 3. กรองข้อมูลเฉพาะสาขาที่เลือกผ่าน ID
     return window.filterByBranch(db, c => c.branch);
 };
 
-// 🎯 1.1 ค้นหาลูกค้าข้ามสาขา (Shared DB)
 window.getCustomerSharedDB = function() {
-    let db = window.getCustomers() || [];
+    let db = window.currentCustomerFilteredData || [];
     const user = window.getCurrentUserSafe();
     const viewingBranch = window.getCurrentViewingBranch();
     const homeBranch = window.getUserHomeBranch();
@@ -4612,11 +4508,11 @@ window.deleteAppointmentById = async function(appId) {
     }
 };
 
-// ✅ ฟังก์ชันหลัก: ลบด้วย ID (เชื่อมต่อ Supabase 100%)
+// ✅ ฟังก์ชันหลัก: ลบนัดหมายด้วย ID จาก Supabase
 window.deleteAppointmentById = async function(appId) {
     const { isConfirmed } = await Swal.fire({
         title: 'ยืนยันการลบ?',
-        html: `คุณต้องการลบข้อมูลนัดหมายนี้ออกจากระบบ Cloud ถาวรใช่หรือไม่?`,
+        html: 'คุณต้องการลบข้อมูลนัดหมายนี้ออกจากระบบ Cloud ถาวรใช่หรือไม่?',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#D48197',
@@ -4625,32 +4521,52 @@ window.deleteAppointmentById = async function(appId) {
         customClass: { popup: 'rounded-[2.5rem]' }
     });
 
-    if (isConfirmed) {
-        // 🎯 ลบข้อมูลที่ Supabase โดยใช้ ID (Primary Key)
+    if (!isConfirmed) return;
+
+    try {
+        if (!window.supabaseClient) {
+            Swal.fire('ผิดพลาด', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+            return;
+        }
+
         const { error } = await window.supabaseClient
             .from('appointments')
             .delete()
             .eq('id', appId);
 
         if (error) {
-            console.error("Delete error:", error);
-            return Swal.fire('ผิดพลาด', 'ไม่สามารถลบข้อมูลได้ค่ะ', 'error');
+            console.error('Delete appointment error:', error);
+            Swal.fire('ผิดพลาด', 'ไม่สามารถลบข้อมูลได้ค่ะ', 'error');
+            return;
         }
 
-        Swal.fire({ icon: 'success', title: 'ลบข้อมูลสำเร็จ', timer: 1000, showConfirmButton: false });
-        
-        if (typeof renderAppointmentPage === 'function') {
-            renderAppointmentPage(); // รีเฟรชหน้าตาราง
+        Swal.fire({
+            icon: 'success',
+            title: 'ลบข้อมูลสำเร็จ',
+            timer: 1000,
+            showConfirmButton: false
+        });
+
+        if (typeof window.renderAppointmentPage === 'function') {
+            await window.renderAppointmentPage();
         }
+    } catch (e) {
+        console.error('deleteAppointmentById catch:', e);
+        Swal.fire('ผิดพลาด', 'เกิดข้อผิดพลาดในการลบข้อมูล', 'error');
     }
 };
 
-// 🎯 ฟังก์ชันสำรอง (รองรับการเรียกผ่าน Index สำหรับระบบเก่า)
+// ✅ ฟังก์ชันสำรองสำหรับระบบเก่า (ถ้ายังมีจุดที่ส่ง index มา)
 window.deleteAppointment = function(index) {
-    let db = JSON.parse(localStorage.getItem('appointmentDB')) || [];
-    if (db[index]) {
-        // ✅ ส่ง ID จริงไปให้ฟังก์ชันลบหลักทำงาน
-        window.deleteAppointmentById(db[index].id || db[index].createdAt);
+    try {
+        const db = JSON.parse(localStorage.getItem('appointmentDB')) || [];
+        const row = db[index];
+        if (!row) return;
+
+        window.deleteAppointmentById(row.id || row.createdAt);
+    } catch (e) {
+        console.error('deleteAppointment fallback error:', e);
+        Swal.fire('ผิดพลาด', 'ไม่พบข้อมูลนัดหมายที่ต้องการลบ', 'error');
     }
 };
 
@@ -11230,17 +11146,37 @@ window.addEventListener('load', function() {
 /* =======================================================
    🔔 ระบบแจ้งเตือนอัจฉริยะ (เชื่อมต่อ Database)
    ======================================================= */
+window.getAppointments = function() {
+    try {
+        return JSON.parse(localStorage.getItem('appointmentDB')) || [];
+    } catch (e) {
+        return [];
+    }
+};
 
-// 1. ฟังก์ชันอัปเดตตัวเลข Badge (เรียกใช้ทุกครั้งที่โหลดหน้า)
-	window.updateNotificationBadges = function() {
-   	 const appointments = window.getAppointments();
-   	 const customers = window.getCustomers();
-    
+window.getCustomers = function() {
+    try {
+        return JSON.parse(localStorage.getItem('customerDB')) || [];
+    } catch (e) {
+        return [];
+    }
+};
+window.updateNotificationBadges = function() {
+    const appointments = typeof window.getAppointments === 'function'
+        ? window.getAppointments()
+        : [];
+
+    const customers = typeof window.getCustomers === 'function'
+        ? window.getCustomers()
+        : [];
+
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0]; // Format: YYYY-MM-DD
-    const todayThaiDayMonth = today.toLocaleDateString('th-TH', { day: 'numeric', month: 'numeric' }); // Format: d/m
+    const todayStr = today.toISOString().split('T')[0];
+    const todayThaiDayMonth = today.toLocaleDateString('th-TH', {
+        day: 'numeric',
+        month: 'numeric'
+    });
 
-    // 🎯 กรองนัดหมายที่มีในวันนี้
     const todayApps = appointments.filter(a => a.date === todayStr && a.status !== 'ยกเลิก');
     const notiEl = document.getElementById('notiCount');
     if (notiEl) {
@@ -11248,13 +11184,29 @@ window.addEventListener('load', function() {
         notiEl.classList.toggle('hidden', todayApps.length === 0);
     }
 
-    // 🎯 กรองลูกค้าที่เกิดวันนี้ (เทียบวัน/เดือน)
     const bdayToday = customers.filter(c => {
-        if (!c.birthDate) return false;
-        // รองรับ Format วันเกิดที่เป็น d/m/yyyy หรือ dd/mm/yyyy
-        const parts = c.birthDate.split('/');
-        const cDayMonth = parseInt(parts[0]) + '/' + parseInt(parts[1]);
-        return cDayMonth === todayThaiDayMonth;
+        const raw = String(c.birthDate || c.birth_date || '').trim();
+        if (!raw) return false;
+
+        if (raw.includes('/')) {
+            const parts = raw.split('/');
+            if (parts.length < 2) return false;
+            return `${parseInt(parts[0], 10)}/${parseInt(parts[1], 10)}` === todayThaiDayMonth;
+        }
+
+        if (raw.includes('-')) {
+            const d = new Date(raw);
+            if (isNaN(d.getTime())) return false;
+
+            const dm = d.toLocaleDateString('th-TH', {
+                day: 'numeric',
+                month: 'numeric'
+            });
+
+            return dm === todayThaiDayMonth;
+        }
+
+        return false;
     });
 
     const birthEl = document.getElementById('birthCount');
@@ -11266,7 +11218,10 @@ window.addEventListener('load', function() {
 
 // 2. ฟังก์ชันแสดงรายละเอียดนัดหมาย
 window.showAppointmentNotifications = function() {
-    const appointments = JSON.parse(localStorage.getItem('appointmentDB')) || [];
+    const appointments = typeof window.getAppointments === 'function'
+        ? window.getAppointments()
+        : [];
+
     const todayStr = new Date().toISOString().split('T')[0];
     const list = appointments.filter(a => a.date === todayStr);
 
@@ -11427,91 +11382,6 @@ window.saveCustomerToSupabase = async function(payload = {}) {
     return `${String(y).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-window.saveCustomerWithAlert = async function() {
-    const firstName = document.getElementById("modalFirstName")?.value?.trim() || "";
-    const lastName = document.getElementById("modalLastName")?.value?.trim() || "";
-    const phone = document.getElementById("modalPhone")?.value?.trim() || "";
-
-    if (!firstName || !phone) {
-        Swal.fire({
-            icon: 'warning',
-            title: 'ข้อมูลไม่ครบ',
-            text: 'กรุณากรอกชื่อจริงและเบอร์โทรศัพท์ค่ะ',
-            confirmButtonColor: '#D48197'
-        });
-        return;
-    }
-
-    const isEdit = !!window.editingCustomerId;
-
-    const hn = (document.getElementById("modalHN")?.value || "").trim();
-    if (!hn || hn === "กำลังโหลด...") {
-        Swal.fire({
-            icon: 'warning',
-            title: 'กรุณารอสักครู่',
-            text: 'ระบบกำลังสร้างรหัส HN',
-            confirmButtonColor: '#D48197'
-        });
-        return;
-    }
-
-    const payload = {
-        id: window.editingCustomerId || crypto.randomUUID(),
-        hn: hn,
-        first_name: firstName,
-        last_name: lastName,
-        fullname: `${firstName} ${lastName}`.trim(),
-        nickname: document.getElementById("modalNickname")?.value?.trim() || "",
-        phone: phone,
-        email: document.getElementById("modalEmail")?.value?.trim() || "",
-        line_id: document.getElementById("modalLine")?.value?.trim() || "",
-        birth_date: convertThaiDateToISO(document.getElementById("modalBirthDate")?.value),
-        citizen_id: document.getElementById("modalCitizenId")?.value?.trim() || "",
-        address: document.getElementById("modalAddress")?.value?.trim() || "",
-        allergy: document.getElementById("modalAllergy")?.value?.trim() || "ไม่มี",
-        branch: document.getElementById("modalBranch")?.value || "สาขาบางพลี",
-        status: document.getElementById("modalStatus")?.value || "ปกติ",
-        photo: window.currentPhotoData || "",
-        avatar_url: window.currentPhotoData || "",
-        created_at: isEdit
-            ? (window.activeCustomer?.created_at || new Date().toISOString())
-            : new Date().toISOString()
-    };
-
-    const saved = await window.saveCustomerToSupabase(payload);
-    if (!saved) return;
-
-    try {
-        let customerDB = JSON.parse(localStorage.getItem('customerDB')) || [];
-        const existingIndex = customerDB.findIndex(c => String(c.id || '') === String(saved.id || ''));
-
-        if (existingIndex !== -1) {
-            customerDB[existingIndex] = { ...customerDB[existingIndex], ...saved };
-        } else {
-            customerDB.unshift(saved);
-        }
-
-        localStorage.setItem('customerDB', JSON.stringify(customerDB));
-    } catch (e) {
-        console.warn('sync local customerDB failed:', e);
-    }
-
-    window.activeCustomer = saved;
-    window.editingCustomerId = null;
-
-    Swal.fire({
-        icon: 'success',
-        title: 'บันทึกสำเร็จ!',
-        text: isEdit ? 'อัปเดตข้อมูลลูกค้าเรียบร้อยแล้วค่ะ' : 'ข้อมูลลูกค้าถูกเก็บเรียบร้อยแล้วค่ะ',
-        timer: 1500,
-        showConfirmButton: false
-    });
-
-    if (typeof window.closeModal === 'function') window.closeModal();
-    if (typeof window.applyCustomerFilter === 'function') {
-        await window.applyCustomerFilter();
-    }
-};
 
 window.getStaff = function() {
     try {

@@ -979,19 +979,39 @@ window.doLogin = async function() {
             return;
         }
 
-        const authUser = data.user;
+       const authUser = data.user;
 
-        const user = {
-            id: authUser.id,
-            email: authUser.email || '',
-            username: authUser.email || '',
-            name: authUser.user_metadata?.full_name || authUser.email || 'User',
-            role: authUser.user_metadata?.role || 'แอดมินหลัก',
-            branch: authUser.user_metadata?.branch || 'ทุกสาขา',
-            homeBranch: authUser.user_metadata?.homeBranch || authUser.user_metadata?.branch || 'ทุกสาขา',
-            viewingBranch: authUser.user_metadata?.viewingBranch || authUser.user_metadata?.branch || 'ทุกสาขา',
-            phone: authUser.phone || ''
-        };
+let staffProfile = null;
+try {
+    const { data: staffData, error: staffError } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .eq('auth_user_id', authUser.id)
+        .single();
+
+    if (staffError) {
+        console.warn('staff profile not found:', staffError.message);
+    } else {
+        staffProfile = staffData;
+    }
+} catch (e) {
+    console.warn('load staff profile exception:', e);
+}
+
+const user = {
+    id: authUser.id,
+    authUserId: authUser.id,
+    email: authUser.email || '',
+    username: authUser.email || '',
+    name: staffProfile?.full_name || authUser.user_metadata?.full_name || authUser.email || 'User',
+    role: staffProfile?.role || authUser.user_metadata?.role || 'แอดมินหลัก',
+    branch: staffProfile?.branch || authUser.user_metadata?.branch || 'ทุกสาขา',
+    homeBranch: staffProfile?.branch || authUser.user_metadata?.homeBranch || authUser.user_metadata?.branch || 'ทุกสาขา',
+    viewingBranch: staffProfile?.branch || authUser.user_metadata?.viewingBranch || authUser.user_metadata?.branch || 'ทุกสาขา',
+    phone: staffProfile?.phone || authUser.phone || '',
+    staffProfileId: staffProfile?.id || null,
+    staffCode: staffProfile?.staff_code || ''
+};
 
         window.executeLogin(user, u, '');
     } catch (e) {
@@ -1030,7 +1050,6 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
     document.getElementById('loginPage')?.classList.add('hidden');
     document.getElementById('mainDashboard')?.classList.remove('hidden');
 
-    // ✅ วางตรงนี้
     if (typeof window.startCustomerRealtime === 'function') {
         window.startCustomerRealtime();
     }
@@ -1052,25 +1071,48 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
     if (document.getElementById('dropProfileRole')) document.getElementById('dropProfileRole').innerText = user.role || 'แอดมินหลัก';
     if (document.getElementById('dropProfileContact')) document.getElementById('dropProfileContact').innerText = user.phone || user.email || 'พนักงานคลินิก';
 
-    if (typeof renderMenuByRole === 'function') renderMenuByRole(user.role || 'แอดมินหลัก');
-    if (typeof renderBranchDropdown === 'function') renderBranchDropdown();
+    const continueLoginRender = async () => {
+        try {
+            if (typeof window.loadPermissionsFromSupabase === 'function') {
+                await window.loadPermissionsFromSupabase();
+            }
 
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('target') === 'ceo_board') {
-        loadPage(10, 'บอร์ดรวมทุกสาขา');
-        window.history.replaceState({}, document.title, window.location.pathname);
-    } else {
-        loadPage(1, 'Dashboard ภาพรวม');
-    }
+            if (typeof renderMenuByRole === 'function') {
+                renderMenuByRole(user.role || 'แอดมินหลัก');
+            }
 
-    Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'success',
-        title: `ยินดีต้อนรับ ${user.name || 'User'}`,
-        showConfirmButton: false,
-        timer: 1500
-    });
+            if (typeof renderBranchDropdown === 'function') {
+                renderBranchDropdown();
+            }
+
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('target') === 'ceo_board') {
+                loadPage(10, 'บอร์ดรวมทุกสาขา');
+                window.history.replaceState({}, document.title, window.location.pathname);
+            } else {
+                loadPage(1, 'Dashboard ภาพรวม');
+            }
+
+            Swal.fire({
+                toast: true,
+                position: 'top-end',
+                icon: 'success',
+                title: `ยินดีต้อนรับ ${user.name || 'User'}`,
+                showConfirmButton: false,
+                timer: 1500
+            });
+        } catch (e) {
+            console.error('continueLoginRender error:', e);
+            Swal.fire({
+                icon: 'error',
+                title: 'เข้าสู่ระบบไม่สำเร็จ',
+                text: e?.message || 'เกิดข้อผิดพลาดหลังเข้าสู่ระบบ',
+                confirmButtonColor: '#D48197'
+            });
+        }
+    };
+
+    continueLoginRender();
 };
 
 // --- 4. ออกจากระบบ ---
@@ -1302,6 +1344,18 @@ window.getCurrentUserSafe = function() {
     } catch (e) {
         return {};
     }
+};
+
+window.normalizeAuthLogin = function(input) {
+    const raw = String(input || '').trim().toLowerCase();
+    if (!raw) return '';
+
+    if (raw.includes('@')) return raw;
+
+    const digits = raw.replace(/\D/g, '');
+    if (digits) return `${digits}@ace.local`;
+
+    return `${raw}@ace.local`;
 };
 
 window.getUserHomeBranch = function() {
@@ -1906,8 +1960,31 @@ window.saveCustomers = function(data = []) {
     localStorage.setItem('customerDB', JSON.stringify(data));
 };
 
+
 // --- ฟังก์ชันบันทึกข้อมูลลูกค้า (เชื่อมต่อ Supabase & ใช้ UUID) ---
 window.saveCustomer = async function () {
+    const isEdit = !!window.editingCustomerId;
+
+    if (isEdit && !window.hasActionPermission('customer_edit')) {
+        await Swal.fire({
+            icon: 'warning',
+            title: 'ไม่มีสิทธิ์',
+            text: 'คุณไม่มีสิทธิ์แก้ไขข้อมูลลูกค้า',
+            confirmButtonColor: '#D48197'
+        });
+        return false;
+    }
+
+    if (!isEdit && !window.hasActionPermission('customer_create')) {
+        await Swal.fire({
+            icon: 'warning',
+            title: 'ไม่มีสิทธิ์',
+            text: 'คุณไม่มีสิทธิ์เพิ่มข้อมูลลูกค้า',
+            confirmButtonColor: '#D48197'
+        });
+        return false;
+    }
+
     const firstName = document.getElementById("modalFirstName")?.value?.trim() || "";
     const lastName = document.getElementById("modalLastName")?.value?.trim() || "";
     const phone = document.getElementById("modalPhone")?.value?.trim() || "";
@@ -1934,8 +2011,6 @@ window.saveCustomer = async function () {
         });
         return false;
     }
-
-    const isEdit = !!window.editingCustomerId;
 
     const oldPhoto = isEdit ? (window.activeCustomer?.photo || "") : "";
     const oldAvatar = isEdit ? (window.activeCustomer?.avatar_url || window.activeCustomer?.photo || "") : "";
@@ -2015,15 +2090,15 @@ window.saveCustomer = async function () {
     }
 
     if (error) {
-    console.error("saveCustomer error:", error);
-    await Swal.fire({
-        icon: 'error',
-        title: 'บันทึกไม่สำเร็จ',
-        text: error.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล',
-        confirmButtonColor: '#D48197'
-    });
-    return false;
-}
+        console.error("saveCustomer error:", error);
+        await Swal.fire({
+            icon: 'error',
+            title: 'บันทึกไม่สำเร็จ',
+            text: error.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล',
+            confirmButtonColor: '#D48197'
+        });
+        return false;
+    }
 
     let customerDB = [];
     try {
@@ -2515,6 +2590,16 @@ window.closeModal = function () {
 };
 
 window.openModalForAdd = async function () {
+    if (!window.hasActionPermission('customer_create')) {
+        await Swal.fire({
+            icon: 'warning',
+            title: 'ไม่มีสิทธิ์',
+            text: 'คุณไม่มีสิทธิ์เพิ่มข้อมูลลูกค้า',
+            confirmButtonColor: '#D48197'
+        });
+        return;
+    }
+
     ensureCustomerEnhancements();
     window.editingCustomerId = null;
 
@@ -2695,6 +2780,16 @@ window.openModalForEdit = function (customerId) {
 
 // 1. เปิด modal แก้ไขด้วย ID
 window.editCustomer = function (customerId) {
+    if (!window.hasActionPermission('customer_edit')) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'ไม่มีสิทธิ์',
+            text: 'คุณมีสิทธิ์ดูข้อมูลลูกค้าเท่านั้น',
+            confirmButtonColor: '#D48197'
+        });
+        return;
+    }
+
     window.openModalForEdit(customerId);
 };
 
@@ -2723,6 +2818,16 @@ document.addEventListener("click", function (e) {
 
 // 5. ลบข้อมูลลูกค้าโดยใช้ ID
 window.deleteCustomer = async function (customerId) {
+    if (!window.hasActionPermission('customer_delete')) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'ไม่มีสิทธิ์',
+            text: 'คุณไม่มีสิทธิ์ลบข้อมูลลูกค้า',
+            confirmButtonColor: '#D48197'
+        });
+        return;
+    }
+
     try {
         if (!window.supabaseClient) {
             Swal.fire('ข้อผิดพลาด', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
@@ -2778,6 +2883,7 @@ window.deleteCustomer = async function (customerId) {
         Swal.fire('ข้อผิดพลาด', e.message || 'ไม่สามารถลบข้อมูลได้', 'error');
     }
 };
+
   function ensureCustomerProfileModal() {
     if (document.getElementById("customerProfileModal")) return;
 
@@ -2834,11 +2940,31 @@ window.deleteCustomer = async function (customerId) {
 };
 
 document.getElementById("profileOPDBtn").onclick = () => {
-    const hn = wrap.dataset.hn; // เปลี่ยนจาก index เป็น hn
+    if (!window.hasActionPermission('customer_edit')) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'ไม่มีสิทธิ์',
+            text: 'คุณมีสิทธิ์ดูข้อมูลลูกค้าเท่านั้น',
+            confirmButtonColor: '#D48197'
+        });
+        return;
+    }
+
+    const hn = wrap.dataset.hn;
     if (hn) window.printOPD(hn);
 };
 
 document.getElementById("profileReceiptBtn").onclick = () => {
+    if (!window.hasActionPermission('customer_edit')) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'ไม่มีสิทธิ์',
+            text: 'คุณมีสิทธิ์ดูข้อมูลลูกค้าเท่านั้น',
+            confirmButtonColor: '#D48197'
+        });
+        return;
+    }
+
     const customerId = wrap.dataset.customerId;
     if (customerId) {
         const customerDB = window.getCustomers() || [];
@@ -2884,17 +3010,14 @@ wrap.addEventListener("click", (e) => {
         box.innerHTML = items.length ? `<div class="grid grid-cols-2 gap-4">${items.map(x => `<div class="border border-pink-50 rounded-2xl p-4 bg-white text-xs font-bold text-slate-500 shadow-sm">${x.name || x}</div>`).join("")}</div>` : `<div class="text-center py-10 text-slate-300 italic text-sm">ยังไม่มีเอกสารแนบค่ะ</div>`;
     }
 }
+
 /* =======================================================
     👁️ ฟังก์ชันดูข้อมูลลูกค้า (Stable ID 100% + UI Reset)
    ======================================================= */
 window.viewCustomerDetailById = function (customerId) {
-    // 1. ปิดเมนูจัดการ (Dropdown) ทุกตัวทันที เพื่อไม่ให้ขวาง UI
     document.querySelectorAll('[id^="action-menu-"]').forEach(m => m.classList.add('hidden'));
 
-    // 2. ดึงข้อมูลจากฐานข้อมูล
     const db = window.getCustomers() || [];
-
-    // ✅ ค้นหาด้วย ID เป็นหลัก
     const c = db.find(item => String(item.id || "").trim() === String(customerId || "").trim());
 
     if (!c) {
@@ -2902,31 +3025,27 @@ window.viewCustomerDetailById = function (customerId) {
         return;
     }
 
-    // 3. ตรวจสอบโครงสร้าง Modal (ถ้ามี)
     if (typeof ensureCustomerProfileModal === 'function') {
         ensureCustomerProfileModal();
     }
 
     const modal = document.getElementById("customerProfileModal");
     if (!modal) {
-        // กรณีไม่มี Modal ให้ใช้วิธีแสดงผลในหน้าหลักแทนเพื่อให้ระบบไม่ค้าง
         if (typeof renderProfileInMainContent === 'function') {
             renderProfileInMainContent(c);
         }
         return;
     }
 
-    // 4. เคลียร์ Tab Content เดิม
     const box = document.getElementById("profileTabContent");
     if (box) {
         box.innerHTML = '<div class="flex justify-center p-10"><span class="animate-spin text-3xl">⌛</span></div>';
     }
 
-    // 5. บันทึกข้อมูลคนไข้ปัจจุบันลง Global
     modal.dataset.customerId = String(c.id || "");
+    modal.dataset.hn = String(c.hn || "");
     window.activeCustomer = c;
 
-    // 6. อัปเดตข้อมูล Header
     const setEl = (id, val) => {
         const el = document.getElementById(id);
         if (el) el.textContent = val || "-";
@@ -2939,7 +3058,6 @@ window.viewCustomerDetailById = function (customerId) {
     setEl("profileBranch", c.branch || "-");
     setEl("profileSeller", c.seller || c.sellerName || c.seller_name || "-");
 
-    // 7. จัดการรูปภาพ
     const img = document.getElementById("profilePhoto");
     const ph = document.getElementById("profilePhotoPlaceholder");
     const photoSrc = c.photo || c.avatar_url || "";
@@ -2956,7 +3074,6 @@ window.viewCustomerDetailById = function (customerId) {
         }
     }
 
-    // 8. สั่งวาด Tab เริ่มต้น
     if (typeof window.switchProfileTab === 'function') {
         setTimeout(() => {
             window.switchProfileTab("info", c.id);
@@ -3244,19 +3361,40 @@ window.renderCustomerTable = function (data) {
           <td class="p-3 italic text-slate-500">${c.nickname || "-"}</td>
           <td class="p-3 font-mono">${c.phone || "-"}</td>
           <td class="p-3"><span class="bg-pink-50 text-[#D48197] px-2 py-1 rounded-lg text-[9px] font-black">${c.branch || "-"}</span></td>
-          <td class="p-3 text-center min-w-[160px] relative">
-            <div class="inline-flex items-center bg-[#D48197] text-white rounded-full p-1 shadow-md relative">
-              <button onclick="window.openModalForEdit('${safeId}')" class="px-4 py-1 text-[11px] font-bold border-r border-white/30 hover:bg-white/10 rounded-l-full">แก้ไข</button>
-              <button onclick="window.toggleActionMenu(event, '${safeId}')" class="px-2 py-1 text-[11px] hover:bg-white/10 rounded-r-full transition-all">▼</button>
+         <td class="p-3 text-center min-w-[160px] relative">
+  <div class="inline-flex items-center bg-[#D48197] text-white rounded-full p-1 shadow-md relative">
 
-              <div id="action-menu-${safeId}" class="hidden absolute right-0 top-10 w-52 bg-white border border-pink-100 rounded-2xl shadow-2xl z-[999] overflow-hidden text-left font-bold italic">
-                <button onclick="window.viewCustomerDetailById('${safeId}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-pink-50 border-b flex items-center gap-2">👁️ ดูข้อมูลลูกค้า</button>
-                <button onclick="window.printOPD('${safeId}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-pink-50 border-b flex items-center gap-2">📄 พิมพ์ OPD Card</button>
-                <button onclick="window.printLatestReceipt('${safeName}', '${safeHN}', '${safeId}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-blue-50 border-b flex items-center gap-2 font-bold">🖨️ พิมพ์ใบเสร็จล่าสุด</button>
-                <button onclick="window.deleteCustomer('${safeId}')" class="w-full p-4 text-[11px] text-red-500 hover:bg-red-50 flex items-center gap-2 font-bold">🗑️ ลบข้อมูลคนไข้</button>
-              </div>
-            </div>
-          </td>
+    ${window.hasActionPermission('customer_edit') ? `
+    <button onclick="window.openModalForEdit('${safeId}')" class="px-4 py-1 text-[11px] font-bold border-r border-white/30 hover:bg-white/10 rounded-l-full">แก้ไข</button>
+    ` : ``}
+
+    <button onclick="window.toggleActionMenu(event, '${safeId}')" class="px-2 py-1 text-[11px] hover:bg-white/10 rounded-r-full transition-all">▼</button>
+
+    <div id="action-menu-${safeId}" class="hidden absolute right-0 top-10 w-52 bg-white border border-pink-100 rounded-2xl shadow-2xl z-[999] overflow-hidden text-left font-bold italic">
+      
+      <button onclick="window.viewCustomerDetailById('${safeId}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-pink-50 border-b flex items-center gap-2">
+        👁️ ดูข้อมูลลูกค้า
+      </button>
+
+      ${window.hasActionPermission('customer_edit') ? `
+      <button onclick="window.printOPD('${safeId}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-pink-50 border-b flex items-center gap-2">
+        📄 พิมพ์ OPD Card
+      </button>
+      ` : ``}
+
+      <button onclick="window.printLatestReceipt('${safeName}', '${safeHN}', '${safeId}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-blue-50 border-b flex items-center gap-2 font-bold">
+        🖨️ พิมพ์ใบเสร็จล่าสุด
+      </button>
+
+      ${window.hasActionPermission('customer_delete') ? `
+      <button onclick="window.deleteCustomer('${safeId}')" class="w-full p-4 text-[11px] text-red-500 hover:bg-red-50 flex items-center gap-2 font-bold">
+        🗑️ ลบข้อมูลคนไข้
+      </button>
+      ` : ``}
+
+    </div>
+  </div>
+</td>
         </tr>
       `;
     });
@@ -3545,6 +3683,28 @@ window.getDoctorOptionsForProcess = function(selectedValue = '') {
 /* =====================
     Permission Helper
 ===================== */
+window.loadPermissionsFromSupabase = async function() {
+    if (!window.supabaseClient) return {};
+
+    const { data, error } = await window.supabaseClient
+        .from('role_menu_permissions')
+        .select('role, menu_id, allowed');
+
+    if (error) {
+        console.error('loadPermissionsFromSupabase error:', error);
+        return JSON.parse(localStorage.getItem('ace_permissions')) || {};
+    }
+
+    const map = {};
+    (data || []).forEach(row => {
+        if (!row.allowed) return;
+        if (!map[row.role]) map[row.role] = [];
+        map[row.role].push(String(row.menu_id));
+    });
+
+    localStorage.setItem('ace_permissions', JSON.stringify(map));
+    return map;
+};
 
 window.getCurrentUserSafe = function() {
     return JSON.parse(localStorage.getItem('currentUser')) || {};
@@ -3553,6 +3713,56 @@ window.getCurrentUserSafe = function() {
 window.getRolePermissions = function(role = '') {
     const perms = JSON.parse(localStorage.getItem('ace_permissions')) || {};
     return perms[role] || [];
+};
+
+window.getActionPermissions = function() {
+    const user = window.getCurrentUserSafe();
+    const role = user.role || '';
+
+    const defaultMap = {
+        'แอดมินหลัก': {
+            customer_view: true,
+            customer_create: true,
+            customer_edit: true,
+            customer_delete: true
+        },
+        'CEO': {
+            customer_view: true,
+            customer_create: true,
+            customer_edit: true,
+            customer_delete: true
+        },
+        'ผู้จัดการ': {
+            customer_view: true,
+            customer_create: true,
+            customer_edit: true,
+            customer_delete: false
+        },
+        'พนักงานหน้าฟร้อนท์': {
+            customer_view: true,
+            customer_create: false,
+            customer_edit: false,
+            customer_delete: false
+        },
+        'หมอ': {
+            customer_view: true,
+            customer_create: false,
+            customer_edit: false,
+            customer_delete: false
+        }
+    };
+
+    return defaultMap[role] || {
+        customer_view: false,
+        customer_create: false,
+        customer_edit: false,
+        customer_delete: false
+    };
+};
+
+window.hasActionPermission = function(key) {
+    const perms = window.getActionPermissions();
+    return !!perms[key];
 };
 
 window.hasMenuPermission = function(menuId) {
@@ -4224,7 +4434,7 @@ window.openAppointmentModal = async function(appId = null) {
             <div class="bg-white w-full max-w-2xl rounded-[3rem] p-12 shadow-2xl border border-pink-200 animate-in zoom-in duration-300 overflow-y-auto max-h-[95vh] font-normal relative">
                 <div class="flex justify-between items-center mb-10">
                     <h3 class="text-3xl font-black text-slate-800 uppercase tracking-tighter italic">
-                        ${editData ? '📝 แก้ไขนัดหมาย' : '✨ ลงนัดหมายลูกค้า'}
+                        ${editData ? '📝 แก้ไขนัดหมาย' : 'ลงนัดหมายลูกค้า'}
                     </h3>
                     <button onclick="window.closeAppModal && window.closeAppModal()" class="text-slate-300 hover:text-pink-400 transition-all text-3xl font-light">✕</button>
                 </div>

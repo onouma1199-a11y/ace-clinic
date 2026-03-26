@@ -669,6 +669,20 @@ window.canViewAllBranches = function() {
     return ['แอดมินหลัก', 'CEO', 'admin'].includes(role) && viewingBranch === 'ทุกสาขา';
 };
 
+window.filterByBranch = function(list = [], getBranchFn) {
+    const viewingBranch = window.getCurrentViewingBranch();
+
+    if (window.canViewAllBranches()) return list;
+
+    return list.filter(item => {
+        const rawBranch = typeof getBranchFn === 'function'
+            ? getBranchFn(item)
+            : item.branch;
+
+        return window.normalizeBranch(rawBranch) === viewingBranch;
+    });
+};
+
 /* -------------------- SUPABASE: CUSTOMER DATA LAYER -------------------- */
 
 // 📥 ดึงลูกค้าจาก Supabase (ใช้ ID เป็นตัวกรองหลักแทน Index)
@@ -706,6 +720,8 @@ window.getCustomersFromSupabase = async function() {
     }
 };
 
+/* -------------------- SUPABASE: Realtime -------------------- */
+
 window.startCustomerRealtime = function() {
     if (!window.supabaseClient) return;
 
@@ -731,7 +747,73 @@ window.startCustomerRealtime = function() {
         .subscribe();
 };
 
+window.startPermissionRealtime = function() {
+    if (!window.supabaseClient) return;
 
+    if (window.permissionRealtimeChannel) {
+        window.supabaseClient.removeChannel(window.permissionRealtimeChannel);
+    }
+
+    window.permissionRealtimeChannel = window.supabaseClient
+        .channel('role-menu-permissions-live')
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'role_menu_permissions'
+            },
+            async function() {
+                console.log('role_menu_permissions changed → reloading permissions');
+
+                if (typeof window.loadPermissionsFromSupabase === 'function') {
+                    await window.loadPermissionsFromSupabase();
+                }
+
+                const currentUser = window.getCurrentUserSafe ? window.getCurrentUserSafe() : (window.currentUser || {});
+                if (currentUser && typeof window.renderMenuByRole === 'function') {
+                    window.renderMenuByRole(currentUser.role || '');
+                }
+
+                if (typeof window.refreshPermissionMatrixUI === 'function') {
+                    window.refreshPermissionMatrixUI();
+                }
+            }
+        )
+        .subscribe();
+};
+
+window.startStaffRealtime = function() {
+    if (!window.supabaseClient) return;
+
+    if (window.staffRealtimeChannel) {
+        window.supabaseClient.removeChannel(window.staffRealtimeChannel);
+    }
+
+    window.staffRealtimeChannel = window.supabaseClient
+        .channel('staff-profiles-live')
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'staff_profiles'
+            },
+            async function() {
+                console.log('staff_profiles changed → reload staff UI');
+
+                if (typeof window.renderStaffManagement === 'function') {
+                    const titleEl = document.getElementById('pageTitle');
+                    const currentTitle = String(titleEl?.innerText || '').toUpperCase();
+
+                    if (currentTitle.includes('จัดการพนักงาน')) {
+                        window.renderStaffManagement();
+                    }
+                }
+            }
+        )
+        .subscribe();
+};
 
 /* -------------------- DATA HELPERS (ID BASED) -------------------- */
 // ✅ เปลี่ยน Logic จากการหาด้วย Index มาเป็นการหาด้วย ID โดยตรง
@@ -1053,6 +1135,12 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
     if (typeof window.startCustomerRealtime === 'function') {
         window.startCustomerRealtime();
     }
+	if (typeof window.startPermissionRealtime === 'function') {
+   	 window.startPermissionRealtime();
+	}
+	if (typeof window.startStaffRealtime === 'function') {
+   	 window.startStaffRealtime();
+	}
 
     if (document.getElementById('userNameLabel')) {
         document.getElementById('userNameLabel').innerText = `${user.name} (${user.role})`;
@@ -1084,6 +1172,10 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
             if (typeof renderBranchDropdown === 'function') {
                 renderBranchDropdown();
             }
+
+	if (typeof window.startPermissionRealtime === 'function') {
+  	  window.startPermissionRealtime();
+	}
 
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('target') === 'ceo_board') {
@@ -1368,19 +1460,6 @@ window.canViewAllBranches = function() {
     return ['แอดมินหลัก', 'CEO'].includes(currentUser.role || '') && window.getCurrentViewingBranch() === 'ทุกสาขา';
 };
 
-window.filterByBranch = function(list = [], getBranchFn) {
-    const viewingBranch = window.getCurrentViewingBranch();
-
-    if (window.canViewAllBranches()) return list;
-
-    return list.filter(item => {
-        const branch = typeof getBranchFn === 'function'
-            ? getBranchFn(item)
-            : item.branch;
-
-        return window.normalizeBranch(branch) === viewingBranch;
-    });
-};
 
 window.renderDashboard = async function(target, period = 'day') {
     if (!target) return;
@@ -3692,14 +3771,18 @@ window.loadPermissionsFromSupabase = async function() {
 
     if (error) {
         console.error('loadPermissionsFromSupabase error:', error);
-        return JSON.parse(localStorage.getItem('ace_permissions')) || {};
+        return {};
     }
 
     const map = {};
+
     (data || []).forEach(row => {
-        if (!row.allowed) return;
-        if (!map[row.role]) map[row.role] = [];
-        map[row.role].push(String(row.menu_id));
+        const role = row.role || '';
+        const menuId = String(row.menu_id || '');
+        const allowed = !!row.allowed;
+
+        if (!map[role]) map[role] = [];
+        if (allowed) map[role].push(menuId);
     });
 
     localStorage.setItem('ace_permissions', JSON.stringify(map));
@@ -9923,7 +10006,7 @@ function renderNavBtn(id, icon, title, sub) {
 }
 
 // 2. ฟังก์ชันสลับเนื้อหาและจัดการสีเมนู
-window.switchSettingsTab = function(tab, btn) {
+window.switchSettingsTab = async function(tab, btn) {
     // 🎨 จัดการสีปุ่ม (Active State)
     document.querySelectorAll('.settings-nav-btn').forEach(b => {
         b.classList.remove('active', 'bg-pink-50', 'border-pink-100', 'shadow-md');
@@ -10040,59 +10123,70 @@ else if (tab === 'users') {
 
  // --- 3. บทบาท/สิทธิ์ (ฉบับแก้ไขปีกกาและเครื่องหมายให้ถูกต้อง 100%) ---
     else if (tab === 'roles') {
-        const menus = [
-            {id:1, n:'Dashboard ภาพรวม'}, {id:2, n:'จัดการลูกค้า/ประวัติ'}, 
-            {id:3, n:'ตีบิลใบเสร็จ'}, {id:9, n:'ตีบิลรายจ่าย'}, 
-            {id:4, n:'ระบบนัดหมาย'}, {id:52, n:'ห้องจัดการคิว'}, 
-            {id:51, n:'รายการคอร์ส'}, {id:53, n:'สต๊อกยาฉีด'}, 
-            {id:6, n:'เมนูรายงาน'}, {id:7, n:'จัดการพนักงาน'}, {id:8, n:'ตั้งค่าระบบ'}
-        ];
-        const roles = ['แอดมินหลัก', 'CEO', 'ผู้จัดการ', 'พนักงานทรีทเม้นท์', 'หมอ'];
-        
-        // 🎯 ดึงข้อมูลสิทธิ์จากเครื่อง
-        const savedPerms = JSON.parse(localStorage.getItem('ace_permissions')) || {};
+    await window.loadPermissionsFromSupabase();
 
-        let tableRows = menus.map(menu => {
-            let roleCols = roles.map(role => {
-                // เช็คสิทธิ์ว่าเคยติ๊กไว้ไหม
-                const isChecked = (savedPerms[role] || []).includes(String(menu.id));
-                const checkAttr = isChecked ? 'checked' : '';
-                const disableAttr = (role === 'แอดมินหลัก') ? 'disabled checked' : '';
-                
-                return '<td class="p-4 text-center">' +
-                       '<input type="checkbox" class="role-checkbox w-5 h-5 accent-pink-500 cursor-pointer" ' +
-                       'data-role="' + role + '" data-menuid="' + menu.id + '" ' +
-                       checkAttr + ' ' + disableAttr + '>' +
-                       '</td>';
-            }).join('');
+    const menus = [
+        {id:1, n:'Dashboard ภาพรวม'}, 
+        {id:2, n:'จัดการลูกค้า/ประวัติ'}, 
+        {id:3, n:'ตีบิลใบเสร็จ'}, 
+        {id:9, n:'ตีบิลรายจ่าย'}, 
+        {id:4, n:'ระบบนัดหมาย'}, 
+        {id:52, n:'ห้องจัดการคิว'}, 
+        {id:51, n:'รายการคอร์ส'}, 
+        {id:53, n:'สต๊อกยาฉีด'}, 
+        {id:6, n:'เมนูรายงาน'}, 
+        {id:7, n:'จัดการพนักงาน'}, 
+        {id:8, n:'ตั้งค่าระบบ'}
+    ];
 
-            return '<tr class="border-b border-slate-50 hover:bg-slate-50/50 text-left font-bold italic">' +
-                   '<td class="p-4 text-xs text-slate-600">' + ([51,52,53].includes(menu.id) ? '└ ' : '') + menu.n + '</td>' +
-                   roleCols +
-                   '</tr>';
+    const roles = ['แอดมินหลัก', 'CEO', 'ผู้จัดการ', 'พนักงานทรีทเม้นท์', 'หมอ'];
+
+    let tableRows = menus.map(menu => {
+        let roleCols = roles.map(role => {
+            const isChecked = window.getPermissionChecked(role, menu.id);
+            const checkAttr = isChecked ? 'checked' : '';
+            const disableAttr = (role === 'แอดมินหลัก') ? 'disabled checked' : '';
+
+            return '<td class="p-4 text-center">' +
+                   '<input type="checkbox" class="role-checkbox w-5 h-5 accent-pink-500 cursor-pointer" ' +
+                   'data-role="' + role + '" data-menuid="' + menu.id + '" ' +
+                   checkAttr + ' ' + disableAttr + '>' +
+                   '</td>';
         }).join('');
 
-        area.innerHTML = `
-            <div class="bg-white p-10 rounded-[3.5rem] shadow-xl border border-pink-50 animate-in slide-in-from-right text-left">
-                <h3 class="text-2xl font-black text-slate-800 italic uppercase mb-8">🛡️ ตารางกำหนดสิทธิ์เมนู</h3>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse min-w-[700px]">
-                        <thead>
-                            <tr class="border-b-2 border-pink-50">
-                                <th class="p-4 text-[10px] font-black text-slate-300 uppercase">เมนูระบบ</th>
-                                ${roles.map(r => `<th class="p-4 text-[9px] font-black text-[#D48197] text-center uppercase">${r}</th>`).join('')}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${tableRows}
-                        </tbody>
-                    </table>
-                </div>
-                <div class="mt-8 flex justify-end">
-                    <button onclick="window.saveRolePermissions()" class="bg-[#D48197] text-white px-10 py-4 rounded-full font-black text-xs uppercase italic shadow-lg hover:bg-black transition-all">💾 บันทึกตารางสิทธิ์</button>
-                </div>
-            </div>`;
+        return '<tr class="border-b border-slate-50 hover:bg-slate-50/50 text-left font-bold italic">' +
+               '<td class="p-4 text-xs text-slate-600">' + ([51,52,53].includes(menu.id) ? '└ ' : '') + menu.n + '</td>' +
+               roleCols +
+               '</tr>';
+    }).join('');
+
+    area.innerHTML = `
+        <div class="bg-white p-10 rounded-[3.5rem] shadow-xl border border-pink-50 animate-in slide-in-from-right text-left">
+            <h3 class="text-2xl font-black text-slate-800 italic uppercase mb-8">🛡️ ตารางกำหนดสิทธิ์เมนู</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse min-w-[700px]">
+                    <thead>
+                        <tr class="border-b-2 border-pink-50">
+                            <th class="p-4 text-[10px] font-black text-slate-300 uppercase">เมนูระบบ</th>
+                            ${roles.map(r => `<th class="p-4 text-[9px] font-black text-[#D48197] text-center uppercase">${r}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows}
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-8 flex justify-end">
+                <button onclick="window.saveRolePermissions()" class="bg-[#D48197] text-white px-10 py-4 rounded-full font-black text-xs uppercase italic shadow-lg hover:bg-black transition-all">
+                    💾 บันทึกตารางสิทธิ์
+                </button>
+            </div>
+        </div>`;
+
+    if (typeof window.refreshPermissionMatrixUI === 'function') {
+        window.refreshPermissionMatrixUI();
     }
+}
 
    // --- 4. บอร์ดวิเคราะห์ภาพรวม และระบบหารกำไร CEO ---
  else if (tab === 'allBranchBoard') {
@@ -10366,18 +10460,100 @@ window.deleteStaffUser = function(idx) {
     });
 };
 
-window.saveRolePermissions = function() {
+window.saveRolePermissions = async function() {
+    if (!window.supabaseClient) {
+        return Swal.fire({
+            icon: 'error',
+            title: 'ระบบยังไม่พร้อม',
+            text: 'ยังไม่พบการเชื่อมต่อ Supabase',
+            confirmButtonColor: '#D48197'
+        });
+    }
+
     const roles = ['แอดมินหลัก', 'CEO', 'ผู้จัดการ', 'พนักงานทรีทเม้นท์', 'หมอ'];
-    let permissionData = {};
+    const rows = [];
+
     roles.forEach(role => {
-        permissionData[role] = [];
-        document.querySelectorAll(`.role-checkbox[data-role="${role}"]:checked`).forEach(cb => {
-            permissionData[role].push(String(cb.dataset.menuid));
+        document.querySelectorAll(`.role-checkbox[data-role="${role}"]`).forEach(cb => {
+            rows.push({
+                role: role,
+                menu_id: String(cb.dataset.menuid || ''),
+                allowed: !!cb.checked
+            });
         });
     });
-    localStorage.setItem('ace_permissions', JSON.stringify(permissionData));
-    Swal.fire({ icon: 'success', title: 'บันทึกสิทธิ์เรียบร้อย!', timer: 1500, showConfirmButton: false });
-    if (window.currentUser) renderMenuByRole(window.currentUser.role);
+
+    try {
+        Swal.fire({
+            title: 'กำลังบันทึกสิทธิ์',
+            text: 'กรุณารอสักครู่นะคะ...',
+            allowOutsideClick: false,
+            showConfirmButton: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        const { error } = await window.supabaseClient
+            .from('role_menu_permissions')
+            .upsert(rows, {
+                onConflict: 'role,menu_id'
+            });
+
+        Swal.close();
+
+        if (error) {
+            console.error('saveRolePermissions error:', error);
+            return Swal.fire({
+                icon: 'error',
+                title: 'บันทึกไม่สำเร็จ',
+                text: error.message || 'ไม่สามารถบันทึกสิทธิ์ได้',
+                confirmButtonColor: '#D48197'
+            });
+        }
+
+        await window.loadPermissionsFromSupabase();
+
+        Swal.fire({
+            icon: 'success',
+            title: 'บันทึกสิทธิ์เรียบร้อย!',
+            timer: 1500,
+            showConfirmButton: false
+        });
+
+        if (window.currentUser && typeof window.renderMenuByRole === 'function') {
+            window.renderMenuByRole(window.currentUser.role || '');
+        }
+
+    } catch (e) {
+        Swal.close();
+        console.error('saveRolePermissions exception:', e);
+        Swal.fire({
+            icon: 'error',
+            title: 'เกิดข้อผิดพลาด',
+            text: e?.message || 'ไม่สามารถบันทึกสิทธิ์ได้',
+            confirmButtonColor: '#D48197'
+        });
+    }
+};
+
+window.getPermissionChecked = function(role, menuId) {
+    const permissions = JSON.parse(localStorage.getItem('ace_permissions')) || {};
+    return (permissions[role] || []).includes(String(menuId));
+};
+
+window.refreshPermissionMatrixUI = function() {
+    const permissions = JSON.parse(localStorage.getItem('ace_permissions')) || {};
+
+    document.querySelectorAll('.role-checkbox').forEach(cb => {
+        const role = cb.dataset.role || '';
+        const menuId = String(cb.dataset.menuid || '');
+        cb.checked = (permissions[role] || []).includes(menuId);
+
+        // แอดมินหลักล็อกให้ติ๊กไว้ตลอด
+        if (role === 'แอดมินหลัก') {
+            cb.checked = true;
+            cb.disabled = true;
+        }
+    });
 };
 
 /* =======================================================

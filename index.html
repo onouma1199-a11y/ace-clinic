@@ -963,11 +963,11 @@ window.doLogin = async function() {
     if (loginBtn) loginBtn.disabled = true;
 
     try {
-        const { data, error } = await window.supabaseClient.auth.signInWithPassword({
-            email: u,
-            password: p
-        });
 
+        const { data, error } = await window.supabaseClient.auth.signInWithPassword({
+    email: u.trim().toLowerCase(),
+    password: p
+	});
         if (error || !data?.user) {
             console.error('login error:', error);
             Swal.fire({
@@ -8810,15 +8810,20 @@ window.showStaffModal = function(mode, idx = null) {
                     <input type="text" id="newNickname" value="${staff.nickname || ''}" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
                 </div>
                 
-                <div class="col-span-1">
-                    <label class="text-[10px] font-bold text-slate-400 ml-2 italic">📞 เบอร์โทรศัพท์ (รหัสผ่าน) *</label>
-                    <input type="text" id="newPhone" value="${staff.phone || ''}" placeholder="08X-XXX-XXXX" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
-                </div>
+               <div class="col-span-1">
+    <label class="text-[10px] font-bold text-slate-400 ml-2 italic">📞 เบอร์โทรศัพท์ (รหัสผ่าน) *</label>
+    <input type="text" id="newPhone" value="${staff.phone || ''}" placeholder="08X-XXX-XXXX" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
+</div>
 
-                <div class="col-span-1">
-                    <label class="text-[10px] font-bold text-[#D48197] ml-2 italic">🏦 ธนาคาร</label>
-                    <input type="text" id="newBank" value="${staff.bankName || ''}" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
-                </div>
+<div class="col-span-1">
+    <label class="text-[10px] font-bold text-slate-400 ml-2 italic">✉️ อีเมล (Username) *</label>
+    <input type="email" id="newEmail" value="${staff.email || ''}" placeholder="name@email.com" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
+</div>
+
+<div class="col-span-1">
+    <label class="text-[10px] font-bold text-[#D48197] ml-2 italic">🏦 ธนาคาร</label>
+    <input type="text" id="newBank" value="${staff.bankName || ''}" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
+</div>
                 
                 <div class="col-span-1">
                     <label class="text-[10px] font-bold text-[#D48197] ml-2 italic">💳 เลขที่บัญชี</label>
@@ -8837,18 +8842,25 @@ window.showStaffModal = function(mode, idx = null) {
         </div>
     </div>`;
     document.body.appendChild(modal);
+
+const hnInput = document.getElementById('newHN');
+if (mode !== 'edit' && hnInput && !hnInput.value) {
+    hnInput.value = generateStaffCode();
+}
 };
 
-window.saveStaffComplete = function(idx, mode) {
-    const name = document.getElementById('newName')?.value;
-    const phone = document.getElementById('newPhone')?.value;
-    const status = document.getElementById('newStatus')?.value;
 
-    if (!name || !phone) {
-        return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกชื่อและเบอร์โทรศัพท์', 'warning');
+window.saveStaffComplete = function(idx, mode) {
+    const name = document.getElementById('newName')?.value?.trim() || '';
+    const phone = document.getElementById('newPhone')?.value?.trim() || '';
+    const email = document.getElementById('newEmail')?.value?.trim() || '';
+    const status = document.getElementById('newStatus')?.value || 'ทำงาน';
+
+    if (!name || !phone || !email) {
+        return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกชื่อ เบอร์โทรศัพท์ และอีเมล', 'warning');
     }
 
-    let staffDB = window.getStaff();
+    let staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
 
     const imgElement = document.getElementById('previewImg');
     const imgData = imgElement ? imgElement.src : '';
@@ -8856,46 +8868,48 @@ window.saveStaffComplete = function(idx, mode) {
     const data = {
         id: mode === 'edit' && staffDB[idx]?.id
             ? staffDB[idx].id
-            : crypto.randomUUID(), // ✅ ใช้ ID จริง
+            : crypto.randomUUID(),
 
         staffId: mode === 'edit' && staffDB[idx]?.staffId
             ? staffDB[idx].staffId
-            : generateStaffCode(), // ✅ รหัสแสดงผล
+            : (document.getElementById('newHN')?.value || generateStaffCode()),
 
         name: name,
         nickname: document.getElementById('newNickname')?.value || '',
+        gender: document.getElementById('newGender')?.value || 'ไม่ระบุ',
         role: document.getElementById('newRole')?.value || '',
         branch: document.getElementById('newBranch')?.value || 'บางพลี',
-        status: status || 'ทำงาน',
+        status: status,
         phone: phone,
+        email: email,
+        username: email,
+        password: phone,
         bankName: document.getElementById('newBank')?.value || '',
         bankAcc: document.getElementById('newAcc')?.value || '',
         startDate: document.getElementById('newStart')?.value || '',
         address: document.getElementById('newAddress')?.value || '',
         salary: parseFloat(document.getElementById('newSalary')?.value || 0),
-        img: imgData.startsWith('data:')
+        img: imgData && imgData.startsWith('data:')
             ? imgData
             : (mode === 'edit' && staffDB[idx] ? staffDB[idx].img : ''),
         isLocked: status === 'ออก',
         updatedAt: new Date().toISOString()
     };
 
-    if (mode === 'edit' && idx !== null) {
+    if (mode === 'edit' && idx !== null && idx !== undefined && staffDB[idx]) {
         staffDB[idx] = data;
     } else {
         staffDB.push(data);
     }
 
-    window.saveStaff(staffDB);
+    localStorage.setItem('staffDB', JSON.stringify(staffDB));
 
     document.getElementById('staffModalContainer')?.remove();
 
     Swal.fire({
         icon: 'success',
         title: 'บันทึกเรียบร้อย',
-        text: status === 'ออก'
-            ? 'ระงับสิทธิ์พนักงานแล้ว'
-            : 'อัปเดตข้อมูลสำเร็จ',
+        text: status === 'ออก' ? 'ระงับสิทธิ์พนักงานแล้ว' : 'อัปเดตข้อมูลสำเร็จ',
         timer: 1500,
         showConfirmButton: false
     });
@@ -8904,6 +8918,19 @@ window.saveStaffComplete = function(idx, mode) {
         renderStaffProfileList();
     }
 };
+
+window.generateStaffCode = function() {
+    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
+    const count = staffDB.length + 1;
+    return 'ST' + String(count).padStart(4, '0');
+
+};
+
+function generateStaffCode() {
+    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
+    const count = staffDB.length + 1;
+    return 'ST' + String(count).padStart(4, '0');
+}
 
 /* --- 3. ฟังก์ชันดูประวัติ (ล็อกสิทธิ์ให้เห็นเฉพาะข้อมูลตัวเองถ้าเป็นพนักงาน) --- */
 window.viewStaffDetail = function(idx) {
@@ -10174,47 +10201,65 @@ else if (tab === 'users') {
 
     // --- 5. สมัครใช้สิทธิ์ใหม่ ---
     else if (tab === 'register') {
-        area.innerHTML = `
-            <div class="bg-white p-10 rounded-[3.5rem] shadow-xl border border-pink-50 animate-in slide-in-from-right text-left">
-                <h3 class="text-2xl font-black text-slate-800 italic uppercase mb-8">🔑 สมัครใช้สิทธิ์เข้าใช้งาน</h3>
-                <div class="bg-slate-50 p-10 rounded-[4rem] border border-white shadow-sm max-w-2xl mx-auto space-y-6">
-                    <div>
-                        <label class="text-[10px] font-black text-[#D48197] uppercase ml-2 block mb-2">ชื่อจริง-นามสกุลพนักงาน</label>
-                        <input type="text" id="regName" placeholder="ระบุชื่อพนักงาน" class="w-full p-4 rounded-3xl border-none shadow-inner font-bold text-sm">
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="text-[10px] font-black text-[#D48197] uppercase ml-2 block mb-2">ชื่อผู้ใช้ (เบอร์โทร Login)</label>
-                            <input type="text" id="regUser" placeholder="095xxxxxxx" class="w-full p-4 rounded-3xl border-none shadow-inner font-bold text-sm">
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-black text-[#D48197] uppercase ml-2 block mb-2">รหัสผ่าน (Password)</label>
-                            <input type="password" id="regPass" placeholder="กำหนดรหัสผ่าน" class="w-full p-4 rounded-3xl border-none shadow-inner font-bold text-sm">
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="text-[10px] font-black text-[#D48197] uppercase ml-2 block mb-2">ระบุบทบาท (Role)</label>
-                            <select id="regRole" class="w-full p-4 rounded-3xl border-none shadow-inner font-bold text-sm bg-white cursor-pointer">
-                                <option value="พนักงานทรีทเม้นท์">พนักงานทรีทเม้นท์</option>
-                                <option value="ผู้จัดการ">ผู้จัดการ (Manager)</option>
-                                <option value="หมอ">หมอ (Doctor)</option>
-                                <option value="CEO">ผู้บริหาร (CEO)</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-black text-[#D48197] uppercase ml-2 block mb-2">สาขาต้นสังกัด</label>
-                            <select id="regBranch" class="w-full p-4 rounded-3xl border-none shadow-inner font-bold text-sm bg-white cursor-pointer">
-                                <option value="บางพลี">บางพลี</option>
-                                <option value="อุดมสุข">อุดมสุข</option>
-                                <option value="ชลบุรี">ชลบุรี</option>
-                            </select>
-                        </div>
-                    </div>
-                    <button onclick="window.processNewRegistration()" class="w-full bg-black text-white py-5 rounded-[2rem] font-black text-xs uppercase italic tracking-widest shadow-xl hover:bg-[#D48197] transition-all">✅ ยืนยันสมัครสิทธิ์พนักงาน</button>
+    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
+
+    area.innerHTML = `
+        <div class="bg-white p-10 rounded-[3.5rem] shadow-xl border border-pink-50 animate-in slide-in-from-right text-left">
+            <h3 class="text-2xl font-black text-slate-800 italic uppercase mb-8">🔑 สมัครใช้สิทธิ์เข้าใช้งาน</h3>
+            <div class="bg-slate-50 p-10 rounded-[4rem] border border-white shadow-sm max-w-2xl mx-auto space-y-6">
+
+                <div>
+                    <label class="text-[10px] font-black text-[#D48197] uppercase ml-2 block mb-2">เลือกชื่อพนักงาน</label>
+                    <input
+                        type="text"
+                        id="regName"
+                        list="staffNameList"
+                        placeholder="พิมพ์ชื่อพนักงาน"
+                        oninput="window.fillRegisterByStaffName()"
+                        class="w-full p-4 rounded-3xl border-none shadow-inner font-bold text-sm"
+                    >
+                    <datalist id="staffNameList">
+                        ${staffDB.map(s => `<option value="${String(s.name || '').replace(/"/g, '&quot;')}"></option>`).join('')}
+                    </datalist>
                 </div>
-            </div>`;
-    }
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] font-black text-[#D48197] uppercase ml-2 block mb-2">ชื่อผู้ใช้ (อีเมล Login)</label>
+                        <input type="text" id="regUser" placeholder="อีเมลจะดึงอัตโนมัติ" class="w-full p-4 rounded-3xl border-none shadow-inner font-bold text-sm bg-white">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-black text-[#D48197] uppercase ml-2 block mb-2">รหัสผ่าน (เบอร์โทร)</label>
+                        <input type="text" id="regPass" placeholder="เบอร์โทรจะดึงอัตโนมัติ" class="w-full p-4 rounded-3xl border-none shadow-inner font-bold text-sm bg-white">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] font-black text-[#D48197] uppercase ml-2 block mb-2">ระบุบทบาท (Role)</label>
+                        <select id="regRole" class="w-full p-4 rounded-3xl border-none shadow-inner font-bold text-sm bg-white cursor-pointer">
+                            <option value="พนักงานทรีทเม้นท์">พนักงานทรีทเม้นท์</option>
+                            <option value="ผู้จัดการ">ผู้จัดการ (Manager)</option>
+                            <option value="หมอ">หมอ (Doctor)</option>
+                            <option value="CEO">ผู้บริหาร (CEO)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-black text-[#D48197] uppercase ml-2 block mb-2">สาขาต้นสังกัด</label>
+                        <select id="regBranch" class="w-full p-4 rounded-3xl border-none shadow-inner font-bold text-sm bg-white cursor-pointer">
+                            <option value="บางพลี">บางพลี</option>
+                            <option value="อุดมสุข">อุดมสุข</option>
+                            <option value="ชลบุรี">ชลบุรี</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button onclick="window.processNewRegistration()" class="w-full bg-black text-white py-5 rounded-[2rem] font-black text-xs uppercase italic tracking-widest shadow-xl hover:bg-[#D48197] transition-all">
+                    ✅ ยืนยันสมัครสิทธิ์พนักงาน
+                </button>
+            </div>
+        </div>`;
+}
 
     else {
         area.innerHTML = `<div class="bg-white p-20 rounded-[3rem] text-center italic text-slate-300">ฟังก์ชัน ${tab} กำลังพัฒนา...</div>`;
@@ -10611,58 +10656,267 @@ setTimeout(() => {
 }, 2000);
 
 // -------------------------
-// Registration
+// Registration (PRO)
 // -------------------------
-window.processNewRegistration = function() {
+window.processNewRegistration = async function() {
     const name = document.getElementById('regName')?.value.trim() || '';
-    const phone = document.getElementById('regUser')?.value.trim() || '';
-    const password = document.getElementById('regPass')?.value.trim() || '';
+    const user = document.getElementById('regUser')?.value.trim() || '';   // email
+    const pass = document.getElementById('regPass')?.value.trim() || '';   // phone
     const role = document.getElementById('regRole')?.value || '';
     const branch = window.normalizeBranch(document.getElementById('regBranch')?.value || '');
 
-    if (!name || !phone || !password) {
+    if (!name || !user || !pass) {
         return Swal.fire({
             icon: 'warning',
-            text: 'กรุณากรอกข้อมูลพนักงานให้ครบถ้วนนะคะ',
+            title: 'ข้อมูลไม่ครบ',
+            text: 'กรุณาเลือกชื่อพนักงาน และตรวจสอบอีเมลกับเบอร์โทรให้ครบถ้วนนะคะ',
+            confirmButtonColor: '#D48197'
+        });
+    }
+
+    if (!window.supabaseClient) {
+        return Swal.fire({
+            icon: 'error',
+            title: 'ระบบยังไม่พร้อม',
+            text: 'ยังไม่ได้เชื่อมต่อ Supabase',
             confirmButtonColor: '#D48197'
         });
     }
 
     let staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
 
-    if (staffDB.some(s => String(s.phone || '').trim() === phone)) {
+    const idx = staffDB.findIndex(s => String(s.name || '').trim() === name);
+
+    if (idx === -1) {
         return Swal.fire({
             icon: 'error',
-            text: 'เบอร์โทรศัพท์นี้ถูกใช้งานในระบบแล้วค่ะ',
+            title: 'ไม่พบพนักงาน',
+            text: 'กรุณาเพิ่มพนักงานจากหน้า "เพิ่มพนักงานใหม่" ก่อนค่ะ',
             confirmButtonColor: '#D48197'
         });
     }
 
-    staffDB.push({
-        staffId: 'ST' + Date.now().toString().slice(-6),
-        name,
-        phone,
-        password,
-        role,
-        branch,
-        homeBranch: branch,
-        status: 'ทำงาน',
-        isLocked: false,
-        createdAt: new Date().toLocaleDateString('th-TH')
-    });
+    if (staffDB[idx].hasLoginAccess || staffDB[idx].authUserId) {
+        return Swal.fire({
+            icon: 'warning',
+            title: 'มีสิทธิ์แล้ว',
+            text: 'พนักงานคนนี้มีสิทธิ์เข้าใช้งานแล้วค่ะ',
+            confirmButtonColor: '#D48197'
+        });
+    }
 
-    localStorage.setItem('staffDB', JSON.stringify(staffDB));
+    const email = user.toLowerCase();
 
-    Swal.fire({
-        icon: 'success',
-        title: 'สมัครสิทธิ์สำเร็จ!',
-        text: `คุณ ${name} เข้าใช้งานได้แล้วค่ะ`,
+    const confirmResult = await Swal.fire({
+        icon: 'question',
+        title: 'ยืนยันสมัครสิทธิ์ใช้งาน',
+        html: `
+            <div class="text-left text-sm leading-7">
+                <div><b>ชื่อพนักงาน:</b> ${name}</div>
+                <div><b>ชื่อผู้ใช้:</b> ${email}</div>
+                <div><b>รหัสผ่าน:</b> ${pass}</div>
+                <div><b>สิทธิ์:</b> ${role || '-'}</div>
+                <div><b>สาขา:</b> ${branch || '-'}</div>
+            </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'ยืนยันสมัคร',
+        cancelButtonText: 'ยกเลิก',
         confirmButtonColor: '#D48197'
     });
 
-    if (document.getElementById('regName')) document.getElementById('regName').value = '';
-    if (document.getElementById('regUser')) document.getElementById('regUser').value = '';
-    if (document.getElementById('regPass')) document.getElementById('regPass').value = '';
+    if (!confirmResult.isConfirmed) return;
+
+    let authUserId = null;
+
+    try {
+        Swal.fire({
+            title: 'กำลังสร้างสิทธิ์เข้าใช้งาน',
+            text: 'กรุณารอสักครู่นะคะ...',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        // ใช้ client แยก เพื่อไม่ให้ session คนที่กำลังใช้งานอยู่หลุด
+        const tempAuthClient = supabase.createClient(
+            SUPABASE_URL,
+            SUPABASE_KEY,
+            {
+                auth: {
+                    persistSession: false,
+                    autoRefreshToken: false,
+                    detectSessionInUrl: false
+                }
+            }
+        );
+
+        // 1) สร้าง user ใน Supabase Auth
+        const { data: signUpData, error: signUpError } = await tempAuthClient.auth.signUp({
+            email: email,
+            password: pass,
+            options: {
+                data: {
+                    full_name: name,
+                    role: role,
+                    branch: branch,
+                    staff_code: staffDB[idx]?.staffId || ''
+                }
+            }
+        });
+
+        if (signUpError) {
+            Swal.close();
+            return Swal.fire({
+                icon: 'error',
+                title: 'สมัครไม่สำเร็จ',
+                text: signUpError.message || 'ไม่สามารถสร้างบัญชีเข้าสู่ระบบได้',
+                confirmButtonColor: '#D48197'
+            });
+        }
+
+        authUserId = signUpData?.user?.id || null;
+
+        if (!authUserId) {
+            Swal.close();
+            return Swal.fire({
+                icon: 'error',
+                title: 'สมัครไม่สำเร็จ',
+                text: 'ระบบไม่ได้รับรหัสผู้ใช้งานจาก Supabase',
+                confirmButtonColor: '#D48197'
+            });
+        }
+
+        // 2) อัปเดต staffDB เดิม
+        staffDB[idx] = {
+            ...staffDB[idx],
+            email: email,
+            username: email,
+            phone: pass,
+            password: pass,
+            role: role || staffDB[idx].role || '',
+            branch: branch || staffDB[idx].branch || '',
+            homeBranch: branch || staffDB[idx].homeBranch || '',
+            hasLoginAccess: true,
+            isLocked: false,
+            authUserId: authUserId,
+            updatedAt: new Date().toISOString()
+        };
+
+        localStorage.setItem('staffDB', JSON.stringify(staffDB));
+
+        // 3) upsert staff_profiles
+        const profilePayload = {
+            auth_user_id: authUserId,
+            staff_code: staffDB[idx]?.staffId || '',
+            full_name: staffDB[idx]?.name || name,
+            phone: pass,
+            email: email,
+            role: role || staffDB[idx]?.role || '',
+            branch: branch || staffDB[idx]?.branch || '',
+            employment_status: staffDB[idx]?.status || 'ทำงาน',
+            is_active: staffDB[idx]?.status !== 'ออก'
+        };
+
+        // ลอง update ด้วย auth_user_id ก่อน
+        let profileSaved = false;
+
+        const { error: insertProfileError } = await window.supabaseClient
+            .from('staff_profiles')
+            .insert([profilePayload]);
+
+        if (!insertProfileError) {
+            profileSaved = true;
+        } else {
+            // ถ้า insert ไม่ได้ ลอง update จาก staff_code
+            const { error: updateProfileError } = await window.supabaseClient
+                .from('staff_profiles')
+                .update({
+                    auth_user_id: authUserId,
+                    full_name: profilePayload.full_name,
+                    phone: profilePayload.phone,
+                    email: profilePayload.email,
+                    role: profilePayload.role,
+                    branch: profilePayload.branch,
+                    employment_status: profilePayload.employment_status,
+                    is_active: profilePayload.is_active
+                })
+                .eq('staff_code', profilePayload.staff_code);
+
+            if (!updateProfileError) {
+                profileSaved = true;
+            } else {
+                console.error('staff_profiles insert error:', insertProfileError);
+                console.error('staff_profiles update error:', updateProfileError);
+            }
+        }
+
+        Swal.close();
+
+        if (!profileSaved) {
+            return Swal.fire({
+                icon: 'warning',
+                title: 'สร้างบัญชีสำเร็จ แต่บันทึกโปรไฟล์ไม่ครบ',
+                text: 'บัญชีล็อกอินถูกสร้างแล้ว แต่ staff_profiles ยังไม่สมบูรณ์ กรุณาตรวจสอบอีกครั้ง',
+                confirmButtonColor: '#D48197'
+            });
+        }
+
+        await Swal.fire({
+            icon: 'success',
+            title: 'สมัครสิทธิ์สำเร็จ!',
+            html: `
+                <div class="text-left text-sm leading-7">
+                    <div><b>ชื่อ:</b> ${name}</div>
+                    <div><b>Username:</b> ${email}</div>
+                    <div><b>Password:</b> ${pass}</div>
+                    <div><b>สิทธิ์:</b> ${role || '-'}</div>
+                    <div><b>สาขา:</b> ${branch || '-'}</div>
+                </div>
+            `,
+            confirmButtonColor: '#D48197'
+        });
+
+        if (document.getElementById('regName')) document.getElementById('regName').value = '';
+        if (document.getElementById('regUser')) document.getElementById('regUser').value = '';
+        if (document.getElementById('regPass')) document.getElementById('regPass').value = '';
+
+        if (typeof window.switchSettingsTab === 'function') {
+            const activeBtn = document.querySelector('.settings-nav-btn.active');
+            if (activeBtn) {
+                window.switchSettingsTab('users', activeBtn);
+            }
+        }
+
+    } catch (e) {
+        Swal.close();
+        console.error('processNewRegistration exception:', e);
+        return Swal.fire({
+            icon: 'error',
+            title: 'เกิดข้อผิดพลาด',
+            text: e?.message || 'ไม่สามารถสมัครสิทธิ์พนักงานได้',
+            confirmButtonColor: '#D48197'
+        });
+    }
+};
+
+window.fillRegisterByStaffName = function() {
+    const name = document.getElementById('regName')?.value?.trim() || '';
+    if (!name) return;
+
+    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
+    const staff = staffDB.find(s => String(s.name || '').trim() === name);
+
+    if (!staff) return;
+
+    const regUser = document.getElementById('regUser');
+    const regPass = document.getElementById('regPass');
+    const regRole = document.getElementById('regRole');
+    const regBranch = document.getElementById('regBranch');
+
+    if (regUser) regUser.value = staff.email || staff.username || '';
+    if (regPass) regPass.value = staff.phone || staff.password || '';
+    if (regRole) regRole.value = staff.role || 'พนักงานทรีทเม้นท์';
+    if (regBranch) regBranch.value = String(staff.branch || 'บางพลี').replace('สาขา', '').trim();
 };
 
 // -------------------------

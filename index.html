@@ -831,15 +831,22 @@ window.startStaffRealtime = function() {
                 table: 'staff_profiles'
             },
             async function() {
-                console.log('staff_profiles changed → reloading users UI');
+                console.log('staff_profiles changed → refreshing UI');
 
                 const titleEl = document.getElementById('pageTitle');
                 const currentTitle = String(titleEl?.innerText || '').toUpperCase();
 
-                if (currentTitle.includes('ตั้งค่าระบบ') || currentTitle.includes('จัดการพนักงาน')) {
-                    const activeBtn = document.querySelector('.settings-nav-btn.active');
-                    if (activeBtn && typeof window.switchSettingsTab === 'function') {
-                        await window.switchSettingsTab('users', activeBtn);
+                if (currentTitle.includes('จัดการพนักงาน') || currentTitle.includes('STAFF')) {
+                    if (typeof window.renderStaffProfileList === 'function') {
+                        await window.renderStaffProfileList();
+                    }
+                }
+
+                if (document.getElementById('staffSubDisplay') && typeof window.viewStaffDetailById === 'function') {
+                    const codeEl = document.querySelector('#dynamicContent .ace-pink');
+                    const matched = codeEl?.innerText?.match(/ID:\s*(.+)$/);
+                    if (matched?.[1]) {
+                        await window.viewStaffDetailById(matched[1].trim());
                     }
                 }
             }
@@ -8775,27 +8782,47 @@ window.renderStaffManagement = function() {
     `;
 };
 
-window.renderStaffProfileList = function() {
+window.renderStaffProfileList = async function() {
     const target = document.getElementById('dynamicContent');
-    if(!target) return;
+    if (!target) return;
 
-    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
+    if (!window.supabaseClient) {
+        target.innerHTML = `<div class="py-20 text-center text-red-400 font-bold">ยังไม่พบการเชื่อมต่อ Supabase</div>`;
+        return;
+    }
+
     const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
-    
-    const viewingBranch = (currentUser.branch || '').replace('สาขา', '').trim();
+    const viewingBranch = String(currentUser.branch || 'ทุกสาขา').replace('สาขา', '').trim();
+    const homeBranch = String(currentUser.homeBranch || currentUser.branch || '').replace('สาขา', '').trim();
     const isAdmin = ['แอดมินหลัก', 'CEO', 'ผู้จัดการ'].includes(currentUser.role);
 
-    const filteredStaff = staffDB.filter(s => {
-        const isNotResigned = s.status !== 'ออก';
+    let query = window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    if (!(typeof window.canViewAllBranches === 'function' && window.canViewAllBranches()) && viewingBranch !== 'ทุกสาขา') {
+        query = query.eq('branch', window.normalizeBranch ? window.normalizeBranch(viewingBranch) : viewingBranch);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+        console.error('renderStaffProfileList error:', error);
+        target.innerHTML = `<div class="py-20 text-center text-red-400 font-bold">โหลดข้อมูลพนักงานไม่สำเร็จ</div>`;
+        return;
+    }
+
+    const filteredStaff = (data || []).filter(s => {
+        const isNotResigned = (s.employment_status || 'ทำงาน') !== 'ออก';
         const staffBranch = String(s.branch || '').replace('สาขา', '').trim();
-        const homeBranch = (currentUser.homeBranch || currentUser.branch || '').replace('สาขา', '').trim();
 
         if (!isAdmin && viewingBranch !== homeBranch) return false;
 
         const matchBranch = (currentUser.branch === 'ทุกสาขา') || (staffBranch === viewingBranch);
         return isNotResigned && matchBranch;
     });
-   
+
     target.innerHTML = `
         <div class="animate-in fade-in duration-500 p-6 bg-[#FDF7F8] min-h-screen text-left font-sans">
             <div class="bg-white p-6 rounded-[2.5rem] shadow-sm mb-6 flex flex-wrap items-center gap-4 border border-pink-100">
@@ -8833,8 +8860,11 @@ window.renderStaffProfileList = function() {
                     </thead>
                     <tbody id="staffTableBody" class="text-[11px] font-bold text-slate-600">
                         ${filteredStaff.length > 0 ? filteredStaff.map((staff, idx) => {
-                            // 💡 ยกเลิกการใช้ realIdx ในปุ่มกด เปลี่ยนมาใช้ staff.staffId แทน
-                            const isLocked = staff.isLocked === true;
+                            const isLocked = (staff.employment_status === 'ออก') || (staff.is_active === false);
+                            const staffCode = staff.staff_code || '-';
+                            const staffName = staff.full_name || '-';
+                            const startDate = staff.start_date || '-';
+                            const branchName = String(staff.branch || '-').replace('สาขา', '');
 
                             return `
                             <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all ${isLocked ? 'opacity-50 grayscale bg-slate-50' : ''}">
@@ -8842,18 +8872,18 @@ window.renderStaffProfileList = function() {
                                 <td class="p-5 text-center">
                                     <img src="${staff.img || 'https://via.placeholder.com/150'}" class="w-10 h-10 rounded-full object-cover mx-auto border-2 border-white shadow-sm ring-1 ring-pink-100">
                                 </td>
-                                <td class="p-5 italic text-slate-400 font-mono">${staff.startDate || '-'}</td>
-                                <td class="p-5 font-mono text-[#D48197]">${staff.staffId || '-'}</td>
-                                <td class="p-5 text-slate-800 ${isLocked ? 'line-through' : ''}">${staff.name}</td>
+                                <td class="p-5 italic text-slate-400 font-mono">${startDate}</td>
+                                <td class="p-5 font-mono text-[#D48197]">${staffCode}</td>
+                                <td class="p-5 text-slate-800 ${isLocked ? 'line-through' : ''}">${staffName}</td>
                                 <td class="p-5 font-mono">${staff.phone || '-'}</td>
-                                <td class="p-5"><span class="bg-pink-50 text-[#D48197] px-3 py-1 rounded-full text-[9px] uppercase font-black italic shadow-sm">${staff.branch || '-'}</span></td>
+                                <td class="p-5"><span class="bg-pink-50 text-[#D48197] px-3 py-1 rounded-full text-[9px] uppercase font-black italic shadow-sm">${branchName}</span></td>
                                 <td class="p-5 text-center relative">
                                     <div class="flex items-center justify-center">
-                                        <button onclick="window.showStaffModalById('edit', '${staff.staffId}')" class="bg-[#D48197] text-white px-5 py-2 rounded-l-full hover:bg-[#C26D84] transition-all font-black uppercase italic">แก้ไข</button>
+                                        <button onclick="window.showStaffModalById('edit', '${staffCode}')" class="bg-[#D48197] text-white px-5 py-2 rounded-l-full hover:bg-[#C26D84] transition-all font-black uppercase italic">แก้ไข</button>
                                         <div class="relative group">
                                             <button class="bg-[#D48197] text-white px-3 py-2 rounded-r-full hover:bg-[#C26D84] border-l border-white/20 transition-all font-black">▼</button>
                                             <div class="hidden group-hover:block absolute right-0 bg-white shadow-2xl rounded-2xl p-2 z-[99] border border-pink-100 min-w-[180px] animate-in zoom-in duration-150 text-left shadow-pink-200/20">
-                                                <button onclick="window.viewStaffDetailById('${staff.staffId}')" class="w-full text-left p-3 hover:bg-pink-50 rounded-xl text-[#D48197] flex items-center gap-2 transition-all">🔍 ดูข้อมูลพนักงาน</button>                                                
+                                                <button onclick="window.viewStaffDetailById('${staffCode}')" class="w-full text-left p-3 hover:bg-pink-50 rounded-xl text-[#D48197] flex items-center gap-2 transition-all">🔍 ดูข้อมูลพนักงาน</button>                                                
                                             </div>
                                         </div>
                                     </div>

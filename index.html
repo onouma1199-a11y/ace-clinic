@@ -1331,16 +1331,18 @@ window.logout = async function() {
 window.renderBranchDropdown = function() {
     const user = JSON.parse(localStorage.getItem('currentUser')) || {};
     const role = user.role || '';
-    const currentBranch = user.branch || 'บางพลี';
-    const homeBranch = user.homeBranch || user.branch || 'บางพลี';
+    const currentBranch = String(user.branch || 'บางพลี').replace('สาขา', '').trim();
+    const homeBranch = String(user.homeBranch || user.branch || 'บางพลี').replace('สาขา', '').trim();
     const branches = ['บางพลี', 'อุดมสุข', 'ชลบุรี'];
     let html = '';
 
     branches.forEach(b => {
         if (!['แอดมินหลัก', 'CEO', 'ผู้จัดการ'].includes(role) && b !== homeBranch) return;
+
         const isActive = b === currentBranch;
+
         html += `
-            <div onclick="changeBranch('${b}')" class="flex items-center gap-4 p-3 rounded-2xl cursor-pointer transition-all hover:bg-pink-50 ${isActive ? 'bg-slate-50 shadow-sm border border-slate-100' : 'border border-transparent'}">
+            <div onclick="window.changeBranch('${b}')" class="flex items-center gap-4 p-3 rounded-2xl cursor-pointer transition-all hover:bg-pink-50 ${isActive ? 'bg-slate-50 shadow-sm border border-slate-100' : 'border border-transparent'}">
                 <img src="ace-logo.jpg" class="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm shrink-0" onerror="this.src='https://via.placeholder.com/150'">
                 <div class="flex-1 text-left">
                     <h4 class="text-[13px] font-bold text-slate-800 leading-tight mb-1">เอซ คลินิกสาขา${b}</h4>
@@ -1353,9 +1355,11 @@ window.renderBranchDropdown = function() {
     });
 
     if (['แอดมินหลัก', 'CEO'].includes(role)) {
+        const isAllBranches = currentBranch === 'ทุกสาขา';
+
         html += `
         <div class="mt-1 pt-2 border-t border-slate-100">
-            <div onclick="loadPage(10, 'บอร์ดรวมทุกสาขา')" class="w-full text-center p-3 rounded-xl bg-slate-800 hover:bg-[#C5A059] text-white text-[11px] font-bold cursor-pointer transition-all uppercase tracking-widest shadow-sm">
+            <div onclick="window.changeBranch('ทุกสาขา')" class="w-full text-center p-3 rounded-xl ${isAllBranches ? 'bg-[#C5A059]' : 'bg-slate-800 hover:bg-[#C5A059]'} text-white text-[11px] font-bold cursor-pointer transition-all uppercase tracking-widest shadow-sm">
                 🌐 ดูภาพรวมทุกสาขา
             </div>
         </div>`;
@@ -1372,9 +1376,13 @@ window.changeBranch = function(branchName) {
     const role = user.role || '';
     const homeBranch = user.homeBranch || user.branch || '';
 
+    const cleanBranch = String(branchName || '').replace('สาขา', '').trim();
+
     if (!['แอดมินหลัก', 'CEO', 'ผู้จัดการ'].includes(role)) {
         user.branch = homeBranch;
         localStorage.setItem('currentUser', JSON.stringify(user));
+        window.currentUser = user;
+
         Swal.fire({
             icon: 'warning',
             title: 'ไม่อนุญาต',
@@ -1384,7 +1392,7 @@ window.changeBranch = function(branchName) {
         return;
     }
 
-    if (role === 'ผู้จัดการ' && branchName === 'ทุกสาขา') {
+    if (role === 'ผู้จัดการ' && cleanBranch === 'ทุกสาขา') {
         Swal.fire({
             icon: 'warning',
             title: 'ไม่อนุญาต',
@@ -1394,12 +1402,21 @@ window.changeBranch = function(branchName) {
         return;
     }
 
-    user.branch = branchName;
+    user.branch = cleanBranch;
     localStorage.setItem('currentUser', JSON.stringify(user));
-    window.currentUser = user; 
+    localStorage.setItem('selectedBranch', cleanBranch);
+    window.currentUser = user;
+
+    if (document.getElementById('userBranchBadge')) {
+        document.getElementById('userBranchBadge').innerText = `สาขา: ${cleanBranch}`;
+    }
+
+    if (typeof window.renderBranchDropdown === 'function') {
+        window.renderBranchDropdown();
+    }
 
     Swal.fire({
-        title: `กำลังสลับไป "${branchName}"`,
+        title: `กำลังสลับไป "${cleanBranch}"`,
         text: 'ระบบกำลังกรองข้อมูลสาขาใหม่ค่ะ...',
         allowOutsideClick: false,
         showConfirmButton: false,
@@ -1409,8 +1426,59 @@ window.changeBranch = function(branchName) {
     });
 
     setTimeout(() => {
-        location.reload(); 
-    }, 600);
+        const pageTitle = String(document.getElementById('pageTitle')?.innerText || '').trim();
+
+        Swal.close();
+
+        if (cleanBranch === 'ทุกสาขา') {
+            if (typeof window.loadPage === 'function') {
+                window.loadPage(10, 'บอร์ดรวมทุกสาขา');
+            }
+            return;
+        }
+
+        if (pageTitle.includes('จัดการลูกค้า') || pageTitle.includes('ประวัติ')) {
+            return window.loadPage?.(2, 'จัดการลูกค้า/ประวัติ');
+        }
+
+        if (pageTitle.includes('ตีบิลใบเสร็จ')) {
+            return window.loadPage?.(3, 'ตีบิลใบเสร็จ');
+        }
+
+        if (pageTitle.includes('ตีบิลรายจ่าย')) {
+            return window.loadPage?.(9, 'ตีบิลรายจ่าย');
+        }
+
+        if (pageTitle.includes('ระบบนัดหมาย')) {
+            return window.loadPage?.(4, 'ระบบนัดหมาย');
+        }
+
+        if (pageTitle.includes('ห้องจัดการคิว')) {
+            return window.loadPage?.(52, 'ห้องจัดการคิว');
+        }
+
+        if (pageTitle.includes('รายการคอร์ส')) {
+            return window.loadPage?.(51, 'รายการคอร์ส');
+        }
+
+        if (pageTitle.includes('สต๊อกยาฉีด')) {
+            return window.loadPage?.(53, 'สต๊อกยาฉีด');
+        }
+
+        if (pageTitle.includes('เมนูรายงาน')) {
+            return window.loadPage?.(6, 'เมนูรายงาน');
+        }
+
+        if (pageTitle.includes('จัดการพนักงาน')) {
+            return window.loadPage?.(7, 'จัดการพนักงาน');
+        }
+
+        if (pageTitle.includes('ตั้งค่าระบบ')) {
+            return window.loadPage?.(8, 'ตั้งค่าระบบ');
+        }
+
+        return window.loadPage?.(1, 'Dashboard ภาพรวม');
+    }, 500);
 };
 
 // --- 6. ฟังก์ชันเปลี่ยนรหัสผ่านส่วนตัว ---

@@ -831,22 +831,18 @@ window.startStaffRealtime = function() {
                 table: 'staff_profiles'
             },
             async function() {
-                console.log('staff_profiles changed → refreshing UI');
+                console.log('staff_profiles changed → refreshing staff UI');
 
-                const titleEl = document.getElementById('pageTitle');
-                const currentTitle = String(titleEl?.innerText || '').toUpperCase();
-
-                if (currentTitle.includes('จัดการพนักงาน') || currentTitle.includes('STAFF')) {
-                    if (typeof window.renderStaffProfileList === 'function') {
-                        await window.renderStaffProfileList();
-                    }
+                // หน้าแฟ้มพนักงาน
+                if (typeof window.renderStaffProfileList === 'function' && document.getElementById('staffTableBody')) {
+                    await window.renderStaffProfileList();
                 }
 
-                if (document.getElementById('staffSubDisplay') && typeof window.viewStaffDetailById === 'function') {
-                    const codeEl = document.querySelector('#dynamicContent .ace-pink');
-                    const matched = codeEl?.innerText?.match(/ID:\s*(.+)$/);
-                    if (matched?.[1]) {
-                        await window.viewStaffDetailById(matched[1].trim());
+                // หน้า settings > users
+                if (window.currentSettingsTab === 'users') {
+                    const activeBtn = document.querySelector('.settings-nav-btn.active');
+                    if (typeof window.switchSettingsTab === 'function') {
+                        await window.switchSettingsTab('users', activeBtn);
                     }
                 }
             }
@@ -1226,7 +1222,7 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
     if (typeof window.startStaffRealtime === 'function') {
         window.startStaffRealtime();
     }
-    // ✅ เพิ่มตัวนี้
+   
     if (typeof window.startPayrollRealtime === 'function') {
         window.startPayrollRealtime();
     }
@@ -9631,6 +9627,100 @@ window.saveStaffProfile = async function(staffId) {
     }
 };
 
+window.toggleUserStatusByCode = async function(staffCode) {
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+    }
+
+    const { data: staff, error: loadError } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .eq('staff_code', staffCode)
+        .single();
+
+    if (loadError || !staff) {
+        console.error('toggleUserStatusByCode load error:', loadError);
+        return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
+    }
+
+    const isLocked = (staff.is_active === false) || (staff.employment_status === 'ออก');
+
+    const payload = isLocked
+        ? {
+            is_active: true,
+            employment_status: 'ทำงาน',
+            updated_at: new Date().toISOString()
+        }
+        : {
+            is_active: false,
+            employment_status: 'ออก',
+            updated_at: new Date().toISOString()
+        };
+
+    const { error } = await window.supabaseClient
+        .from('staff_profiles')
+        .update(payload)
+        .eq('staff_code', staffCode);
+
+    if (error) {
+        console.error('toggleUserStatusByCode update error:', error);
+        return Swal.fire('ผิดพลาด', error.message || 'ไม่สามารถเปลี่ยนสถานะได้', 'error');
+    }
+
+    Swal.fire({
+        icon: 'success',
+        title: 'อัปเดตสถานะเรียบร้อย',
+        timer: 1200,
+        showConfirmButton: false
+    });
+
+    const activeBtn = document.querySelector('.settings-nav-btn.active');
+    if (activeBtn && typeof window.switchSettingsTab === 'function') {
+        await window.switchSettingsTab('users', activeBtn);
+    }
+};
+
+window.deleteStaffUserByCode = async function(staffCode) {
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+    }
+
+    const result = await Swal.fire({
+        icon: 'warning',
+        title: 'ยืนยันการลบ',
+        text: 'ต้องการลบข้อมูลพนักงานนี้ใช่หรือไม่?',
+        showCancelButton: true,
+        confirmButtonText: 'ลบเลย',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#dc2626'
+    });
+
+    if (!result.isConfirmed) return;
+
+    const { error } = await window.supabaseClient
+        .from('staff_profiles')
+        .delete()
+        .eq('staff_code', staffCode);
+
+    if (error) {
+        console.error('deleteStaffUserByCode error:', error);
+        return Swal.fire('ลบไม่สำเร็จ', error.message || 'เกิดข้อผิดพลาด', 'error');
+    }
+
+    Swal.fire({
+        icon: 'success',
+        title: 'ลบเรียบร้อย',
+        timer: 1200,
+        showConfirmButton: false
+    });
+
+    const activeBtn = document.querySelector('.settings-nav-btn.active');
+    if (activeBtn && typeof window.switchSettingsTab === 'function') {
+        await window.switchSettingsTab('users', activeBtn);
+    }
+};
+
+
 window.saveSalaryAdjustmentById = async function(staffId) {
     if (!window.supabaseClient) {
         return Swal.fire({
@@ -10673,6 +10763,8 @@ window.toggleStaffProfileStatus = async function(profileId, nextActive) {
 
 // 2. ฟังก์ชันสลับเนื้อหาและจัดการสีเมนู
 window.switchSettingsTab = async function(tab, btn) {
+    window.currentSettingsTab = tab; // ✅ สำคัญมาก
+
     // 🎨 จัดการสีปุ่ม (Active State)
     document.querySelectorAll('.settings-nav-btn').forEach(b => {
         b.classList.remove('active', 'bg-pink-50', 'border-pink-100', 'shadow-md');
@@ -10729,12 +10821,53 @@ window.switchSettingsTab = async function(tab, btn) {
             </div>`;
     }
 
-   // --- 2. จัดการผู้ใช้งาน (เพิ่มปุ่มแก้ไข/ลบ และ Sorting) ---
+ // --- 2. จัดการผู้ใช้งาน (Supabase + Online Realtime) ---
 else if (tab === 'users') {
-    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
-    
+    window.currentSettingsTab = 'users';
+
+    if (!window.supabaseClient) {
+        area.innerHTML = `
+            <div class="bg-white p-10 rounded-[3.5rem] shadow-xl border border-pink-50 text-center text-red-400 font-bold">
+                ยังไม่พบการเชื่อมต่อ Supabase
+            </div>`;
+        return;
+    }
+
+    const currentUser = window.getCurrentUserSafe
+        ? window.getCurrentUserSafe()
+        : (JSON.parse(localStorage.getItem('currentUser')) || {});
+
+    const viewingBranch = String(currentUser.branch || 'ทุกสาขา').replace('สาขา', '').trim();
+
+    let query = window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    if (!(typeof window.canViewAllBranches === 'function' && window.canViewAllBranches()) && viewingBranch !== 'ทุกสาขา') {
+        query = query.eq(
+            'branch',
+            window.normalizeBranch ? window.normalizeBranch(viewingBranch) : viewingBranch
+        );
+    }
+
+    const { data: staffDB, error } = await query;
+
+    if (error) {
+        console.error('load staff_profiles for users tab error:', error);
+        area.innerHTML = `
+            <div class="bg-white p-10 rounded-[3.5rem] shadow-xl border border-pink-50 text-center text-red-400 font-bold">
+                โหลดข้อมูลผู้ใช้งานไม่สำเร็จ
+            </div>`;
+        return;
+    }
+
     // เรียงลำดับ: Active อยู่บน, Locked อยู่ล่าง
-    const sortedStaff = [...staffDB].sort((a, b) => (a.isLocked === b.isLocked) ? 0 : a.isLocked ? 1 : -1);
+    const sortedStaff = [...(staffDB || [])].sort((a, b) => {
+        const aLocked = (a.is_active === false) || (a.employment_status === 'ออก');
+        const bLocked = (b.is_active === false) || (b.employment_status === 'ออก');
+        return (aLocked === bLocked) ? 0 : aLocked ? 1 : -1;
+    });
 
     area.innerHTML = `
         <div class="bg-white p-10 rounded-[3.5rem] shadow-xl border border-pink-50 animate-in slide-in-from-right h-full flex flex-col">
@@ -10759,23 +10892,29 @@ else if (tab === 'users') {
                         </thead>
                         <tbody class="font-bold text-slate-600">
                             ${sortedStaff.map((s) => {
-                                const originalIdx = staffDB.findIndex(item => item.staffId === s.staffId);
-                                const isLocked = s.isLocked === true;
+                                const staffCode = s.staff_code || '';
+                                const isLocked = (s.is_active === false) || (s.employment_status === 'ออก');
+                                const displayName = s.full_name || s.name || '-';
+
                                 return `
                                 <tr class="border-b border-slate-50 transition-all ${isLocked ? 'bg-slate-50/80 opacity-60' : 'hover:bg-pink-50/30'}">
-                                    <td class="p-5"><span class="${isLocked ? 'line-through text-slate-400' : 'text-slate-800'}">${isLocked ? '🚫 ' : '👤 '}${s.name}</span></td>
+                                    <td class="p-5">
+                                        <span class="${isLocked ? 'line-through text-slate-400' : 'text-slate-800'}">
+                                            ${isLocked ? '🚫 ' : '👤 '}${displayName}
+                                        </span>
+                                    </td>
                                     <td class="p-5 text-pink-400 italic">${s.role || '-'}</td>
-                                    <td class="p-5 font-mono text-slate-400">${s.phone || '-'}</td>
+                                    <td class="p-5 font-mono text-slate-400">${staffCode || '-'} / ${s.phone || '-'}</td>
                                     <td class="p-5 text-center">
-                                        <button onclick="window.toggleUserStatus(${originalIdx})" 
+                                        <button onclick="window.toggleUserStatusByCode('${staffCode}')" 
                                             class="px-4 py-1.5 rounded-full text-[9px] font-black uppercase shadow-sm transition-all ${isLocked ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}">
                                             ${isLocked ? '✅ เปิดสิทธิ์' : '🚫 ระงับสิทธิ์'}
                                         </button>
                                     </td>
                                     <td class="p-5 text-center">
                                         <div class="flex gap-2 justify-center">
-                                            <button onclick="window.showStaffModal('edit', ${originalIdx})" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-pink-500 hover:text-white transition-all flex items-center justify-center">✏️</button>
-                                            <button onclick="window.deleteStaffUser(${originalIdx})" class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:bg-black hover:text-white transition-all flex items-center justify-center">🗑️</button>
+                                            <button onclick="window.showStaffModalById('edit', '${staffCode}')" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-pink-500 hover:text-white transition-all flex items-center justify-center">✏️</button>
+                                            <button onclick="window.deleteStaffUserByCode('${staffCode}')" class="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:bg-black hover:text-white transition-all flex items-center justify-center">🗑️</button>
                                         </div>
                                     </td>
                                 </tr>`;

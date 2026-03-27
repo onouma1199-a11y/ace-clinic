@@ -720,6 +720,37 @@ window.getCustomersFromSupabase = async function() {
     }
 };
 
+window.getStaffFromSupabase = async function() {
+    try {
+        if (!window.supabaseClient) return [];
+
+        const viewingBranch = typeof window.getCurrentViewingBranch === 'function'
+            ? window.getCurrentViewingBranch()
+            : 'ทุกสาขา';
+
+        let query = window.supabaseClient
+            .from('staff_profiles')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (!(typeof window.canViewAllBranches === 'function' && window.canViewAllBranches()) && viewingBranch !== 'ทุกสาขา') {
+            query = query.eq('branch', viewingBranch);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            console.error('getStaffFromSupabase error:', error);
+            return [];
+        }
+
+        return Array.isArray(data) ? data : [];
+    } catch (e) {
+        console.error('getStaffFromSupabase exception:', e);
+        return [];
+    }
+};
+
 /* -------------------- SUPABASE: Realtime -------------------- */
 
 window.startCustomerRealtime = function() {
@@ -800,16 +831,58 @@ window.startStaffRealtime = function() {
                 table: 'staff_profiles'
             },
             async function() {
-                console.log('staff_profiles changed → reload staff UI');
+                console.log('staff_profiles changed → reloading users UI');
 
-                if (typeof window.renderStaffManagement === 'function') {
+                const titleEl = document.getElementById('pageTitle');
+                const currentTitle = String(titleEl?.innerText || '').toUpperCase();
+
+                if (currentTitle.includes('ตั้งค่าระบบ') || currentTitle.includes('จัดการพนักงาน')) {
+                    const activeBtn = document.querySelector('.settings-nav-btn.active');
+                    if (activeBtn && typeof window.switchSettingsTab === 'function') {
+                        await window.switchSettingsTab('users', activeBtn);
+                    }
+                }
+            }
+        )
+        .subscribe();
+};
+
+window.startPayrollRealtime = function() {
+    if (!window.supabaseClient) return;
+
+    if (window.payrollRealtimeChannel) {
+        window.supabaseClient.removeChannel(window.payrollRealtimeChannel);
+    }
+
+    let payrollRefreshTimer; // ✅ วางตรงนี้
+
+    window.payrollRealtimeChannel = window.supabaseClient
+        .channel('payroll-history-live')
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'payroll_history'
+            },
+            function() {
+                console.log('payroll_history changed → debounce refresh');
+
+                // ✅ ใส่ตรงนี้ (แทนของเดิมทั้งหมด)
+                clearTimeout(payrollRefreshTimer);
+
+                payrollRefreshTimer = setTimeout(() => {
                     const titleEl = document.getElementById('pageTitle');
                     const currentTitle = String(titleEl?.innerText || '').toUpperCase();
 
-                    if (currentTitle.includes('จัดการพนักงาน')) {
-                        window.renderStaffManagement();
+                    if (currentTitle.includes('ATTENDANCE')) {
+                        window.renderAttendanceRecord?.();
                     }
-                }
+
+                    if (currentTitle.includes('PAYROLL')) {
+                        window.renderPayrollSystem?.();
+                    }
+                }, 300);
             }
         )
         .subscribe();
@@ -1126,22 +1199,34 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
         localStorage.setItem('ace_saved_accounts', JSON.stringify(savedList));
     }
 
+    // ✅ set current user
     window.currentUser = user;
     localStorage.setItem('currentUser', JSON.stringify(user));
 
+    // ✅ switch UI
     document.getElementById('loginPage')?.classList.add('hidden');
     document.getElementById('mainDashboard')?.classList.remove('hidden');
 
+    // =========================
+    // 🔴 START REALTIME ALL SYSTEM
+    // =========================
     if (typeof window.startCustomerRealtime === 'function') {
         window.startCustomerRealtime();
     }
-	if (typeof window.startPermissionRealtime === 'function') {
-   	 window.startPermissionRealtime();
-	}
-	if (typeof window.startStaffRealtime === 'function') {
-   	 window.startStaffRealtime();
-	}
+    if (typeof window.startPermissionRealtime === 'function') {
+        window.startPermissionRealtime();
+    }
+    if (typeof window.startStaffRealtime === 'function') {
+        window.startStaffRealtime();
+    }
+    // ✅ เพิ่มตัวนี้
+    if (typeof window.startPayrollRealtime === 'function') {
+        window.startPayrollRealtime();
+    }
 
+    // =========================
+    // 👤 PROFILE UI
+    // =========================
     if (document.getElementById('userNameLabel')) {
         document.getElementById('userNameLabel').innerText = `${user.name} (${user.role})`;
     }
@@ -1159,24 +1244,27 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
     if (document.getElementById('dropProfileRole')) document.getElementById('dropProfileRole').innerText = user.role || 'แอดมินหลัก';
     if (document.getElementById('dropProfileContact')) document.getElementById('dropProfileContact').innerText = user.phone || user.email || 'พนักงานคลินิก';
 
+    // =========================
+    // 🚀 CONTINUE LOAD SYSTEM
+    // =========================
     const continueLoginRender = async () => {
         try {
+            // โหลด permission จาก Supabase
             if (typeof window.loadPermissionsFromSupabase === 'function') {
                 await window.loadPermissionsFromSupabase();
             }
 
+            // render menu ตาม role
             if (typeof renderMenuByRole === 'function') {
                 renderMenuByRole(user.role || 'แอดมินหลัก');
             }
 
+            // render dropdown สาขา
             if (typeof renderBranchDropdown === 'function') {
                 renderBranchDropdown();
             }
 
-	if (typeof window.startPermissionRealtime === 'function') {
-  	  window.startPermissionRealtime();
-	}
-
+            // redirect หน้า
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('target') === 'ceo_board') {
                 loadPage(10, 'บอร์ดรวมทุกสาขา');
@@ -1185,6 +1273,7 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
                 loadPage(1, 'Dashboard ภาพรวม');
             }
 
+            // toast
             Swal.fire({
                 toast: true,
                 position: 'top-end',
@@ -1193,6 +1282,7 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
                 showConfirmButton: false,
                 timer: 1500
             });
+
         } catch (e) {
             console.error('continueLoginRender error:', e);
             Swal.fire({
@@ -8777,59 +8867,120 @@ window.renderStaffProfileList = function() {
     `;
 };
 
-// --- 🎯 ฟังก์ชันสะพานเชื่อม ID (ตัวนี้จะทำหน้าที่รับ ID จากปุ่มที่คุณแก้ แล้วไปหาลำดับใน Database ให้เอง) ---
+// --- 🎯 ฟังก์ชันสะพานเชื่อม ID (Supabase-based) ---
 
-window.showStaffModalById = function(mode, staffId) {
-    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
-    // ค้นหาลำดับ (Index) จริงๆ จาก Database โดยใช้ staffId
-    const idx = staffDB.findIndex(s => String(s.staffId) === String(staffId));
-    
-    // ส่งลำดับที่หาเจอไปให้ฟังก์ชันหน้ากากเดิมทำงานต่อ
-    window.showStaffModal(mode, idx !== -1 ? idx : null);
+window.getStaffProfileByCode = async function(staffCode) {
+    if (!window.supabaseClient) return null;
+
+    const { data, error } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .eq('staff_code', staffCode)
+        .single();
+
+    if (error) {
+        console.error('getStaffProfileByCode error:', error);
+        return null;
+    }
+
+    return data || null;
 };
 
-window.viewStaffDetailById = function(staffId) {
-    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
-    const idx = staffDB.findIndex(s => String(s.staffId) === String(staffId));
-    
-    if (idx !== -1) {
-        window.viewStaffDetail(idx);
+window.showStaffModalById = async function(mode, staffId) {
+    if (mode !== 'edit') {
+        window.showStaffModal(mode, null, null);
+        return;
+    }
+
+    const staff = await window.getStaffProfileByCode(staffId);
+
+    if (!staff) {
+        return Swal.fire('Error', 'ไม่พบรหัสพนักงานนี้ในระบบ', 'error');
+    }
+
+    window.showStaffModal(mode, null, staff);
+};
+
+window.viewStaffDetailById = async function(staffId) {
+    const staff = await window.getStaffProfileByCode(staffId);
+
+    if (!staff) {
+        return Swal.fire('Error', 'ไม่พบรหัสพนักงานนี้ในระบบ', 'error');
+    }
+
+    window.viewStaffDetailDirect(staff);
+};
+
+window.openLuxuryPayrollById = async function(staffId, period) {
+    const staff = await window.getStaffProfileByCode(staffId);
+
+    if (!staff) {
+        return Swal.fire('Error', 'ไม่พบรหัสพนักงานนี้ในระบบ', 'error');
+    }
+
+    if (typeof window.openLuxuryPayrollDirect === 'function') {
+        window.openLuxuryPayrollDirect(staff, period);
     } else {
-        Swal.fire('Error', 'ไม่พบรหัสพนักงานนี้ในระบบ Database', 'error');
+        Swal.fire('Error', 'ยังไม่พบฟังก์ชัน openLuxuryPayrollDirect', 'error');
     }
 };
 
-window.openLuxuryPayrollById = function(staffId, period) {
+/* --- 1. ฟังก์ชันเปิดหน้าต่าง เพิ่ม/แก้ไข พนักงาน (รองรับ Supabase) --- */
+window.showStaffModal = function(mode, idx = null, directStaff = null) {
     const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
-    const idx = staffDB.findIndex(s => String(s.staffId) === String(staffId));
-    if (idx !== -1) {
-        window.openLuxuryPayroll(idx, period);
-    }
-};
 
-/* --- 1. ฟังก์ชันเปิดหน้าต่าง เพิ่ม/แก้ไข พนักงาน (ฉบับพิมพ์ พ.ศ. ได้ และระบุเพศ) --- */
-window.showStaffModal = function(mode, idx = null) {
-    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
-    let staff = (mode === 'edit' && idx !== null) ? staffDB[idx] : { 
-        name: '', nickname: '', gender: 'ไม่ระบุ', phone: '', branch: 'บางพลี', 
-        status: 'ทำงาน', role: 'พนักงานทรีทเม้นท์', email:'', lineId:'', 
-        bankName:'', bankAcc:'', salary: 0, startDate: '' 
-    };
-    
+    let staff = directStaff || ((mode === 'edit' && idx !== null && staffDB[idx]) ? staffDB[idx] : {
+        name: '',
+        nickname: '',
+        gender: 'ไม่ระบุ',
+        phone: '',
+        branch: 'บางพลี',
+        status: 'ทำงาน',
+        role: 'พนักงานทรีทเม้นท์',
+        email: '',
+        lineId: '',
+        bankName: '',
+        bankAcc: '',
+        salary: 0,
+        startDate: ''
+    });
+
+    const safeBranch = String(staff.branch || '').replace('สาขา', '').trim() || 'บางพลี';
+    const safeStatus = staff.status || staff.employment_status || 'ทำงาน';
+    const safeStaffCode = staff.staffId || staff.staff_code || '';
+
+    // ✅ จุดสำคัญ: ต้องส่ง staff_code ก่อน ไม่ใช่ id uuid
+    const staffCodeForSave = String(
+        staff.staffId || staff.staff_code || ''
+    ).replace(/'/g, "\\'");
+
     const modal = document.createElement('div');
     modal.id = 'staffModalContainer';
     modal.className = 'fixed inset-0 bg-black/70 flex items-center justify-center z-[10005] p-4';
     modal.innerHTML = `
     <div class="bg-white w-full max-w-4xl rounded-[4rem] shadow-2xl overflow-hidden border-2 border-pink-200 font-sans animate-in zoom-in duration-300">
         <div class="bg-[#F9EBEF] p-8 flex justify-between items-center border-b border-pink-300">
-            <h2 class="text-[#D48197] text-xl font-bold italic uppercase">📝 ${mode === 'edit' ? 'แก้ไขข้อมูลพนักงาน' : 'เพิ่มพนักงานใหม่'}</h2>
+            <h2 class="text-[#D48197] text-xl font-bold italic uppercase">
+                📝 ${mode === 'edit' ? 'แก้ไขข้อมูลพนักงาน' : 'เพิ่มพนักงานใหม่'}
+            </h2>
             <div class="flex gap-3">
-                <button onclick="window.saveStaffComplete(${idx}, '${mode}')" class="bg-[#D48197] text-white px-10 py-3 rounded-full text-xs font-black shadow-lg hover:scale-105 transition-all italic">💾 บันทึกข้อมูลพนักงาน</button>
-                <button onclick="document.getElementById('staffModalContainer').remove()" class="bg-slate-200 text-slate-500 px-8 py-3 rounded-full text-xs font-bold">ยกเลิก</button>
+                <button 
+                    onclick="${mode === 'edit' 
+                        ? `window.saveStaffProfile('${staffCodeForSave}')` 
+                        : `window.saveStaffComplete(${idx === null ? 'null' : idx}, '${mode}', '${staffCodeForSave}')`
+                    }"
+                    class="bg-[#D48197] text-white px-10 py-3 rounded-full text-xs font-black shadow-lg hover:scale-105 transition-all italic">
+                    💾 บันทึกข้อมูลพนักงาน
+                </button>
+
+                <button onclick="document.getElementById('staffModalContainer').remove()" 
+                    class="bg-slate-200 text-slate-500 px-8 py-3 rounded-full text-xs font-bold">
+                    ยกเลิก
+                </button>
             </div>
         </div>
+
         <div class="p-10 grid grid-cols-12 gap-10 text-left overflow-y-auto max-h-[80vh]">
-            
             <div class="col-span-12 md:col-span-4 space-y-4">
                 <div class="w-full aspect-[3/4] bg-slate-50 rounded-[3rem] border-4 border-pink-300 flex flex-col items-center justify-center overflow-hidden relative shadow-inner">
                     <img id="previewImg" src="${staff.img || ''}" class="w-full h-full object-cover ${staff.img ? '' : 'hidden'}">
@@ -8840,9 +8991,9 @@ window.showStaffModal = function(mode, idx = null) {
                 <div>
                     <label class="text-[10px] font-bold text-slate-400 ml-2 italic uppercase">📍 ประจำสาขา</label>
                     <select id="newBranch" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none bg-white">
-                        <option value="บางพลี" ${staff.branch === 'บางพลี' ? 'selected' : ''}>บางพลี</option>
-                        <option value="ชลบุรี" ${staff.branch === 'ชลบุรี' ? 'selected' : ''}>ชลบุรี</option>
-                        <option value="อุดมสุข" ${staff.branch === 'อุดมสุข' ? 'selected' : ''}>อุดมสุข</option>
+                        <option value="บางพลี" ${safeBranch === 'บางพลี' ? 'selected' : ''}>บางพลี</option>
+                        <option value="ชลบุรี" ${safeBranch === 'ชลบุรี' ? 'selected' : ''}>ชลบุรี</option>
+                        <option value="อุดมสุข" ${safeBranch === 'อุดมสุข' ? 'selected' : ''}>อุดมสุข</option>
                     </select>
                 </div>
 
@@ -8858,8 +9009,8 @@ window.showStaffModal = function(mode, idx = null) {
                 <div>
                     <label class="text-[10px] font-bold text-slate-400 ml-2 italic">🟢 สถานะพนักงาน</label>
                     <select id="newStatus" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none bg-white">
-                        <option value="ทำงาน" ${staff.status === 'ทำงาน' ? 'selected' : ''}>🟢 สถานะ: ทำงาน</option>
-                        <option value="ออก" ${staff.status === 'ออก' ? 'selected' : ''}>🔴 สถานะ: ลาออก</option>
+                        <option value="ทำงาน" ${safeStatus === 'ทำงาน' ? 'selected' : ''}>🟢 สถานะ: ทำงาน</option>
+                        <option value="ออก" ${safeStatus === 'ออก' ? 'selected' : ''}>🔴 สถานะ: ลาออก</option>
                     </select>
                 </div>
             </div>
@@ -8867,22 +9018,22 @@ window.showStaffModal = function(mode, idx = null) {
             <div class="col-span-12 md:col-span-8 grid grid-cols-2 gap-x-6 gap-y-4 content-start">
                 <div class="col-span-1">
                     <label class="text-[10px] font-bold text-pink-500 ml-2 uppercase italic">รหัสพนักงาน (Auto)</label>
-                    <input type="text" id="newHN" value="${staff.staffId || ''}" class="w-full bg-slate-100 border-2 border-pink-200 rounded-xl p-3 text-sm font-bold text-[#D48197]" readonly>
+                    <input type="text" id="newHN" value="${safeStaffCode}" class="w-full bg-slate-100 border-2 border-pink-200 rounded-xl p-3 text-sm font-bold text-[#D48197]" readonly>
                 </div>
                 <div class="col-span-1">
                     <label class="text-[10px] font-bold text-slate-400 ml-2 italic">📅 วันที่เริ่มงาน (พิมพ์ พ.ศ. ได้)</label>
-                    <input type="text" id="newStart" value="${staff.startDate || ''}" placeholder="เช่น 01/12/2569" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none focus:border-[#D48197]">
+                    <input type="text" id="newStart" value="${staff.startDate || staff.start_date || ''}" placeholder="เช่น 01/12/2569" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none focus:border-[#D48197]">
                 </div>
                 
                 <div class="col-span-2">
                     <label class="text-[10px] font-bold text-slate-400 ml-2 italic">ชื่อจริง-นามสกุล *</label>
-                    <input type="text" id="newName" value="${staff.name || ''}" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
+                    <input type="text" id="newName" value="${staff.name || staff.full_name || ''}" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
                 </div>
 
                 <div class="col-span-1">
                     <label class="text-[10px] font-bold text-slate-400 ml-2 italic uppercase">⚧ เพศ</label>
                     <select id="newGender" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none bg-white">
-                        <option value="ไม่ระบุ" ${staff.gender === 'ไม่ระบุ' ? 'selected' : ''}>-- ระบุเพศ --</option>
+                        <option value="ไม่ระบุ" ${(staff.gender || 'ไม่ระบุ') === 'ไม่ระบุ' ? 'selected' : ''}>-- ระบุเพศ --</option>
                         <option value="ชาย" ${staff.gender === 'ชาย' ? 'selected' : ''}>ชาย</option>
                         <option value="หญิง" ${staff.gender === 'หญิง' ? 'selected' : ''}>หญิง</option>
                     </select>
@@ -8893,24 +9044,24 @@ window.showStaffModal = function(mode, idx = null) {
                     <input type="text" id="newNickname" value="${staff.nickname || ''}" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
                 </div>
                 
-               <div class="col-span-1">
-    <label class="text-[10px] font-bold text-slate-400 ml-2 italic">📞 เบอร์โทรศัพท์ (รหัสผ่าน) *</label>
-    <input type="text" id="newPhone" value="${staff.phone || ''}" placeholder="08X-XXX-XXXX" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
-</div>
+                <div class="col-span-1">
+                    <label class="text-[10px] font-bold text-slate-400 ml-2 italic">📞 เบอร์โทรศัพท์ (รหัสผ่าน) *</label>
+                    <input type="text" id="newPhone" value="${staff.phone || ''}" placeholder="08X-XXX-XXXX" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
+                </div>
 
-<div class="col-span-1">
-    <label class="text-[10px] font-bold text-slate-400 ml-2 italic">✉️ อีเมล (Username) *</label>
-    <input type="email" id="newEmail" value="${staff.email || ''}" placeholder="name@email.com" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
-</div>
+                <div class="col-span-1">
+                    <label class="text-[10px] font-bold text-slate-400 ml-2 italic">✉️ อีเมล (Username) *</label>
+                    <input type="email" id="newEmail" value="${staff.email || ''}" placeholder="name@email.com" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
+                </div>
 
-<div class="col-span-1">
-    <label class="text-[10px] font-bold text-[#D48197] ml-2 italic">🏦 ธนาคาร</label>
-    <input type="text" id="newBank" value="${staff.bankName || ''}" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
-</div>
+                <div class="col-span-1">
+                    <label class="text-[10px] font-bold text-[#D48197] ml-2 italic">🏦 ธนาคาร</label>
+                    <input type="text" id="newBank" value="${staff.bankName || staff.bank_name || ''}" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
+                </div>
                 
                 <div class="col-span-1">
                     <label class="text-[10px] font-bold text-[#D48197] ml-2 italic">💳 เลขที่บัญชี</label>
-                    <input type="text" id="newAcc" value="${staff.bankAcc || ''}" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
+                    <input type="text" id="newAcc" value="${staff.bankAcc || staff.bank_acc || ''}" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
                 </div>
 
                 <div class="col-span-2">
@@ -8924,16 +9075,17 @@ window.showStaffModal = function(mode, idx = null) {
             </div>
         </div>
     </div>`;
+
     document.body.appendChild(modal);
 
-const hnInput = document.getElementById('newHN');
-if (mode !== 'edit' && hnInput && !hnInput.value) {
-    hnInput.value = generateStaffCode();
-}
+    const hnInput = document.getElementById('newHN');
+    if (mode !== 'edit' && hnInput && !hnInput.value) {
+        hnInput.value = generateStaffCode();
+    }
 };
 
 
-window.saveStaffComplete = function(idx, mode) {
+window.saveStaffComplete = async function(idx, mode, directId = '') {
     const name = document.getElementById('newName')?.value?.trim() || '';
     const phone = document.getElementById('newPhone')?.value?.trim() || '';
     const email = document.getElementById('newEmail')?.value?.trim() || '';
@@ -8948,15 +9100,23 @@ window.saveStaffComplete = function(idx, mode) {
     const imgElement = document.getElementById('previewImg');
     const imgData = imgElement ? imgElement.src : '';
 
+    const staffCode = document.getElementById('newHN')?.value?.trim() || generateStaffCode();
+
+    let existingIndex = -1;
+
+    if (mode === 'edit' && idx !== null && idx !== undefined && staffDB[idx]) {
+        existingIndex = idx;
+    } else if (directId) {
+        existingIndex = staffDB.findIndex(s => String(s.id || '') === String(directId));
+    } else if (staffCode) {
+        existingIndex = staffDB.findIndex(s => String(s.staffId || s.staff_code || '') === String(staffCode));
+    }
+
+    const oldItem = existingIndex !== -1 ? (staffDB[existingIndex] || {}) : {};
+
     const data = {
-        id: mode === 'edit' && staffDB[idx]?.id
-            ? staffDB[idx].id
-            : crypto.randomUUID(),
-
-        staffId: mode === 'edit' && staffDB[idx]?.staffId
-            ? staffDB[idx].staffId
-            : (document.getElementById('newHN')?.value || generateStaffCode()),
-
+        id: oldItem.id || directId || crypto.randomUUID(),
+        staffId: oldItem.staffId || oldItem.staff_code || staffCode,
         name: name,
         nickname: document.getElementById('newNickname')?.value || '',
         gender: document.getElementById('newGender')?.value || 'ไม่ระบุ',
@@ -8974,18 +9134,45 @@ window.saveStaffComplete = function(idx, mode) {
         salary: parseFloat(document.getElementById('newSalary')?.value || 0),
         img: imgData && imgData.startsWith('data:')
             ? imgData
-            : (mode === 'edit' && staffDB[idx] ? staffDB[idx].img : ''),
+            : (oldItem.img || ''),
         isLocked: status === 'ออก',
         updatedAt: new Date().toISOString()
     };
 
-    if (mode === 'edit' && idx !== null && idx !== undefined && staffDB[idx]) {
-        staffDB[idx] = data;
+    if (existingIndex !== -1) {
+        staffDB[existingIndex] = { ...staffDB[existingIndex], ...data };
     } else {
         staffDB.push(data);
     }
 
     localStorage.setItem('staffDB', JSON.stringify(staffDB));
+
+    if (window.supabaseClient) {
+        const payload = {
+            staff_code: data.staffId,
+            full_name: data.name,
+            phone: data.phone,
+            email: data.email,
+            role: data.role,
+            branch: window.normalizeBranch ? window.normalizeBranch(data.branch) : data.branch,
+            employment_status: data.status,
+            is_active: data.status !== 'ออก'
+        };
+
+        const { error } = await window.supabaseClient
+            .from('staff_profiles')
+            .upsert([payload], { onConflict: 'staff_code' });
+
+        if (error) {
+            console.error('saveStaffComplete supabase error:', error);
+            return Swal.fire({
+                icon: 'error',
+                title: 'บันทึกลง Supabase ไม่สำเร็จ',
+                text: error.message || 'ไม่สามารถบันทึกข้อมูลพนักงานได้',
+                confirmButtonColor: '#D48197'
+            });
+        }
+    }
 
     document.getElementById('staffModalContainer')?.remove();
 
@@ -9000,59 +9187,88 @@ window.saveStaffComplete = function(idx, mode) {
     if (typeof renderStaffProfileList === 'function') {
         renderStaffProfileList();
     }
+
+    const activeBtn = document.querySelector('.settings-nav-btn.active');
+    if (activeBtn && typeof window.switchSettingsTab === 'function') {
+        await window.switchSettingsTab('users', activeBtn);
+    }
 };
 
 window.generateStaffCode = function() {
     const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
-    const count = staffDB.length + 1;
-    return 'ST' + String(count).padStart(4, '0');
+    const codes = staffDB
+        .map(s => String(s.staffId || s.staff_code || ''))
+        .filter(Boolean);
 
+    let maxNum = 0;
+    codes.forEach(code => {
+        const num = parseInt(String(code).replace(/[^\d]/g, ''), 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+    });
+
+    return 'ST' + String(maxNum + 1).padStart(4, '0');
 };
 
 function generateStaffCode() {
-    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
-    const count = staffDB.length + 1;
-    return 'ST' + String(count).padStart(4, '0');
+    return window.generateStaffCode();
 }
 
-/* --- 3. ฟังก์ชันดูประวัติ (ล็อกสิทธิ์ให้เห็นเฉพาะข้อมูลตัวเองถ้าเป็นพนักงาน) --- */
-window.viewStaffDetail = function(idx) {
-    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
-    const staff = staffDB[idx];
-    if (!staff) return alert("❌ ไม่พบข้อมูล");
+/* --- 3. ฟังก์ชันดูประวัติพนักงาน (รองรับทั้ง index เดิม + object จาก Supabase) --- */
+window.viewStaffDetailDirect = function(staff) {
+    if (!staff) {
+        return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
+    }
 
-    // 🔒 ระบบล็อกสิทธิ์: ถ้าเป็น "พนักงานทรีทเม้นท์" จะดูได้เฉพาะประวัติของตัวเองเท่านั้น
     const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
     const isAdmin = ['แอดมินหลัก', 'CEO', 'ผู้จัดการ'].includes(currentUser.role);
-    
-    // ถ้าไม่ใช่ Admin และไม่ใช่ชื่อตัวเอง จะเด้งออกทันที
-    if (!isAdmin && currentUser.name !== staff.name) {
+
+    const staffName = staff.name || staff.full_name || '-';
+    const staffCode = staff.staffId || staff.staff_code || '-';
+    const staffBranch = staff.branch || '-';
+
+    if (!isAdmin && currentUser.name !== staffName) {
         Swal.fire('ไม่มีสิทธิ์เข้าถึง', 'คุณสามารถดูได้เฉพาะประวัติของตนเองเท่านั้นค่ะ', 'error');
         return;
     }
 
     const target = document.getElementById('dynamicContent');
+    if (!target) return;
+
     target.innerHTML = `
         <div class="animate-in slide-in-from-right duration-500 p-6 text-left pb-20 font-sans">
             <div class="bg-white p-6 rounded-[2.5rem] shadow-sm mb-6 flex justify-between items-center border border-pink-100">
                 <button onclick="renderStaffManagement()" class="bg-pink-50 p-3 rounded-2xl text-[#D48197] font-bold">🔙 กลับ</button>
-                <div class="text-right font-black ace-pink uppercase italic">ID: ${staff.staffId || '-'}</div>
+                <div class="text-right font-black ace-pink uppercase italic">ID: ${staffCode}</div>
             </div>
             <div class="grid grid-cols-12 gap-8">
                 <div class="col-span-12 lg:col-span-4 space-y-6">
                     <div class="bg-white p-8 rounded-[4rem] shadow-xl border border-pink-50 text-center">
                         <img src="${staff.img || 'https://via.placeholder.com/300'}" class="w-full aspect-[3/4] rounded-[3rem] object-cover border-8 border-slate-50 mb-6">
-                        <h3 class="text-2xl font-black text-slate-700">${staff.name}</h3>
-                        <p class="text-sm font-bold text-[#D48197] mt-2 italic uppercase">${staff.branch}</p>
+                        <h3 class="text-2xl font-black text-slate-700">${staffName}</h3>
+                        <p class="text-sm font-bold text-[#D48197] mt-2 italic uppercase">${staffBranch}</p>
                     </div>
                     
                     <div class="grid grid-cols-1 gap-3">
-                        <button onclick="window.showStaffAttendanceById('${staff.staffId}')" 
-    class="w-full bg-blue-500 text-white p-4 rounded-3xl text-xs font-black shadow-lg hover:scale-105 transition-all">📊 สถิติ ขาด/ลา/สาย (%)</button>
-                        ${isAdmin ? `<button onclick="window.showSalaryHistoryById('${staff.staffId}')" 
-    class="w-full bg-green-500 text-white p-4 rounded-3xl text-xs font-black shadow-lg hover:scale-105 transition-all">💰 เงินเดือนย้อนหลัง</button>
-                      <button onclick="window.openSalaryAdjustmentModalById('${staff.staffId}')" class="w-full bg-rose-500 text-white p-4 rounded-3xl text-xs font-black shadow-lg hover:scale-105 transition-all">📈 ปรับฐานเงินเดือน</button>` : ''}
-                        <button onclick="showStaffDocs(${idx})" class="w-full bg-amber-500 text-white p-4 rounded-3xl text-xs font-black shadow-lg hover:scale-105 transition-all">📁 แฟ้มเก็บเอกสาร</button>
+                        <button onclick="window.showStaffAttendanceById('${staffCode}')" 
+                            class="w-full bg-blue-500 text-white p-4 rounded-3xl text-xs font-black shadow-lg hover:scale-105 transition-all">
+                            📊 สถิติ ขาด/ลา/สาย (%)
+                        </button>
+
+                        ${isAdmin ? `
+                            <button onclick="window.showSalaryHistoryById('${staffCode}')" 
+                                class="w-full bg-green-500 text-white p-4 rounded-3xl text-xs font-black shadow-lg hover:scale-105 transition-all">
+                                💰 เงินเดือนย้อนหลัง
+                            </button>
+                            <button onclick="window.openSalaryAdjustmentModalById('${staffCode}')" 
+                                class="w-full bg-rose-500 text-white p-4 rounded-3xl text-xs font-black shadow-lg hover:scale-105 transition-all">
+                                📈 ปรับฐานเงินเดือน
+                            </button>
+                        ` : ''}
+
+                        <button onclick="showStaffDocsByCode ? showStaffDocsByCode('${staffCode}') : Swal.fire('แจ้งเตือน','ยังไม่พบฟังก์ชัน showStaffDocsByCode','info')"
+                            class="w-full bg-amber-500 text-white p-4 rounded-3xl text-xs font-black shadow-lg hover:scale-105 transition-all">
+                            📁 แฟ้มเก็บเอกสาร
+                        </button>
                     </div>
                 </div>
                 
@@ -9063,18 +9279,25 @@ window.viewStaffDetail = function(idx) {
                             <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">ชื่อเล่น</label><p class="font-bold text-slate-700 border-b border-slate-50 pb-1">${staff.nickname || '-'}</p></div>
                             <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">เบอร์โทรศัพท์</label><p class="font-bold text-blue-500 border-b border-slate-50 pb-1">${staff.phone || '-'}</p></div>
                             <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">วันเริ่มงาน</label><p class="font-bold text-slate-700 border-b border-slate-50 pb-1">${staff.startDate || '-'}</p></div>
-                            <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">สถานะ</label><p class="font-bold text-green-500 border-b border-slate-50 pb-1">${staff.status || '-'}</p></div>
+                            <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">สถานะ</label><p class="font-bold text-green-500 border-b border-slate-50 pb-1">${staff.status || staff.employment_status || '-'}</p></div>
                             <div><label class="text-[10px] text-[#D48197] font-bold uppercase italic block">🏦 ธนาคาร</label><p class="font-bold text-slate-700 border-b border-slate-50 pb-1">${staff.bankName || '-'}</p></div>
                             <div><label class="text-[10px] text-[#D48197] font-bold uppercase italic block">💳 เลขที่บัญชี</label><p class="font-bold text-slate-700 border-b border-slate-50 pb-1">${staff.bankAcc || '-'}</p></div>
                             
-                            ${isAdmin ? `<div class="col-span-2"><label class="text-[10px] text-rose-500 font-bold uppercase italic block">💸 ฐานเงินเดือนปัจจุบัน</label><p class="text-sm font-black text-rose-600 border-b border-rose-50 pb-1">฿${parseFloat(staff.salary || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</p></div>` : ''}
+                            ${isAdmin ? `
+                                <div class="col-span-2">
+                                    <label class="text-[10px] text-rose-500 font-bold uppercase italic block">💸 ฐานเงินเดือนปัจจุบัน</label>
+                                    <p class="text-sm font-black text-rose-600 border-b border-rose-50 pb-1">฿${parseFloat(staff.salary || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
+                                </div>
+                            ` : ''}
                             
                             <div class="col-span-2"><label class="text-[10px] text-slate-400 font-bold uppercase italic">ที่อยู่ปัจจุบัน</label><p class="text-xs font-bold text-slate-500 leading-relaxed">${staff.address || '-'}</p></div>
                         </div>
                     </div>
+
                     <div id="staffSubDisplay" class="bg-white p-10 rounded-[4rem] shadow-2xl border-2 border-slate-50 min-h-[300px]">
                         <div class="flex flex-col items-center justify-center h-full pt-10 text-slate-300 italic text-center">
-                            <p class="text-6xl mb-4 opacity-20">📊</p><p>กรุณาเลือกเมนูทางซ้ายเพื่อดูสถิติรายบุคคลค่ะ</p>
+                            <p class="text-6xl mb-4 opacity-20">📊</p>
+                            <p>กรุณาเลือกเมนูทางซ้ายเพื่อดูสถิติรายบุคคลค่ะ</p>
                         </div>
                     </div>
                 </div>
@@ -9082,16 +9305,49 @@ window.viewStaffDetail = function(idx) {
         </div>`;
 };
 
-
-window.showStaffAttendance = function(idx) {
+window.viewStaffDetail = function(idx) {
     const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
     const staff = staffDB[idx];
-    if (!staff) return;
+    if (!staff) return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
 
-    const totalWorkDays = 26; 
-    const absentDays = parseInt(staff.lastAbsentReg || 0); 
-    const lateMins = parseInt(staff.lastLateMins || 0);   
-    const leaveDays = parseInt(staff.lastLeaveDays || 0); 
+    window.viewStaffDetailDirect(staff);
+};
+
+window.showStaffAttendance = async function(idxOrStaffCode) {
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+    }
+
+    let staffCode = '';
+
+    // รองรับทั้งกรณีส่ง staff_code มาเลย และกรณีมี currentStaffProfile
+    if (typeof idxOrStaffCode === 'string') {
+        staffCode = idxOrStaffCode;
+    } else if (window.currentStaffProfile?.staff_code) {
+        staffCode = window.currentStaffProfile.staff_code;
+    } else if (window.currentStaffProfile?.staffId) {
+        staffCode = window.currentStaffProfile.staffId;
+    }
+
+    if (!staffCode) {
+        return Swal.fire('Error', 'ไม่พบรหัสพนักงานสำหรับดูสถิติ', 'error');
+    }
+
+    const { data: staff, error } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .eq('staff_code', staffCode)
+        .single();
+
+    if (error || !staff) {
+        console.error('showStaffAttendance error:', error);
+        return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
+    }
+
+    const totalWorkDays = 26;
+    const absentDays = parseInt(staff.last_absent || 0);
+    const lateMins = parseInt(staff.last_late || 0);
+    const leaveDays = parseInt(staff.last_leave || 0);
 
     const attendanceRate = Math.max(0, ((totalWorkDays - absentDays) / totalWorkDays) * 100).toFixed(0);
 
@@ -9099,11 +9355,14 @@ window.showStaffAttendance = function(idx) {
     if (attendanceRate < 90) suggestion = "สถิติการมาทำงานค่อนข้างน้อย ควรพิจารณาตามความเหมาะสม";
     if (lateMins > 120) suggestion = "มีการมาสายสะสมเกินเกณฑ์ ควรตักเตือนก่อนปรับเงินเดือน";
 
-    document.getElementById('staffSubDisplay').innerHTML = `
+    const box = document.getElementById('staffSubDisplay');
+    if (!box) return;
+
+    box.innerHTML = `
         <div class="animate-in fade-in duration-300 text-left">
             <div class="flex justify-between items-center mb-6 border-b pb-2">
                 <h4 class="text-lg font-black text-blue-600 uppercase italic">📊 วิเคราะห์การมาทำงาน (Attendance)</h4>
-                <button onclick="openAttendanceEntryModal(${idx})" class="bg-blue-600 text-white px-4 py-1.5 rounded-xl text-[10px] font-bold hover:bg-black transition-all">+ บันทึก ขาด/ลา/สาย</button>
+                <button onclick="window.openAttendanceEntryModalById('${staff.staff_code}')" class="bg-blue-600 text-white px-4 py-1.5 rounded-xl text-[10px] font-bold hover:bg-black transition-all">+ บันทึก ขาด/ลา/สาย</button>
             </div>
             <div class="grid grid-cols-4 gap-4 mb-8">
                 <div class="bg-green-50 p-6 rounded-[2.5rem] text-center border border-green-100 shadow-sm">
@@ -9131,71 +9390,110 @@ window.showStaffAttendance = function(idx) {
         </div>`;
 };
 
-window.openAttendanceEntryModalById = function(staffId) {
-    const allStaff = JSON.parse(localStorage.getItem('staffDB')) || [];
-    
-    // ค้นหาด้วย staffId (ใช้ String ครอบเพื่อป้องกัน Error กรณี ID เป็นตัวเลข)
-    const staff = allStaff.find(s => String(s.staffId) === String(staffId));
-    
-    if(!staff) return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
+window.showStaffAttendanceById = function(staffId) {
+    return window.showStaffAttendance(staffId);
+};
+
+window.openAttendanceEntryModalById = async function(staffId) {
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+    }
+
+    const { data: staff, error } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .eq('staff_code', staffId)
+        .single();
+
+    if (error || !staff) {
+        console.error('openAttendanceEntryModalById error:', error);
+        return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
+    }
+
+    const staffName = staff.full_name || staff.name || '-';
+    const staffCode = staff.staff_code || staffId;
 
     document.getElementById('staffSubDisplay').innerHTML = `
         <div class="animate-in slide-in-from-right duration-300 text-left">
             <h4 class="text-lg font-black text-blue-600 uppercase mb-6 border-b pb-2 italic">📝 บันทึกสถิติ (ประจำเดือน)</h4>
-            <p class="text-xs font-bold text-slate-400 mb-6 italic">พนักงาน: ${staff.name} (ID: ${staff.staffId})</p>
+            <p class="text-xs font-bold text-slate-400 mb-6 italic">พนักงาน: ${staffName} (ID: ${staffCode})</p>
             <div class="grid grid-cols-3 gap-6 mb-8">
                 <div>
                     <label class="text-[10px] font-bold text-slate-400 uppercase ml-2">สายสะสม (นาที)</label>
-                    <input type="number" id="inputLate" value="${staff.lastLateMins || 0}" class="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold outline-none focus:border-blue-400 bg-white">
+                    <input type="number" id="inputLate" value="${staff.last_late || 0}" class="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold outline-none focus:border-blue-400 bg-white">
                 </div>
                 <div>
                     <label class="text-[10px] font-bold text-red-400 uppercase ml-2">ขาดงาน (วัน)</label>
-                    <input type="number" id="inputAbsent" value="${staff.lastAbsentReg || 0}" class="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold outline-none focus:border-red-400 bg-white text-red-500">
+                    <input type="number" id="inputAbsent" value="${staff.last_absent || 0}" class="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold outline-none focus:border-red-400 bg-white text-red-500">
                 </div>
                 <div>
                     <label class="text-[10px] font-bold text-blue-400 uppercase ml-2">ลาป่วย/กิจ (วัน)</label>
-                    <input type="number" id="inputLeave" value="${staff.lastLeaveDays || 0}" class="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold outline-none focus:border-blue-400 bg-white text-blue-500">
+                    <input type="number" id="inputLeave" value="${staff.last_leave || 0}" class="w-full border-2 border-slate-100 p-4 rounded-2xl font-bold outline-none focus:border-blue-400 bg-white text-blue-500">
                 </div>
             </div>
             <div class="flex gap-3">
-                <button onclick="window.saveAttendanceDataById('${staff.staffId}')" class="flex-1 bg-black text-white py-4 rounded-[1.5rem] font-bold shadow-xl hover:bg-blue-600 transition-all uppercase text-xs italic">💾 บันทึกสถิติพนักงาน</button>
-                <button onclick="window.showStaffAttendanceById('${staff.staffId}')" class="px-8 py-4 bg-slate-100 text-slate-400 rounded-[1.5rem] font-bold text-xs">ยกเลิก</button>
+                <button onclick="window.saveAttendanceDataById('${staffCode}')" class="flex-1 bg-black text-white py-4 rounded-[1.5rem] font-bold shadow-xl hover:bg-blue-600 transition-all uppercase text-xs italic">💾 บันทึกสถิติพนักงาน</button>
+                <button onclick="window.showStaffAttendanceById('${staffCode}')" class="px-8 py-4 bg-slate-100 text-slate-400 rounded-[1.5rem] font-bold text-xs">ยกเลิก</button>
             </div>
         </div>`;
 };
 
-window.saveAttendanceDataById = function(staffId) {
-    // 1. ดึงข้อมูลจาก Database (localStorage)
-    let db = JSON.parse(localStorage.getItem('staffDB')) || [];
-    
-    // 2. 🎯 ค้นหาตำแหน่งพนักงานใน Database โดยใช้ staffId
-    const idx = db.findIndex(s => String(s.staffId) === String(staffId));
-    
-    // 🛡️ เช็คความปลอดภัยถ้าหาไม่เจอ
-    if (idx === -1) {
-        return Swal.fire({ icon: 'error', title: 'ไม่พบข้อมูล', text: 'รหัสพนักงานไม่ถูกต้อง' });
+window.saveAttendanceDataById = async function(staffId) {
+    if (!window.supabaseClient) {
+        return Swal.fire({ icon: 'error', title: 'ระบบยังไม่พร้อม', text: 'ยังไม่พบการเชื่อมต่อ Supabase' });
     }
 
-    // 3. บันทึกค่าใหม่ลงในตำแหน่งที่เจอ (ใช้ ID เป็นตัวอ้างอิง)
-    db[idx].lastLateMins = parseInt(document.getElementById('inputLate').value) || 0;
-    db[idx].lastAbsentReg = parseInt(document.getElementById('inputAbsent').value) || 0;
-    db[idx].lastLeaveDays = parseInt(document.getElementById('inputLeave').value) || 0;
-    
-    // 4. บันทึกกลับลง Database
-    localStorage.setItem('staffDB', JSON.stringify(db));
-    
-    // 5. แจ้งเตือน และโหลดหน้าแสดงผลใหม่โดยใช้ ID
-    Swal.fire({ icon: 'success', title: 'บันทึกสถิติสำเร็จ!', timer: 1500, showConfirmButton: false });
-    
-    // 🔄 เรียกฟังก์ชันแสดงผลใหม่ด้วย ID (ต้องแก้ชื่อฟังก์ชันนี้ให้เป็น ById ด้วยนะคะ)
+    const lateVal = parseInt(document.getElementById('inputLate')?.value || 0);
+    const absentVal = parseInt(document.getElementById('inputAbsent')?.value || 0);
+    const leaveVal = parseInt(document.getElementById('inputLeave')?.value || 0);
+
+    const { error } = await window.supabaseClient
+        .from('staff_profiles')
+        .update({
+            last_late: lateVal,
+            last_absent: absentVal,
+            last_leave: leaveVal
+        })
+        .eq('staff_code', staffId);
+
+    if (error) {
+        console.error('saveAttendanceDataById error:', error);
+        return Swal.fire({
+            icon: 'error',
+            title: 'บันทึกไม่สำเร็จ',
+            text: error.message || 'ไม่สามารถบันทึกสถิติพนักงานได้'
+        });
+    }
+
+    Swal.fire({
+        icon: 'success',
+        title: 'บันทึกสถิติสำเร็จ!',
+        timer: 1500,
+        showConfirmButton: false
+    });
+
     if (typeof window.showStaffAttendanceById === 'function') {
         window.showStaffAttendanceById(staffId);
     }
 };
-window.openSalaryAdjustmentModalById = function(staffId) {
-    const allStaff = JSON.parse(localStorage.getItem('staffDB')) || [];
-    const staff = allStaff.find(s => String(s.staffId) === String(staffId));
-    if(!staff) return;
+
+window.openSalaryAdjustmentModalById = async function(staffId) {
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+    }
+
+    const { data: staff, error } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .eq('staff_code', staffId)
+        .single();
+
+    if (error || !staff) {
+        console.error('openSalaryAdjustmentModalById error:', error);
+        return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
+    }
+
+    const staffCode = staff.staff_code || staffId;
 
     document.getElementById('staffSubDisplay').innerHTML = `
         <div class="max-w-md mx-auto py-10 text-left animate-in slide-in-from-bottom">
@@ -9209,80 +9507,184 @@ window.openSalaryAdjustmentModalById = function(staffId) {
                     <label class="text-[10px] text-rose-500 font-bold uppercase ml-2">ระบุฐานเงินเดือนใหม่ (มีผล 1 ม.ค.)</label>
                     <input type="number" id="newSalaryInput" placeholder="0.00" class="w-full border-2 border-rose-100 p-5 rounded-[2rem] text-xl font-black text-rose-600 outline-none focus:border-rose-400">
                 </div>
-                <button onclick="window.saveSalaryAdjustmentById('${staff.staffId}')" 
-    class="w-full bg-rose-500 text-white p-6 rounded-[2.5rem] font-black shadow-xl hover:brightness-110 transition-all uppercase tracking-widest italic">💾 ยืนยันบันทึกการปรับเงินเดือน</button>
+                <button onclick="window.saveSalaryAdjustmentById('${staffCode}')" 
+                    class="w-full bg-rose-500 text-white p-6 rounded-[2.5rem] font-black shadow-xl hover:brightness-110 transition-all uppercase tracking-widest italic">
+                    💾 ยืนยันบันทึกการปรับเงินเดือน
+                </button>
             </div>
         </div>`;
 };
 
-window.saveSalaryAdjustmentById = function(staffId) {
-    const val = document.getElementById('newSalaryInput').value;
-    const newSalary = parseFloat(val);
-
-    // 🛡️ เช็คความถูกต้องของข้อมูล
-    if (!val || newSalary <= 0) {
-        return Swal.fire({ icon: 'warning', title: 'ข้อมูลไม่ถูกต้อง', text: 'กรุณาระบุจำนวนเงินเดือนใหม่เป็นตัวเลขค่ะ' });
+window.saveStaffProfile = async function(staffId) {
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
     }
 
-    let db = JSON.parse(localStorage.getItem('staffDB')) || [];
-    // 🎯 ค้นหาพนักงานด้วย staffId
-    const idx = db.findIndex(s => String(s.staffId) === String(staffId));
+    const name = document.getElementById('newName')?.value?.trim() || '';
+    const phone = document.getElementById('newPhone')?.value?.trim() || '';
+    const email = document.getElementById('newEmail')?.value?.trim() || '';
+    const role = document.getElementById('newRole')?.value || '';
+    const branch = document.getElementById('newBranch')?.value || '';
+    const status = document.getElementById('newStatus')?.value || 'ทำงาน';
+    const gender = document.getElementById('newGender')?.value || 'ไม่ระบุ';
+    const nickname = document.getElementById('newNickname')?.value || '';
+    const bankName = document.getElementById('newBank')?.value || '';
+    const bankAcc = document.getElementById('newAcc')?.value || '';
+    const startDate = document.getElementById('newStart')?.value || '';
+    const address = document.getElementById('newAddress')?.value || '';
+    const salary = parseFloat(document.getElementById('newSalary')?.value || 0);
 
-    if (idx !== -1) {
-        // บันทึกฐานเงินเดือนใหม่ลง Database
-        db[idx].salary = newSalary;
-        localStorage.setItem('staffDB', JSON.stringify(db));
+    if (!name || !phone || !email) {
+        return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกชื่อ เบอร์โทรศัพท์ และอีเมล', 'warning');
+    }
 
-        Swal.fire({
-            icon: 'success',
-            title: 'ปรับปรุงเงินเดือนสำเร็จ!',
-            text: 'ฐานเงินเดือนใหม่ถูกบันทึกลงระบบแล้วค่ะ',
-            timer: 2000,
-            showConfirmButton: false
-        });
+    // ✅ เช็คอีเมลซ้ำ โดยต้องใช้ window.supabaseClient
+    const { data: exist, error: checkError } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('staff_code,email')
+        .eq('email', email);
 
-        // 🔄 โหลดหน้าประวัติพนักงานใหม่เพื่ออัปเดตตัวเลขที่โชว์
-        if (typeof window.viewStaffDetailById === 'function') {
-            window.viewStaffDetailById(staffId);
-        }
-    } else {
-        Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: 'ไม่พบรหัสพนักงานนี้ในระบบ' });
+    if (checkError) {
+        console.error('check duplicate email error:', checkError);
+        return Swal.fire('ตรวจสอบไม่สำเร็จ', checkError.message || 'เช็คอีเมลซ้ำไม่ได้', 'error');
+    }
+
+    const duplicate = (exist || []).filter(e => String(e.staff_code || '') !== String(staffId || ''));
+    if (duplicate.length > 0) {
+        return Swal.fire('ซ้ำ', 'อีเมลนี้ถูกใช้แล้ว', 'warning');
+    }
+
+    const payload = {
+        full_name: name,
+        phone: phone,
+        email: email,
+        role: role,
+        branch: window.normalizeBranch ? window.normalizeBranch(branch) : branch,
+        employment_status: status,
+        is_active: status === 'ทำงาน',
+        gender: gender,
+        nickname: nickname,
+        bank_name: bankName,
+        bank_acc: bankAcc,
+        start_date: startDate,
+        address: address,
+        salary: salary,
+        updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await window.supabaseClient
+        .from('staff_profiles')
+        .update(payload)
+        .eq('staff_code', staffId)
+        .select();
+
+    if (error) {
+        console.error('saveStaffProfile error:', error);
+        return Swal.fire('บันทึกไม่สำเร็จ', error.message || 'เกิดข้อผิดพลาด', 'error');
+    }
+
+    if (!data || data.length === 0) {
+        return Swal.fire('บันทึกไม่สำเร็จ', 'ไม่พบ staff_code ที่ต้องการแก้ไข', 'error');
+    }
+
+    Swal.fire({
+        icon: 'success',
+        title: 'บันทึกข้อมูลสำเร็จ!',
+        timer: 1500,
+        showConfirmButton: false
+    });
+
+    document.getElementById('staffModalContainer')?.remove();
+
+    if (typeof window.renderStaffProfileList === 'function') {
+        await window.renderStaffProfileList();
     }
 };
 
-window.renderPayrollSystem = function() {
+window.saveSalaryAdjustmentById = async function(staffId) {
+    if (!window.supabaseClient) {
+        return Swal.fire({
+            icon: 'error',
+            title: 'ระบบยังไม่พร้อม',
+            text: 'ยังไม่พบการเชื่อมต่อ Supabase'
+        });
+    }
+
+    const val = document.getElementById('newSalaryInput')?.value;
+    const newSalary = parseFloat(val);
+
+    if (!val || newSalary <= 0) {
+        return Swal.fire({
+            icon: 'warning',
+            title: 'ข้อมูลไม่ถูกต้อง',
+            text: 'กรุณาระบุจำนวนเงินเดือนใหม่เป็นตัวเลขค่ะ'
+        });
+    }
+
+    const { error } = await window.supabaseClient
+        .from('staff_profiles')
+        .update({ salary: newSalary })
+        .eq('staff_code', staffId);
+
+    if (error) {
+        console.error('saveSalaryAdjustmentById error:', error);
+        return Swal.fire({
+            icon: 'error',
+            title: 'เกิดข้อผิดพลาด',
+            text: error.message || 'ไม่สามารถบันทึกฐานเงินเดือนได้'
+        });
+    }
+
+    Swal.fire({
+        icon: 'success',
+        title: 'ปรับปรุงเงินเดือนสำเร็จ!',
+        text: 'ฐานเงินเดือนใหม่ถูกบันทึกลงระบบแล้วค่ะ',
+        timer: 2000,
+        showConfirmButton: false
+    });
+
+    if (typeof window.viewStaffDetailById === 'function') {
+        window.viewStaffDetailById(staffId);
+    }
+};
+
+window.renderPayrollSystem = async function() {
     const target = document.getElementById('dynamicContent');
-    if(!target) return;
+    if (!target) return;
 
-    // 1. ดึงข้อมูลพื้นฐาน
-    const allStaff = JSON.parse(localStorage.getItem('staffDB')) || [];
-    const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
+    if (!window.supabaseClient) {
+        target.innerHTML = `<div class="glass-card py-20 text-center text-red-400 font-bold">ยังไม่พบการเชื่อมต่อ Supabase</div>`;
+        return;
+    }
+
+    const currentUser = JSON.parse(localStorage.getItem('currentUser')) || [];
     const payrollHistory = JSON.parse(localStorage.getItem('payrollHistoryDB')) || [];
-    
-    // 🎯 2. ดึงชื่อสาขาที่ระบบกำลังเปิดดูอยู่ (อ้างอิงจาก Header)
-    const viewingBranch = (currentUser.branch || '').replace('สาขา', '').trim();
-    const isAdmin = ['แอดมินหลัก', 'CEO'].includes(currentUser.role);
 
-   // 🔍 3. กรองพนักงาน: เน้นดึงข้อมูลให้ขึ้นหน้าจอ (เรียบง่ายและแม่นยำ)
-const filteredStaff = allStaff.filter(s => {
-    // 1. เช็คสถานะ: ต้องทำงานอยู่เท่านั้น
-    const isWorking = s.status === 'ทำงาน';
-    if (!isWorking) return false;
+    const viewingBranchRaw = currentUser.branch || 'ทุกสาขา';
+    const viewingBranch = String(viewingBranchRaw).replace('สาขา', '').trim();
 
-    // 2. ดึงค่าสาขาปัจจุบันจาก currentUser (ตัวที่ระบบเลือกดูอยู่บนหน้า Dashboard)
-    const viewingBranch = (currentUser.branch || '').replace('สาขา', '').trim();
-    const staffBranch = String(s.branch || '').replace('สาขา', '').trim();
+    let query = window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    // 3. เงื่อนไขด่านสุดท้าย: ถ้าเลือก "ทุกสาขา" ให้ขึ้นทุกคน หรือถ้าเลือกรายสาขา ให้ขึ้นเฉพาะคนสาขานั้น
-    const matchBranch = (viewingBranch === 'ทุกสาขา' || viewingBranch === '') || (staffBranch === viewingBranch);
-    
-    return matchBranch;
-});
+    if (!(typeof window.canViewAllBranches === 'function' && window.canViewAllBranches()) && viewingBranch !== 'ทุกสาขา') {
+        query = query.eq('branch', window.normalizeBranch ? window.normalizeBranch(viewingBranch) : viewingBranch);
+    }
 
-// ตรวจสอบใน Console ของ Browser (Inspect) เพื่อดูว่ามีพนักงานหลุดมาใน List กี่คน
-console.log("พนักงานที่ผ่านการกรอง:", filteredStaff.length, filteredStaff);
+    const { data: allStaff, error } = await query;
 
-    // 📅 การจัดการงวดเดือน
+    if (error) {
+        console.error('renderPayrollSystem staff_profiles error:', error);
+        target.innerHTML = `<div class="glass-card py-20 text-center text-red-400 font-bold">โหลดข้อมูลพนักงานไม่สำเร็จ</div>`;
+        return;
+    }
+
+    const filteredStaff = (allStaff || []).filter(s => {
+        const status = s.employment_status || s.status || 'ทำงาน';
+        return status === 'ทำงาน';
+    });
+
     const now = new Date();
     const selM = document.getElementById('filterMonth')?.value || (now.getMonth() + 1);
     const selY = document.getElementById('filterYear')?.value || (now.getFullYear() + 543);
@@ -9317,23 +9719,25 @@ console.log("พนักงานที่ผ่านการกรอง:", 
 
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                 ${filteredStaff.length > 0 ? filteredStaff.map((s) => {
-                    const record = payrollHistory.find(p => p.staffId === s.staffId && p.period === selectedPeriod);
-                    const originalIndex = allStaff.findIndex(item => item.staffId === s.staffId);
+                    const staffCode = s.staff_code || s.staffId || '';
+                    const staffName = s.full_name || s.name || '-';
+                    const record = payrollHistory.find(p => String(p.staffId) === String(staffCode) && p.period === selectedPeriod);
+
                     return `
                     <div class="bg-white rounded-[2.5rem] p-6 border border-slate-50 shadow-lg hover:shadow-2xl transition-all text-center relative overflow-hidden group">
                         <div class="w-14 h-14 bg-[#FFF5F7] rounded-2xl flex items-center justify-center mb-4 border border-pink-50 mx-auto overflow-hidden">
                             <img src="${s.img || 'https://via.placeholder.com/150'}" class="w-full h-full object-cover">
                         </div>
-                        <h3 class="text-lg font-black text-slate-800 leading-tight mb-0.5 italic text-center">${s.name}</h3>
+                        <h3 class="text-lg font-black text-slate-800 leading-tight mb-0.5 italic text-center">${staffName}</h3>
                         <p class="text-[8px] text-[#D48197] font-black uppercase tracking-widest mb-4 italic text-center">${s.role || 'Staff'}</p>
                         
                         <div class="space-y-2 border-t border-slate-50 pt-4 mb-6 font-bold italic text-[10px]">
                             <div class="flex justify-between"><span>เงินเดือน</span><span class="text-slate-700 font-black">฿${parseFloat(s.salary || 0).toLocaleString()}</span></div>
-                            <div class="flex justify-between"><span>สาขา</span><span class="text-pink-400 font-black">${s.branch}</span></div>
+                            <div class="flex justify-between"><span>สาขา</span><span class="text-pink-400 font-black">${s.branch || '-'}</span></div>
                             <div class="flex justify-between"><span>สถานะ</span><span class="${record ? 'text-green-500' : 'text-orange-400'} font-black">${record ? 'สำเร็จ' : 'รอดำเนินการ'}</span></div>
                         </div>
 
-                        <button onclick="window.openLuxuryPayroll(${originalIndex}, '${selectedPeriod}')" class="w-full py-3 rounded-xl font-black text-[9px] uppercase tracking-[0.2em] shadow-md transition-all ${record ? 'bg-slate-100 text-slate-400' : 'bg-[#D48197] text-white hover:bg-black'}">
+                        <button onclick="window.openLuxuryPayroll('${staffCode}', '${selectedPeriod}')" class="w-full py-3 rounded-xl font-black text-[9px] uppercase tracking-[0.2em] shadow-md transition-all ${record ? 'bg-slate-100 text-slate-400' : 'bg-[#D48197] text-white hover:bg-black'}">
                             ${record ? 'ดูข้อมูล / แก้ไข' : 'เริ่มคำนวณ'}
                         </button>
                     </div>`;
@@ -9346,21 +9750,26 @@ console.log("พนักงานที่ผ่านการกรอง:", 
         </div>`;
 };
 
-/* --- แก้ไขฟังก์ชันคำนวณเงินเดือนให้รองรับระบบ ID --- */
-window.openLuxuryPayroll = function(idx, period) {
-    const allStaff = JSON.parse(localStorage.getItem('staffDB')) || [];
-    
-    // 🎯 แก้จุดนี้: ใช้ idx ที่ส่งมาดึงข้อมูลโดยตรง (เพราะปุ่มส่ง originalIndex มาให้แล้ว)
-    const staff = allStaff[idx]; 
-    
-    if(!staff) {
-        Swal.fire('Error', 'ไม่พบข้อมูลพนักงานในระบบ', 'error');
-        return;
+window.openLuxuryPayroll = async function(staffId, period) {
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
     }
 
-    // ดึงประวัติการจ่ายเงิน (เช็คผ่าน staffId เพื่อความปลอดภัย)
+    const { data: staff, error } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .eq('staff_code', staffId)
+        .single();
+
+    if (error || !staff) {
+        console.error('openLuxuryPayroll error:', error);
+        return Swal.fire('Error', 'ไม่พบข้อมูลพนักงานในระบบ', 'error');
+    }
+
     const history = JSON.parse(localStorage.getItem('payrollHistoryDB')) || [];
-    const prev = history.find(p => String(p.staffId) === String(staff.staffId) && p.period === period);
+    const prev = history.find(p => String(p.staffId) === String(staffId) && p.period === period);
+
+    const staffName = staff.full_name || staff.name || '-';
 
     const modal = document.createElement('div');
     modal.id = "payrollModal";
@@ -9371,7 +9780,7 @@ window.openLuxuryPayroll = function(idx, period) {
             <div class="grid grid-cols-1 md:grid-cols-12">
                 <div class="md:col-span-4 bg-[#FFF5F7] p-10 flex flex-col justify-between border-r border-pink-100 font-bold italic">
                     <div>
-                        <h3 class="text-2xl font-black text-slate-800 mb-1 uppercase">${staff.name}</h3>
+                        <h3 class="text-2xl font-black text-slate-800 mb-1 uppercase">${staffName}</h3>
                         <p class="text-[9px] text-[#D48197] font-black uppercase mb-8">งวดประมวลผล: ${period}</p>
                         <div class="bg-white p-6 rounded-[2rem] shadow-sm border-b-8 border-[#C5A059] text-center">
                             <p class="text-[8px] font-black text-slate-400 uppercase italic mb-1">ยอดรับสุทธิ (NET)</p>
@@ -9379,10 +9788,16 @@ window.openLuxuryPayroll = function(idx, period) {
                         </div>
                     </div>
                     <div class="space-y-3">
-                        <button onclick="window.saveAndPrintPayrollById('${staff.staffId}', '${period}')" 
-    class="w-full bg-[#D48197] text-white py-4 rounded-[1.5rem] text-[11px] font-black shadow-lg hover:bg-black uppercase italic">💾 บันทึกและพิมพ์สลิป</button>
-                        <button type="button" onclick="window.sendPayrollEmailPrompt()" class="w-full bg-white border-2 border-pink-200 text-[#D48197] py-3.5 rounded-[1.5rem] text-[10px] font-black hover:bg-pink-50 uppercase italic">📧 ส่งอีเมล</button>
-                        <button onclick="document.getElementById('payrollModal').remove()" class="w-full text-slate-300 py-1 text-[9px] font-black uppercase hover:text-red-400 font-bold italic">ปิดหน้าต่าง</button>
+                        <button onclick="window.saveAndPrintPayrollById('${staffId}', '${period}')" 
+                            class="w-full bg-[#D48197] text-white py-4 rounded-[1.5rem] text-[11px] font-black shadow-lg hover:bg-black uppercase italic">
+                            💾 บันทึกและพิมพ์สลิป
+                        </button>
+                        <button type="button" onclick="window.sendPayrollEmailPrompt()" class="w-full bg-white border-2 border-pink-200 text-[#D48197] py-3.5 rounded-[1.5rem] text-[10px] font-black hover:bg-pink-50 uppercase italic">
+                            📧 ส่งอีเมล
+                        </button>
+                        <button onclick="document.getElementById('payrollModal').remove()" class="w-full text-slate-300 py-1 text-[9px] font-black uppercase hover:text-red-400 italic">
+                            ปิดหน้าต่าง
+                        </button>
                     </div>
                 </div>
                 <div class="md:col-span-8 p-10 overflow-y-auto font-bold italic" style="max-height: 80vh;">
@@ -9391,7 +9806,7 @@ window.openLuxuryPayroll = function(idx, period) {
                             <h4 class="text-xs font-black text-[#C5A059] border-b-4 border-pink-50 pb-2 uppercase italic tracking-widest">💰 รายได้ (EARNINGS)</h4>
                             <div class="space-y-4 font-normal italic">
                                 <div><label class="text-[10px] text-slate-400 font-black">เงินเดือนฐาน</label>
-                                <input type="number" id="mSalary" value="${staff.salary}" class="w-full bg-slate-50 border-none p-3.5 rounded-2xl font-black text-slate-400 italic" readonly></div>
+                                <input type="number" id="mSalary" value="${staff.salary || 0}" class="w-full bg-slate-50 border-none p-3.5 rounded-2xl font-black text-slate-400 italic" readonly></div>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div><label class="text-[10px] text-slate-400 font-black italic">ค่าคอมมิชชั่น</label>
                                     <input type="number" id="mComm" oninput="calcPayrollLogic()" value="${prev ? prev.comm : 0}" class="w-full border-2 border-pink-50 p-3.5 rounded-2xl font-black outline-none focus:border-[#C5A059]"></div>
@@ -9447,6 +9862,7 @@ window.openLuxuryPayroll = function(idx, period) {
                 </div>
             </div>
         </div>`;
+
     document.body.appendChild(modal);
     calcPayrollLogic();
 };
@@ -9496,44 +9912,65 @@ window.calcPayrollLogic = function() {
     document.getElementById('mNet').innerText = `฿${net.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
 };
 
-window.saveAndPrintPayroll = function(idx, period) {
-    const allStaff = JSON.parse(localStorage.getItem('staffDB')) || [];
-    const staff = allStaff.find(s => s.staffId === staffId);
-    if(!staff) return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
+window.saveAndPrintPayrollById = async function(staffId, period) {
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+    }
 
-    const data = {
-        staffId: staff.staffId,
+    const { data: staff, error: staffErr } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .eq('staff_code', staffId)
+        .single();
+
+    if (staffErr || !staff) {
+        console.error('saveAndPrintPayrollById staff error:', staffErr);
+        return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
+    }
+
+    const payload = {
+        staff_code: staffId,
         period: period,
-        salary: parseFloat(document.getElementById('mSalary').value) || 0,
-        comm: parseFloat(document.getElementById('mComm').value) || 0,
-        df: parseFloat(document.getElementById('mDF').value) || 0,
-        ot: parseFloat(document.getElementById('mOT').value) || 0,
-        tax: parseFloat(document.getElementById('mTax').value) || 0,
-        absDays: parseFloat(document.getElementById('mAbsDays').value) || 0,
-        absHours: parseFloat(document.getElementById('mAbsHours').value) || 0,
-        lateMins: parseFloat(document.getElementById('lateMin').value) || 0,
-        netPay: document.getElementById('mNet').innerText,
-        timestamp: new Date().getTime()
+        salary: parseFloat(document.getElementById('mSalary')?.value || 0),
+        comm: parseFloat(document.getElementById('mComm')?.value || 0),
+        df: parseFloat(document.getElementById('mDF')?.value || 0),
+        ot: parseFloat(document.getElementById('mOT')?.value || 0),
+        tax: parseFloat(document.getElementById('mTax')?.value || 0),
+        abs_days: parseFloat(document.getElementById('mAbsDays')?.value || 0),
+        abs_hours: parseFloat(document.getElementById('mAbsHours')?.value || 0),
+        late_mins: parseFloat(document.getElementById('mLateMin')?.value || 0),
+        sick_days: 0,
+        net_pay: document.getElementById('mNet')?.innerText || '฿0.00',
+        updated_at: new Date().toISOString()
     };
 
-    let history = JSON.parse(localStorage.getItem('payrollHistoryDB')) || [];
-    const exIdx = history.findIndex(p => p.staffId === staff.staffId && p.period === period);
-    
-    if(exIdx !== -1) { history[exIdx] = data; } 
-    else { history.push(data); }
-    
-    localStorage.setItem('payrollHistoryDB', JSON.stringify(history));
+    const { error } = await window.supabaseClient
+        .from('payroll_history')
+        .upsert(payload, {
+            onConflict: 'staff_code,period'
+        });
+
+    if (error) {
+        console.error('saveAndPrintPayrollById upsert error:', error);
+        return Swal.fire({
+            icon: 'error',
+            title: 'บันทึกไม่สำเร็จ',
+            text: error.message || 'เกิดข้อผิดพลาดในการบันทึก Payroll'
+        });
+    }
 
     Swal.fire({
         icon: 'success',
         title: 'บันทึกสำเร็จ',
-        text: 'ข้อมูลเงินเดือนงวด ' + period + ' ถูกบันทึกแล้ว',
+        text: `ข้อมูลเงินเดือนงวด ${period} ถูกบันทึกแล้ว`,
         showConfirmButton: false,
         timer: 1500
     }).then(() => {
-        if (window.printSlip) window.printSlip(data, staff); 
-        document.getElementById('payrollModal').remove();
-        renderPayrollSystem(); 
+        if (window.printSlip) window.printSlip(payload, staff);
+        document.getElementById('payrollModal')?.remove();
+        if (typeof window.renderPayrollSystem === 'function') {
+            window.renderPayrollSystem();
+        }
     });
 };
 
@@ -9560,54 +9997,131 @@ window.sendPayrollEmailPrompt = function() {
     });
 };
 
-window.renderAttendanceRecord = function() {
+window.renderAttendanceRecord = async function() {
     const target = document.getElementById('dynamicContent');
-    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
-    const payrollHistory = JSON.parse(localStorage.getItem('payrollHistoryDB')) || [];
-    const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+    if (!target) return;
 
-    if (!window.attViewMode) window.attViewMode = 'monthly'; 
+    if (!window.supabaseClient) {
+        target.innerHTML = `<div class="py-20 text-center text-red-400 font-bold">ยังไม่พบการเชื่อมต่อ Supabase</div>`;
+        return;
+    }
+
+    const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+    const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
+
+    if (!window.attViewMode) window.attViewMode = 'monthly';
     const selMonth = window.selectedAttMonth || String(new Date().getMonth() + 1).padStart(2, '0');
-    const selYearThai = window.selectedAttYear || "2569"; 
+    const selYearThai = window.selectedAttYear || "2569";
+
+    // ✅ ดึงข้อมูล payroll_history จาก Supabase
+    const { data: payrollHistory, error: payrollError } = await window.supabaseClient
+        .from('payroll_history')
+        .select('*');
+
+    if (payrollError) {
+        console.error('renderAttendanceRecord payroll_history error:', payrollError);
+        target.innerHTML = `<div class="py-20 text-center text-red-400 font-bold">โหลดประวัติ Attendance ไม่สำเร็จ</div>`;
+        return;
+    }
+
+    // ✅ ดึงข้อมูล staff_profiles จาก Supabase
+    let staffQuery = window.supabaseClient
+        .from('staff_profiles')
+        .select('*');
+
+    const viewingBranchRaw = currentUser.branch || 'ทุกสาขา';
+    const viewingBranch = String(viewingBranchRaw).replace('สาขา', '').trim();
+
+    if (!(typeof window.canViewAllBranches === 'function' && window.canViewAllBranches()) && viewingBranch !== 'ทุกสาขา') {
+        staffQuery = staffQuery.eq('branch', window.normalizeBranch ? window.normalizeBranch(viewingBranch) : viewingBranch);
+    }
+
+    const { data: staffProfiles, error: staffError } = await staffQuery;
+
+    if (staffError) {
+        console.error('renderAttendanceRecord staff_profiles error:', staffError);
+        target.innerHTML = `<div class="py-20 text-center text-red-400 font-bold">โหลดข้อมูลพนักงานไม่สำเร็จ</div>`;
+        return;
+    }
+
+    const staffMap = {};
+    (staffProfiles || []).forEach(s => {
+        const code = String(s.staff_code || s.staffId || '');
+        if (code) staffMap[code] = s;
+    });
 
     let displayData = [];
     let titleText = "";
 
     if (window.attViewMode === 'monthly') {
         const periodKey = `${parseInt(selMonth)}/${selYearThai}`;
-        titleText = `สรุปสถิติงวดเดือน ${monthNames[parseInt(selMonth)-1]} ${selYearThai}`;
-        
-        displayData = payrollHistory.filter(p => p.period === periodKey).map(record => {
-            const staffInfo = staffDB.find(s => s.staffId === record.staffId);
-            return {
-                ...record,
-                displayName: staffInfo ? staffInfo.name : (record.name || 'ไม่ระบุชื่อ'),
-                lateMins: parseFloat(record.lateMins || record.lateCount || 0),
-                absDays: parseFloat(record.absDays || 0),
-                sickDays: parseFloat(record.sickDays || 0),
-                netAmount: parseFloat(record.netAmount || 0)
-            };
-        });
+        titleText = `สรุปสถิติงวดเดือน ${monthNames[parseInt(selMonth) - 1]} ${selYearThai}`;
+
+        displayData = (payrollHistory || [])
+            .filter(p => p.period === periodKey)
+            .filter(record => {
+                const staffCode = String(record.staff_code || record.staffId || '');
+                if (typeof window.canViewAllBranches === 'function' && window.canViewAllBranches()) return true;
+
+                const staffInfo = staffMap[staffCode];
+                if (!staffInfo) return false;
+
+                const staffBranch = String(staffInfo.branch || '').replace('สาขา', '').trim();
+                return viewingBranch === 'ทุกสาขา' || staffBranch === viewingBranch;
+            })
+            .map(record => {
+                const staffCode = String(record.staff_code || record.staffId || '');
+                const staffInfo = staffMap[staffCode];
+
+                return {
+                    ...record,
+                    displayName: staffInfo ? (staffInfo.full_name || staffInfo.name || 'ไม่ระบุชื่อ') : (record.name || 'ไม่ระบุชื่อ'),
+                    lateMins: parseFloat(record.late_mins || record.lateMins || record.lateCount || 0),
+                    absDays: parseFloat(record.abs_days || record.absDays || 0),
+                    sickDays: parseFloat(record.sick_days || record.sickDays || 0),
+                    netAmount: parseFloat(
+                        String(record.net_pay || record.netPay || record.netAmount || 0).replace(/[^\d.-]/g, '')
+                    ) || 0
+                };
+            });
+
     } else {
         titleText = `สรุปสถิติรวมทั้งปี พ.ศ. ${selYearThai}`;
         const yearlyMap = {};
-        payrollHistory.forEach(record => {
-            if (record.period && record.period.endsWith(selYearThai)) {
-                if (!yearlyMap[record.staffId]) {
-                    const staffInfo = staffDB.find(s => s.staffId === record.staffId);
-                    yearlyMap[record.staffId] = { 
-                        staffId: record.staffId,
-                        displayName: staffInfo ? staffInfo.name : (record.name || 'ไม่ระบุชื่อ'),
-                        lateMins: 0, absDays: 0, sickDays: 0, netAmount: 0, monthsCount: 0 
-                    };
-                }
-                yearlyMap[record.staffId].lateMins += parseFloat(record.lateMins || record.lateCount || 0);
-                yearlyMap[record.staffId].absDays += parseFloat(record.absDays || 0);
-                yearlyMap[record.staffId].sickDays += parseFloat(record.sickDays || 0);
-                yearlyMap[record.staffId].netAmount += parseFloat(record.netAmount || 0);
-                yearlyMap[record.staffId].monthsCount += 1;
+
+        (payrollHistory || []).forEach(record => {
+            if (!record.period || !String(record.period).endsWith(selYearThai)) return;
+
+            const staffCode = String(record.staff_code || record.staffId || '');
+            const staffInfo = staffMap[staffCode];
+
+            if (!(typeof window.canViewAllBranches === 'function' && window.canViewAllBranches())) {
+                if (!staffInfo) return;
+                const staffBranch = String(staffInfo.branch || '').replace('สาขา', '').trim();
+                if (!(viewingBranch === 'ทุกสาขา' || staffBranch === viewingBranch)) return;
             }
+
+            if (!yearlyMap[staffCode]) {
+                yearlyMap[staffCode] = {
+                    staffCode: staffCode,
+                    displayName: staffInfo ? (staffInfo.full_name || staffInfo.name || 'ไม่ระบุชื่อ') : (record.name || 'ไม่ระบุชื่อ'),
+                    lateMins: 0,
+                    absDays: 0,
+                    sickDays: 0,
+                    netAmount: 0,
+                    monthsCount: 0
+                };
+            }
+
+            yearlyMap[staffCode].lateMins += parseFloat(record.late_mins || record.lateMins || record.lateCount || 0);
+            yearlyMap[staffCode].absDays += parseFloat(record.abs_days || record.absDays || 0);
+            yearlyMap[staffCode].sickDays += parseFloat(record.sick_days || record.sickDays || 0);
+            yearlyMap[staffCode].netAmount += parseFloat(
+                String(record.net_pay || record.netPay || record.netAmount || 0).replace(/[^\d.-]/g, '')
+            ) || 0;
+            yearlyMap[staffCode].monthsCount += 1;
         });
+
         displayData = Object.values(yearlyMap);
     }
 
@@ -9621,23 +10135,25 @@ window.renderAttendanceRecord = function() {
                 
                 <div class="flex flex-wrap items-center gap-3 bg-slate-50 p-3 rounded-3xl border border-pink-50">
                     <div class="flex bg-white rounded-xl p-1 shadow-sm border border-pink-100 mr-2">
-                        <button onclick="window.attViewMode='monthly'; renderAttendanceRecord()" class="px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${window.attViewMode==='monthly' ? 'bg-[#D48197] text-white' : 'text-slate-400'}">รายเดือน</button>
-                        <button onclick="window.attViewMode='yearly'; renderAttendanceRecord()" class="px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${window.attViewMode==='yearly' ? 'bg-[#D48197] text-white' : 'text-slate-400'}">รายปี</button>
+                        <button onclick="window.attViewMode='monthly'; window.renderAttendanceRecord()" class="px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${window.attViewMode === 'monthly' ? 'bg-[#D48197] text-white' : 'text-slate-400'}">รายเดือน</button>
+                        <button onclick="window.attViewMode='yearly'; window.renderAttendanceRecord()" class="px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${window.attViewMode === 'yearly' ? 'bg-[#D48197] text-white' : 'text-slate-400'}">รายปี</button>
                     </div>
 
                     ${window.attViewMode === 'monthly' ? `
-                        <select onchange="window.selectedAttMonth = this.value; renderAttendanceRecord()" class="bg-white border border-pink-200 rounded-xl px-4 py-2 text-xs font-bold outline-none cursor-pointer">
-                            ${monthNames.map((m, i) => `<option value="${String(i+1).padStart(2,'0')}" ${selMonth == String(i+1).padStart(2,'0') ? 'selected' : ''}>${m}</option>`).join('')}
+                        <select onchange="window.selectedAttMonth = this.value; window.renderAttendanceRecord()" class="bg-white border border-pink-200 rounded-xl px-4 py-2 text-xs font-bold outline-none cursor-pointer">
+                            ${monthNames.map((m, i) => `<option value="${String(i + 1).padStart(2, '0')}" ${selMonth == String(i + 1).padStart(2, '0') ? 'selected' : ''}>${m}</option>`).join('')}
                         </select>
                     ` : ''}
                     
-                    <select onchange="window.selectedAttYear = this.value; renderAttendanceRecord()" class="bg-white border border-pink-200 rounded-xl px-4 py-2 text-xs font-bold outline-none cursor-pointer">
+                    <select onchange="window.selectedAttYear = this.value; window.renderAttendanceRecord()" class="bg-white border border-pink-200 rounded-xl px-4 py-2 text-xs font-bold outline-none cursor-pointer">
                         <option value="2568" ${selYearThai == '2568' ? 'selected' : ''}>2568</option>
                         <option value="2569" ${selYearThai == '2569' ? 'selected' : ''}>2569</option>
+                        <option value="2570" ${selYearThai == '2570' ? 'selected' : ''}>2570</option>
                     </select>
 
                     <button onclick="window.print()" class="bg-slate-800 text-white px-6 py-2 rounded-xl text-[10px] font-black shadow-lg hover:bg-black transition-all uppercase">🖨️ พิมพ์</button>
                 </div>
+
                 <button onclick="loadPage(7, 'จัดการพนักงาน')" class="bg-pink-50 p-3 rounded-2xl text-[#D48197] font-bold shadow-sm hover:bg-pink-100 transition-all">🔙 กลับ</button>
             </div>
 
@@ -9662,7 +10178,12 @@ window.renderAttendanceRecord = function() {
                                 <td class="p-5">${record.sickDays} ว.</td>
                                 <td class="p-5 text-[#D48197]">฿${record.netAmount.toLocaleString()}</td>
                                 <td class="p-5 bg-pink-50/20 text-blue-600">5.0%</td>
-                            </tr>`).join('') : `<tr><td colspan="6" class="p-20 text-slate-300 italic">❌ ไม่พบประวัติ</td></tr>`}
+                            </tr>
+                        `).join('') : `
+                            <tr>
+                                <td colspan="6" class="p-20 text-slate-300 italic">❌ ไม่พบประวัติ</td>
+                            </tr>
+                        `}
                     </tbody>
                 </table>
             </div>
@@ -9670,9 +10191,14 @@ window.renderAttendanceRecord = function() {
     `;
 };
 
-window.renderStaffCalendar = function() {
+
+window.renderStaffCalendar = async function() {
     const target = document.getElementById('dynamicContent');
     if (!target) return;
+
+    if (!window.currentViewDate) {
+        window.currentViewDate = new Date();
+    }
     
     target.innerHTML = `
         <div class="animate-in fade-in duration-500 p-4 -mt-6 text-left pb-20 font-normal">
@@ -9685,7 +10211,7 @@ window.renderStaffCalendar = function() {
                     </div>
                 </div>
                 <div class="flex gap-3">
-                    <button onclick="window.syncCalendarToGoogle()" class="bg-[#4285F4] text-white px-8 py-3 rounded-2xl text-[11px] font-black shadow-lg hover:brightness-110 transition-all uppercase flex items-center gap-2">
+                    <button onclick="window.openGoogleCalendar()" class="bg-[#4285F4] text-white px-8 py-3 rounded-2xl text-[11px] font-black shadow-lg hover:brightness-110 transition-all uppercase flex items-center gap-2">
                         <img src="https://cdn-icons-png.flaticon.com/128/300/300221.png" class="w-4 h-4 brightness-200"> SYNC GOOGLE
                     </button>
                     <button onclick="window.openAddHolidayModal()" class="bg-[#D48197] text-white px-8 py-3 rounded-2xl text-[11px] font-black shadow-xl hover:bg-black transition-all uppercase">
@@ -9715,18 +10241,26 @@ window.renderStaffCalendar = function() {
             </div>
         </div>
     `;
-    window.updateHolidayDisplay();
+
+    await window.updateHolidayDisplay();
 };
 
-window.changeMonth = function(offset) {
+window.changeMonth = async function(offset) {
+    if (!window.currentViewDate) {
+        window.currentViewDate = new Date();
+    }
     window.currentViewDate.setMonth(window.currentViewDate.getMonth() + offset);
-    window.updateHolidayDisplay();
+    await window.updateHolidayDisplay();
 };
 
-window.drawCalendar = function() {
+window.drawCalendar = async function(holidays = []) {
     const grid = document.getElementById('calendarGrid');
     const label = document.getElementById('monthYearLabel');
     if (!grid || !label) return;
+
+    if (!window.currentViewDate) {
+        window.currentViewDate = new Date();
+    }
 
     const year = window.currentViewDate.getFullYear();
     const month = window.currentViewDate.getMonth();
@@ -9734,7 +10268,6 @@ window.drawCalendar = function() {
     
     label.innerText = `${monthNames[month]} ${year + 543}`;
 
-    const holidays = JSON.parse(localStorage.getItem('clinicHolidaysDB')) || [];
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
@@ -9745,21 +10278,22 @@ window.drawCalendar = function() {
         </div>
     `).join('');
 
-    for(let i=0; i < firstDay; i++) grid.innerHTML += `<div></div>`;
+    for (let i = 0; i < firstDay; i++) grid.innerHTML += `<div></div>`;
 
-    for(let d=1; d <= daysInMonth; d++) {
+    for (let d = 1; d <= daysInMonth; d++) {
         const checkDate = new Date(year, month, d);
-        checkDate.setHours(0,0,0,0);
+        checkDate.setHours(0, 0, 0, 0);
         
         const isHoliday = holidays.find(h => {
-            const start = new Date(h.start);
-            const end = new Date(h.end);
-            start.setHours(0,0,0,0);
-            end.setHours(0,0,0,0);
+            const start = new Date(h.start_date);
+            const end = new Date(h.end_date);
+            start.setHours(0, 0, 0, 0);
+            end.setHours(0, 0, 0, 0);
             return checkDate >= start && checkDate <= end;
         });
 
-        const isToday = d === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
+        const today = new Date();
+        const isToday = d === today.getDate() && month === today.getMonth() && year === today.getFullYear();
 
         grid.innerHTML += `
             <div class="relative h-24 border-2 border-slate-50 rounded-[2rem] flex flex-col items-center justify-center transition-all shadow-sm
@@ -9771,29 +10305,43 @@ window.drawCalendar = function() {
     }
 };
 
-window.updateHolidayDisplay = function() {
+window.updateHolidayDisplay = async function() {
     const listArea = document.getElementById('holidayList');
     if (!listArea) return;
-    
-    let holidays = JSON.parse(localStorage.getItem('clinicHolidaysDB')) || [];
-    holidays = holidays.filter(h => h && h.start && h.end);
-    holidays.sort((a, b) => new Date(a.start) - new Date(b.start));
-    
+
+    if (!window.supabaseClient) {
+        listArea.innerHTML = `<div class="py-20 text-center text-red-400 italic">ยังไม่พบการเชื่อมต่อ Supabase</div>`;
+        return;
+    }
+
+    const { data, error } = await window.supabaseClient
+        .from('clinic_holidays')
+        .select('*')
+        .order('start_date', { ascending: true });
+
+    if (error) {
+        console.error('updateHolidayDisplay error:', error);
+        listArea.innerHTML = `<div class="py-20 text-center text-red-400 italic">โหลดวันหยุดไม่สำเร็จ</div>`;
+        return;
+    }
+
+    const holidays = (data || []).filter(h => h && h.start_date && h.end_date);
+
     listArea.innerHTML = holidays.length === 0 
         ? `<div class="py-20 text-center text-slate-300 italic">ไม่มีบันทึกวันหยุด</div>`
-        : holidays.map((h, idx) => `
+        : holidays.map(h => `
             <div class="group p-4 bg-white border-l-8 border-[#D48197] rounded-r-3xl mb-3 flex justify-between items-center shadow-sm hover:shadow-md transition-all border border-pink-50">
                 <div class="text-left font-normal">
                     <p class="text-[10px] text-[#D48197] font-black uppercase">
-                        ${h.start.split('-').reverse().join('/')} - ${h.end.split('-').reverse().join('/')}
+                        ${String(h.start_date).split('-').reverse().join('/')} - ${String(h.end_date).split('-').reverse().join('/')}
                     </p>
                     <p class="text-sm font-bold text-slate-800">${h.title}</p>
                 </div>
-                <button onclick="window.deleteHoliday(${idx})" class="text-slate-300 hover:text-red-500 font-bold p-2 transition-colors">✕</button>
+                <button onclick="window.deleteHoliday('${h.id}')" class="text-slate-300 hover:text-red-500 font-bold p-2 transition-colors">✕</button>
             </div>
         `).join('');
-    
-    window.drawCalendar();
+
+    await window.drawCalendar(holidays);
 };
 
 window.openAddHolidayModal = function() {
@@ -9822,40 +10370,100 @@ window.openAddHolidayModal = function() {
         showCancelButton: true,
         cancelButtonText: 'ยกเลิก',
         preConfirm: () => {
-            const title = document.getElementById('hTitle').value;
-            const start = document.getElementById('hStart').value;
-            const end = document.getElementById('hEnd').value;
+            const title = document.getElementById('hTitle')?.value?.trim();
+            const start = document.getElementById('hStart')?.value;
+            const end = document.getElementById('hEnd')?.value;
+
             if (!title || !start || !end) {
                 Swal.showValidationMessage('กรุณากรอกข้อมูลให้ครบถ้วนค่ะ');
+                return false;
             }
+
+            if (start > end) {
+                Swal.showValidationMessage('วันที่เริ่มต้องไม่มากกว่าวันสิ้นสุด');
+                return false;
+            }
+
             return { title, start, end };
         }
-    }).then((result) => {
-        if (result.isConfirmed) {
-            let holidays = JSON.parse(localStorage.getItem('clinicHolidaysDB')) || [];
-            holidays.push(result.value);
-            localStorage.setItem('clinicHolidaysDB', JSON.stringify(holidays));
-            window.updateHolidayDisplay();
-            Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ!', showConfirmButton: false, timer: 1500 });
+    }).then(async (result) => {
+        if (!result.isConfirmed) return;
+
+        if (!window.supabaseClient) {
+            return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
         }
+
+        const { error } = await window.supabaseClient
+            .from('clinic_holidays')
+            .insert([{
+                title: result.value.title,
+                start_date: result.value.start,
+                end_date: result.value.end
+            }]);
+
+        if (error) {
+            console.error('openAddHolidayModal insert error:', error);
+            return Swal.fire({
+                icon: 'error',
+                title: 'บันทึกไม่สำเร็จ',
+                text: error.message || 'ไม่สามารถบันทึกวันหยุดได้'
+            });
+        }
+
+        await window.updateHolidayDisplay();
+
+        Swal.fire({
+            icon: 'success',
+            title: 'บันทึกสำเร็จ!',
+            showConfirmButton: false,
+            timer: 1500
+        });
     });
 };
 
-window.deleteHoliday = function(idx) {
-    if(confirm("ต้องการลบวันหยุดนี้ใช่หรือไม่?")) {
-        let holidays = JSON.parse(localStorage.getItem('clinicHolidaysDB')) || [];
-        holidays.splice(idx, 1);
-        localStorage.setItem('clinicHolidaysDB', JSON.stringify(holidays));
-        window.updateHolidayDisplay();
+window.deleteHoliday = async function(id) {
+    const result = await Swal.fire({
+        icon: 'warning',
+        title: 'ยืนยันการลบ',
+        text: 'ต้องการลบวันหยุดนี้ใช่หรือไม่?',
+        showCancelButton: true,
+        confirmButtonText: 'ลบเลย',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#dc2626'
+    });
+
+    if (!result.isConfirmed) return;
+
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
     }
+
+    const { error } = await window.supabaseClient
+        .from('clinic_holidays')
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        console.error('deleteHoliday error:', error);
+        return Swal.fire({
+            icon: 'error',
+            title: 'ลบไม่สำเร็จ',
+            text: error.message || 'ไม่สามารถลบวันหยุดได้'
+        });
+    }
+
+    await window.updateHolidayDisplay();
+
+    Swal.fire({
+        icon: 'success',
+        title: 'ลบสำเร็จ',
+        timer: 1200,
+        showConfirmButton: false
+    });
 };
 
-window.syncCalendarToGoogle = function() {
+window.openGoogleCalendar = function() {
     window.open('https://calendar.google.com/', '_blank');
-    Swal.fire({
-        toast: true, position: 'top-end', icon: 'success',
-        title: 'เปิดหน้าปฏิทินพนักงานแล้วค่ะ', showConfirmButton: false, timer: 3000
-    });
 };
 
 /* =======================================================
@@ -10004,6 +10612,34 @@ function renderNavBtn(id, icon, title, sub) {
             </div>
         </button>`;
 }
+
+window.toggleStaffProfileStatus = async function(profileId, nextActive) {
+    if (!window.supabaseClient) {
+        return Swal.fire('ข้อผิดพลาด', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+    }
+
+    const { error } = await window.supabaseClient
+        .from('staff_profiles')
+        .update({ is_active: nextActive })
+        .eq('id', profileId);
+
+    if (error) {
+        console.error('toggleStaffProfileStatus error:', error);
+        return Swal.fire('บันทึกไม่สำเร็จ', error.message || 'ไม่สามารถเปลี่ยนสถานะได้', 'error');
+    }
+
+    Swal.fire({
+        icon: 'success',
+        title: 'อัปเดตสถานะสำเร็จ',
+        timer: 1200,
+        showConfirmButton: false
+    });
+
+    const activeBtn = document.querySelector('.settings-nav-btn.active');
+    if (activeBtn && typeof window.switchSettingsTab === 'function') {
+        await window.switchSettingsTab('users', activeBtn);
+    }
+};
 
 // 2. ฟังก์ชันสลับเนื้อหาและจัดการสีเมนู
 window.switchSettingsTab = async function(tab, btn) {

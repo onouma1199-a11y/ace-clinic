@@ -1374,12 +1374,12 @@ window.changeBranch = function(branchName) {
 
     let user = JSON.parse(localStorage.getItem('currentUser')) || {};
     const role = user.role || '';
-    const homeBranch = user.homeBranch || user.branch || '';
-
+    const homeBranch = String(user.homeBranch || user.branch || '').replace('สาขา', '').trim();
     const cleanBranch = String(branchName || '').replace('สาขา', '').trim();
 
     if (!['แอดมินหลัก', 'CEO', 'ผู้จัดการ'].includes(role)) {
         user.branch = homeBranch;
+        user.isCrossBranchView = false;
         localStorage.setItem('currentUser', JSON.stringify(user));
         window.currentUser = user;
 
@@ -1403,16 +1403,19 @@ window.changeBranch = function(branchName) {
     }
 
     user.branch = cleanBranch;
+
+    // ✅ เพิ่มตรงนี้: ถ้าไปดูสาขาอื่น ให้ระบบรู้ว่ากำลัง cross-branch
+    user.isCrossBranchView = (
+        cleanBranch !== 'ทุกสาขา' &&
+        cleanBranch !== homeBranch
+    );
+
     localStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('selectedBranch', cleanBranch);
     window.currentUser = user;
 
     if (document.getElementById('userBranchBadge')) {
         document.getElementById('userBranchBadge').innerText = `สาขา: ${cleanBranch}`;
-    }
-
-    if (typeof window.renderBranchDropdown === 'function') {
-        window.renderBranchDropdown();
     }
 
     Swal.fire({
@@ -1426,47 +1429,30 @@ window.changeBranch = function(branchName) {
     });
 
     setTimeout(() => {
-        const pageTitle = String(document.getElementById('pageTitle')?.innerText || '').trim();
-
         Swal.close();
 
+        // ✅ ถ้ามีระบบ render menu ให้เรียกใหม่
+        if (typeof window.renderMenuByRole === 'function') {
+            window.renderMenuByRole(user.role || '');
+        }
+
+        // ✅ ถ้ากดดูภาพรวมทุกสาขา ให้ไปหน้าบอร์ดรวม
         if (cleanBranch === 'ทุกสาขา') {
             if (typeof window.loadPage === 'function') {
                 window.loadPage(10, 'บอร์ดรวมทุกสาขา');
+                return;
             }
-            return;
         }
+
+        // ✅ ถ้าอยู่หน้าไหนอยู่ ก็ให้รีโหลดหน้าแบบนุ่ม ๆ
+        const pageTitle = String(document.getElementById('pageTitle')?.innerText || '').trim();
 
         if (pageTitle.includes('จัดการลูกค้า') || pageTitle.includes('ประวัติ')) {
             return window.loadPage?.(2, 'จัดการลูกค้า/ประวัติ');
         }
 
-        if (pageTitle.includes('ตีบิลใบเสร็จ')) {
-            return window.loadPage?.(3, 'ตีบิลใบเสร็จ');
-        }
-
-        if (pageTitle.includes('ตีบิลรายจ่าย')) {
-            return window.loadPage?.(9, 'ตีบิลรายจ่าย');
-        }
-
         if (pageTitle.includes('ระบบนัดหมาย')) {
             return window.loadPage?.(4, 'ระบบนัดหมาย');
-        }
-
-        if (pageTitle.includes('ห้องจัดการคิว')) {
-            return window.loadPage?.(52, 'ห้องจัดการคิว');
-        }
-
-        if (pageTitle.includes('รายการคอร์ส')) {
-            return window.loadPage?.(51, 'รายการคอร์ส');
-        }
-
-        if (pageTitle.includes('สต๊อกยาฉีด')) {
-            return window.loadPage?.(53, 'สต๊อกยาฉีด');
-        }
-
-        if (pageTitle.includes('เมนูรายงาน')) {
-            return window.loadPage?.(6, 'เมนูรายงาน');
         }
 
         if (pageTitle.includes('จัดการพนักงาน')) {
@@ -1477,10 +1463,15 @@ window.changeBranch = function(branchName) {
             return window.loadPage?.(8, 'ตั้งค่าระบบ');
         }
 
-        return window.loadPage?.(1, 'Dashboard ภาพรวม');
-    }, 500);
+        // fallback
+        if (typeof window.loadPage === 'function') {
+            window.loadPage(1, 'Dashboard ภาพรวม');
+        } else {
+            location.reload();
+        }
+    }, 600);
 };
-
+	
 // --- 6. ฟังก์ชันเปลี่ยนรหัสผ่านส่วนตัว ---
 window.openChangePasswordModal = function() {
     const currentUser = JSON.parse(localStorage.getItem('currentUser'));

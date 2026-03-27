@@ -1126,6 +1126,7 @@ window.doLogin = async function() {
     email: u.trim().toLowerCase(),
     password: p
 	});
+
         if (error || !data?.user) {
             console.error('login error:', error);
             Swal.fire({

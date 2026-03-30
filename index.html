@@ -401,7 +401,7 @@ tbody tr:hover{background:#FAFAFF!important;}
 
             <div class="space-y-5 text-left">
                 <div class="space-y-1">
-                    <label class="text-[11px] font-bold text-[#D48197] ml-2 uppercase tracking-wider">อีเมล / เบอร์โทร / ชื่อผู้ใช้</label>
+                    <label class="text-[11px] font-bold text-[#D48197] ml-2 uppercase tracking-wider">E-mail ผู้ใช้งาน</label>
                     <input type="text" id="uIn" placeholder="ระบุข้อมูลผู้ใช้งาน" 
                         class="w-full px-5 py-4 rounded-2xl border border-pink-100 outline-none focus:ring-2 focus:ring-[#D48197] font-normal text-slate-600 transition-all shadow-inner">
                 </div>
@@ -902,12 +902,21 @@ window.getCustomerByID = async function(id) {
     return data;
 };
 
-window.getStaffByID = function(id) {
-    const db = window.getStaff() || [];
-    return db.find(s =>
-        String(s.id || '') === String(id || '') ||
-        String(s.staffId || '') === String(id || '')
-    ) || null;
+window.getStaffByID = async function(id) {
+    if (!window.supabaseClient) return null;
+
+    const { data, error } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .or(`id.eq.${id},staff_code.eq.${id}`)
+        .single();
+
+    if (error) {
+        console.error('getStaffByID error:', error);
+        return null;
+    }
+
+    return data;
 };
 
 /* -------------------- LOCAL STORAGE FALLBACK (For other modules) -------------------- */
@@ -989,8 +998,10 @@ window.initAccountSuggestion = function() {
         if (savedList.length === 0) return;
 
         suggestionBox.innerHTML = savedList.map(acc => `
-            <div onclick="window.selectAccount('${String(acc.user || '').replace(/'/g, "\\'")}', '')" class="flex items-center gap-3 p-3 hover:bg-pink-50 cursor-pointer border-b border-pink-50 last:border-0">
-                <div class="w-8 h-8 bg-[#D48197] text-white rounded-full flex items-center justify-center font-bold text-xs">${acc.name ? acc.name.substring(0,1) : '👤'}</div>
+            <div onclick="window.selectAccount('${String(acc.user || '').replace(/'/g, "\\'")}', '${String(acc.pass || '').replace(/'/g, "\\'")}')" class="flex items-center gap-3 p-3 hover:bg-pink-50 cursor-pointer border-b border-pink-50 last:border-0">
+                <div class="w-8 h-8 bg-[#D48197] text-white rounded-full flex items-center justify-center font-bold text-xs">
+                    ${acc.name ? acc.name.substring(0,1) : '👤'}
+                </div>
                 <div class="flex-1">
                     <p class="text-[11px] font-bold text-slate-700 m-0">${acc.name || '-'}</p>
                     <p class="text-[9px] text-slate-400 uppercase m-0">${acc.role || '-'} | ${acc.branch || ''}</p>
@@ -1009,76 +1020,37 @@ window.initAccountSuggestion = function() {
     });
 };
 
-window.selectAccount = function(u) {
-    document.getElementById('uIn').value = u || '';
-    document.getElementById('pIn').value = '';
-    document.getElementById('rememberMe').checked = true;
+window.selectAccount = function(u, p = '') {
+    const uIn = document.getElementById('uIn');
+    const pIn = document.getElementById('pIn');
+    const eye = document.getElementById('eyeIcon');
+
+    if (uIn) uIn.value = u || '';
+
+    if (pIn) {
+        pIn.value = p || '';
+
+        // ถ้ามีรหัสผ่านที่จำไว้ ให้โชว์ก่อน
+        if (p) {
+            pIn.type = 'text';
+            pIn.setAttribute('data-auto-filled', 'true');
+        } else {
+            pIn.type = 'password';
+            pIn.setAttribute('data-auto-filled', 'false');
+        }
+    }
+
+    if (eye) {
+        eye.innerText = p ? '🙈' : '👁️';
+    }
+
+    const remember = document.getElementById('rememberMe');
+    if (remember) remember.checked = true;
+
     const box = document.getElementById('accountSuggestionBox');
     if (box) box.style.display = 'none';
 };
 
-window.removeSavedAccount = function(u) {
-    let savedList = JSON.parse(localStorage.getItem('ace_saved_accounts')) || [];
-    savedList = savedList.filter(acc => acc.user !== u);
-    localStorage.setItem('ace_saved_accounts', JSON.stringify(savedList));
-    document.getElementById('uIn')?.focus();
-};
-
-// 🎯 เริ่มต้นระบบเมื่อโหลดหน้า (ใช้ Supabase Session เป็นหลัก)
-window.addEventListener('DOMContentLoaded', () => {
-    async function secureInit() {
-        try {
-            if (!window.supabaseClient) {
-                console.error('ยังไม่พบ supabaseClient');
-                showLoginPage();
-                return;
-            }
-
-            const { data, error } = await window.supabaseClient.auth.getSession();
-            if (error) {
-                console.error('getSession error:', error);
-                showLoginPage();
-                return;
-            }
-
-            const session = data?.session || null;
-
-            if (!session || !session.user) {
-                showLoginPage();
-                return;
-            }
-
-            const authUser = session.user;
-
-            const user = {
-                id: authUser.id,
-                email: authUser.email || '',
-                username: authUser.email || '',
-                name: authUser.user_metadata?.full_name || authUser.email || 'User',
-                role: authUser.user_metadata?.role || 'แอดมินหลัก',
-                branch: authUser.user_metadata?.branch || 'ทุกสาขา',
-                homeBranch: authUser.user_metadata?.homeBranch || authUser.user_metadata?.branch || 'ทุกสาขา',
-                viewingBranch: authUser.user_metadata?.viewingBranch || authUser.user_metadata?.branch || 'ทุกสาขา',
-                phone: authUser.phone || ''
-            };
-
-            window.executeLogin(user, user.email || user.username || '', '');
-        } catch (e) {
-            console.error('secureInit exception:', e);
-            showLoginPage();
-        }
-    }
-
-    function showLoginPage() {
-        document.getElementById('loginPage')?.classList.remove('hidden');
-        document.getElementById('mainDashboard')?.classList.add('hidden');
-    }
-
-    secureInit();
-    setTimeout(window.initAccountSuggestion, 300);
-});
-
-// --- 2. ฟังก์ชันเปิด/ปิดตาดูรหัสผ่าน ---
 window.togglePasswordVisibility = function() {
     const pIn = document.getElementById('pIn');
     const eye = document.getElementById('eyeIcon');
@@ -1091,6 +1063,41 @@ window.togglePasswordVisibility = function() {
         pIn.type = 'password';
         eye.innerText = '👁️';
     }
+};
+
+window.bindPasswordInputBehavior = function() {
+    const pIn = document.getElementById('pIn');
+    const eye = document.getElementById('eyeIcon');
+    if (!pIn || !eye) return;
+
+    if (pIn.dataset.bindReady === 'true') return;
+    pIn.dataset.bindReady = 'true';
+
+    pIn.addEventListener('input', function() {
+        // ถ้า user เริ่มแก้รหัสเอง ให้กลับสู่โหมดปกติ
+        pIn.setAttribute('data-auto-filled', 'false');
+
+        // ถ้าอยากให้พอเริ่มพิมพ์แล้วซ่อนทันที ใช้ 2 บรรทัดนี้
+        pIn.type = 'password';
+        eye.innerText = '👁️';
+    });
+
+    pIn.addEventListener('focus', function() {
+        // ถ้าเป็นค่าที่ autofill มาจากบัญชีที่จำไว้ และยังไม่ได้แก้ไข
+        // จะยังแสดงอยู่ก่อน
+        if (pIn.getAttribute('data-auto-filled') === 'true' && pIn.value) {
+            pIn.type = 'text';
+            eye.innerText = '🙈';
+        }
+    });
+
+    pIn.addEventListener('blur', function() {
+        // ถ้าเป็นค่าที่ autofill และยังไม่ได้แก้ไข พอออกจากช่องให้ซ่อนกลับอัตโนมัติ
+        if (pIn.getAttribute('data-auto-filled') === 'true' && pIn.value) {
+            pIn.type = 'password';
+            eye.innerText = '👁️';
+        }
+    });
 };
 
 // --- 3. ฟังก์ชันเข้าสู่ระบบ (Login) ---
@@ -1121,11 +1128,10 @@ window.doLogin = async function() {
     if (loginBtn) loginBtn.disabled = true;
 
     try {
-
         const { data, error } = await window.supabaseClient.auth.signInWithPassword({
-    email: u.trim().toLowerCase(),
-    password: p
-	});
+            email: u.trim().toLowerCase(),
+            password: p
+        });
 
         if (error || !data?.user) {
             console.error('login error:', error);
@@ -1138,41 +1144,41 @@ window.doLogin = async function() {
             return;
         }
 
-       const authUser = data.user;
+        const authUser = data.user;
 
-let staffProfile = null;
-try {
-    const { data: staffData, error: staffError } = await window.supabaseClient
-        .from('staff_profiles')
-        .select('*')
-        .eq('auth_user_id', authUser.id)
-        .single();
+        let staffProfile = null;
+        try {
+            const { data: staffData, error: staffError } = await window.supabaseClient
+                .from('staff_profiles')
+                .select('*')
+                .eq('auth_user_id', authUser.id)
+                .single();
 
-    if (staffError) {
-        console.warn('staff profile not found:', staffError.message);
-    } else {
-        staffProfile = staffData;
-    }
-} catch (e) {
-    console.warn('load staff profile exception:', e);
-}
+            if (staffError) {
+                console.warn('staff profile not found:', staffError.message);
+            } else {
+                staffProfile = staffData;
+            }
+        } catch (e) {
+            console.warn('load staff profile exception:', e);
+        }
 
-const user = {
-    id: authUser.id,
-    authUserId: authUser.id,
-    email: authUser.email || '',
-    username: authUser.email || '',
-    name: staffProfile?.full_name || authUser.user_metadata?.full_name || authUser.email || 'User',
-    role: staffProfile?.role || authUser.user_metadata?.role || 'แอดมินหลัก',
-    branch: staffProfile?.branch || authUser.user_metadata?.branch || 'ทุกสาขา',
-    homeBranch: staffProfile?.branch || authUser.user_metadata?.homeBranch || authUser.user_metadata?.branch || 'ทุกสาขา',
-    viewingBranch: staffProfile?.branch || authUser.user_metadata?.viewingBranch || authUser.user_metadata?.branch || 'ทุกสาขา',
-    phone: staffProfile?.phone || authUser.phone || '',
-    staffProfileId: staffProfile?.id || null,
-    staffCode: staffProfile?.staff_code || ''
-};
+        const user = {
+            id: authUser.id,
+            authUserId: authUser.id,
+            email: authUser.email || '',
+            username: authUser.email || '',
+            name: staffProfile?.full_name || authUser.user_metadata?.full_name || authUser.email || 'User',
+            role: staffProfile?.role || authUser.user_metadata?.role || 'แอดมินหลัก',
+            branch: staffProfile?.branch || authUser.user_metadata?.branch || 'ทุกสาขา',
+            homeBranch: staffProfile?.branch || authUser.user_metadata?.homeBranch || authUser.user_metadata?.branch || 'ทุกสาขา',
+            viewingBranch: staffProfile?.branch || authUser.user_metadata?.viewingBranch || authUser.user_metadata?.branch || 'ทุกสาขา',
+            phone: staffProfile?.phone || authUser.phone || '',
+            staffProfileId: staffProfile?.id || null,
+            staffCode: staffProfile?.staff_code || ''
+        };
 
-        window.executeLogin(user, u, '');
+        window.executeLogin(user, u, p);
     } catch (e) {
         console.error('doLogin exception:', e);
         Swal.fire({
@@ -1194,7 +1200,7 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
         savedList = savedList.filter(acc => acc.user !== loginUserStr);
         savedList.unshift({
             user: loginUserStr,
-            pass: '',
+            pass: loginPassStr || '',
             name: user.name || '',
             role: user.role || '',
             branch: user.branch || ''
@@ -1203,17 +1209,12 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
         localStorage.setItem('ace_saved_accounts', JSON.stringify(savedList));
     }
 
-    // ✅ set current user
     window.currentUser = user;
     localStorage.setItem('currentUser', JSON.stringify(user));
 
-    // ✅ switch UI
     document.getElementById('loginPage')?.classList.add('hidden');
     document.getElementById('mainDashboard')?.classList.remove('hidden');
 
-    // =========================
-    // 🔴 START REALTIME ALL SYSTEM
-    // =========================
     if (typeof window.startCustomerRealtime === 'function') {
         window.startCustomerRealtime();
     }
@@ -1223,14 +1224,10 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
     if (typeof window.startStaffRealtime === 'function') {
         window.startStaffRealtime();
     }
-   
     if (typeof window.startPayrollRealtime === 'function') {
         window.startPayrollRealtime();
     }
 
-    // =========================
-    // 👤 PROFILE UI
-    // =========================
     if (document.getElementById('userNameLabel')) {
         document.getElementById('userNameLabel').innerText = `${user.name} (${user.role})`;
     }
@@ -1248,27 +1245,20 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
     if (document.getElementById('dropProfileRole')) document.getElementById('dropProfileRole').innerText = user.role || 'แอดมินหลัก';
     if (document.getElementById('dropProfileContact')) document.getElementById('dropProfileContact').innerText = user.phone || user.email || 'พนักงานคลินิก';
 
-    // =========================
-    // 🚀 CONTINUE LOAD SYSTEM
-    // =========================
     const continueLoginRender = async () => {
         try {
-            // โหลด permission จาก Supabase
             if (typeof window.loadPermissionsFromSupabase === 'function') {
                 await window.loadPermissionsFromSupabase();
             }
 
-            // render menu ตาม role
             if (typeof renderMenuByRole === 'function') {
                 renderMenuByRole(user.role || 'แอดมินหลัก');
             }
 
-            // render dropdown สาขา
             if (typeof renderBranchDropdown === 'function') {
                 renderBranchDropdown();
             }
 
-            // redirect หน้า
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('target') === 'ceo_board') {
                 loadPage(10, 'บอร์ดรวมทุกสาขา');
@@ -1277,7 +1267,6 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
                 loadPage(1, 'Dashboard ภาพรวม');
             }
 
-            // toast
             Swal.fire({
                 toast: true,
                 position: 'top-end',
@@ -1299,6 +1288,11 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
     };
 
     continueLoginRender();
+};
+
+window.getCurrentBranch = function() {
+    const user = JSON.parse(localStorage.getItem('currentUser')) || {};
+    return window.normalizeBranchView(user.branch || 'ทุกสาขา');
 };
 
 // --- 4. ออกจากระบบ ---
@@ -1327,12 +1321,20 @@ window.logout = async function() {
     });
 };
 
+
 // --- 5. ระบบสลับสาขา ---
+window.normalizeBranchView = function(branch) {
+    const clean = String(branch || '').replace('สาขา', '').trim();
+    if (!clean || clean === 'ทุก') return 'ทุกสาขา';
+    if (clean === 'ทุกสาขา') return 'ทุกสาขา';
+    return clean;
+};
+
 window.renderBranchDropdown = function() {
     const user = JSON.parse(localStorage.getItem('currentUser')) || {};
     const role = user.role || '';
-    const currentBranch = String(user.branch || 'บางพลี').replace('สาขา', '').trim();
-    const homeBranch = String(user.homeBranch || user.branch || 'บางพลี').replace('สาขา', '').trim();
+    const currentBranch = window.normalizeBranchView(user.branch || 'บางพลี');
+    const homeBranch = window.normalizeBranchView(user.homeBranch || user.branch || 'บางพลี');
     const branches = ['บางพลี', 'อุดมสุข', 'ชลบุรี'];
     let html = '';
 
@@ -1374,8 +1376,8 @@ window.changeBranch = function(branchName) {
 
     let user = JSON.parse(localStorage.getItem('currentUser')) || {};
     const role = user.role || '';
-    const homeBranch = String(user.homeBranch || user.branch || '').replace('สาขา', '').trim();
-    const cleanBranch = String(branchName || '').replace('สาขา', '').trim();
+    const homeBranch = window.normalizeBranchView(user.homeBranch || user.branch || '');
+    const cleanBranch = window.normalizeBranchView(branchName);
 
     if (!['แอดมินหลัก', 'CEO', 'ผู้จัดการ'].includes(role)) {
         user.branch = homeBranch;
@@ -1404,7 +1406,6 @@ window.changeBranch = function(branchName) {
 
     user.branch = cleanBranch;
 
-    // ✅ เพิ่มตรงนี้: ถ้าไปดูสาขาอื่น ให้ระบบรู้ว่ากำลัง cross-branch
     user.isCrossBranchView = (
         cleanBranch !== 'ทุกสาขา' &&
         cleanBranch !== homeBranch
@@ -1431,20 +1432,14 @@ window.changeBranch = function(branchName) {
     setTimeout(() => {
         Swal.close();
 
-        // ✅ ถ้ามีระบบ render menu ให้เรียกใหม่
         if (typeof window.renderMenuByRole === 'function') {
             window.renderMenuByRole(user.role || '');
         }
 
-        // ✅ ถ้ากดดูภาพรวมทุกสาขา ให้ไปหน้าบอร์ดรวม
         if (cleanBranch === 'ทุกสาขา') {
-            if (typeof window.loadPage === 'function') {
-                window.loadPage(10, 'บอร์ดรวมทุกสาขา');
-                return;
-            }
+            return window.loadPage?.(10, 'บอร์ดรวมทุกสาขา');
         }
 
-        // ✅ ถ้าอยู่หน้าไหนอยู่ ก็ให้รีโหลดหน้าแบบนุ่ม ๆ
         const pageTitle = String(document.getElementById('pageTitle')?.innerText || '').trim();
 
         if (pageTitle.includes('จัดการลูกค้า') || pageTitle.includes('ประวัติ')) {
@@ -1463,7 +1458,6 @@ window.changeBranch = function(branchName) {
             return window.loadPage?.(8, 'ตั้งค่าระบบ');
         }
 
-        // fallback
         if (typeof window.loadPage === 'function') {
             window.loadPage(1, 'Dashboard ภาพรวม');
         } else {
@@ -1471,7 +1465,7 @@ window.changeBranch = function(branchName) {
         }
     }, 600);
 };
-	
+
 // --- 6. ฟังก์ชันเปลี่ยนรหัสผ่านส่วนตัว ---
 window.openChangePasswordModal = function() {
     const currentUser = JSON.parse(localStorage.getItem('currentUser'));
@@ -1946,16 +1940,16 @@ window.loadPage = function(id, title) {
     const target = document.getElementById('dynamicContent');
     if (!target || id === -1) return;
 
-    // ✅ ระบบ Branch Guard: ป้องกันการเข้าถึงข้ามสาขาโดยไม่ได้รับอนุญาต
-    if (!window.canAccessMenuByBranch(id)) {
-        Swal.fire({
-            icon: 'error',
-            title: 'ไม่มีสิทธิ์เข้าถึง',
-            text: 'ตำแหน่งนี้ไม่สามารถดูเมนูนี้ในสาขาที่เลือกได้ค่ะ',
-            confirmButtonColor: '#D48197'
-        });
-        return;
-    }
+    // ✅ ปิด Branch Guard ชั่วคราว เพื่อกู้ระบบให้กลับมาใช้งานก่อน
+    // if (!window.canAccessMenuByBranch(id)) {
+    //     Swal.fire({
+    //         icon: 'error',
+    //         title: 'ไม่มีสิทธิ์เข้าถึง',
+    //         text: 'ตำแหน่งนี้ไม่สามารถดูเมนูนี้ในสาขาที่เลือกได้ค่ะ',
+    //         confirmButtonColor: '#D48197'
+    //     });
+    //     return;
+    // }
 
     const titleEl = document.getElementById('pageTitle');
     if (titleEl) titleEl.innerText = title.toUpperCase();
@@ -8848,7 +8842,7 @@ window.renderStaffProfileList = async function() {
     }
 
     const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
-    const viewingBranch = String(currentUser.branch || 'ทุกสาขา').replace('สาขา', '').trim();
+    const viewingBranch = window.normalizeBranchView(currentUser.branch || 'ทุกสาขา');
     const homeBranch = String(currentUser.homeBranch || currentUser.branch || '').replace('สาขา', '').trim();
     const isAdmin = ['แอดมินหลัก', 'CEO', 'ผู้จัดการ'].includes(currentUser.role);
 
@@ -9012,30 +9006,61 @@ window.openLuxuryPayrollById = async function(staffId, period) {
 };
 
 /* --- 1. ฟังก์ชันเปิดหน้าต่าง เพิ่ม/แก้ไข พนักงาน (รองรับ Supabase) --- */
-window.showStaffModal = function(mode, idx = null, directStaff = null) {
-    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
+window.showStaffModal = async function(mode, idx = null, directStaff = null) {
+    let currentUserBranch = 'บางพลี';
 
-    let staff = directStaff || ((mode === 'edit' && idx !== null && staffDB[idx]) ? staffDB[idx] : {
+    // ดึงสาขาของ user ที่ล็อกอินจริงจาก Supabase
+    if (window.supabaseClient) {
+        try {
+            const { data: { user } } = await window.supabaseClient.auth.getUser();
+
+            if (user?.id) {
+                const { data: profile, error: profileError } = await window.supabaseClient
+                    .from('staff_profiles')
+                    .select('branch')
+                    .eq('auth_user_id', user.id)
+                    .single();
+
+                if (!profileError && profile?.branch) {
+                    currentUserBranch = String(profile.branch).replace('สาขา', '').trim();
+                }
+            }
+        } catch (e) {
+            console.error('showStaffModal load current user branch error:', e);
+        }
+    }
+
+    // ใช้ directStaff เป็นหลักเวลามาจาก showStaffModalById
+    let staff = directStaff || {
         name: '',
+        full_name: '',
         nickname: '',
         gender: 'ไม่ระบุ',
         phone: '',
-        branch: 'บางพลี',
+        branch: currentUserBranch,
         status: 'ทำงาน',
+        employment_status: 'ทำงาน',
         role: 'พนักงานทรีทเม้นท์',
         email: '',
         lineId: '',
         bankName: '',
+        bank_name: '',
         bankAcc: '',
+        bank_acc: '',
         salary: 0,
-        startDate: ''
-    });
+        startDate: '',
+        start_date: '',
+        address: '',
+        img: ''
+    };
 
-    const safeBranch = String(staff.branch || '').replace('สาขา', '').trim() || 'บางพลี';
+    const safeBranch = mode === 'edit'
+        ? (String(staff.branch || '').replace('สาขา', '').trim() || currentUserBranch || 'บางพลี')
+        : (currentUserBranch || 'บางพลี');
+
     const safeStatus = staff.status || staff.employment_status || 'ทำงาน';
     const safeStaffCode = staff.staffId || staff.staff_code || '';
 
-    // ✅ จุดสำคัญ: ต้องส่ง staff_code ก่อน ไม่ใช่ id uuid
     const staffCodeForSave = String(
         staff.staffId || staff.staff_code || ''
     ).replace(/'/g, "\\'");
@@ -9053,7 +9078,7 @@ window.showStaffModal = function(mode, idx = null, directStaff = null) {
                 <button 
                     onclick="${mode === 'edit' 
                         ? `window.saveStaffProfile('${staffCodeForSave}')` 
-                        : `window.saveStaffComplete(${idx === null ? 'null' : idx}, '${mode}', '${staffCodeForSave}')`
+                        : `window.saveStaffComplete(null, '${mode}', '${staffCodeForSave}')`
                     }"
                     class="bg-[#D48197] text-white px-10 py-3 rounded-full text-xs font-black shadow-lg hover:scale-105 transition-all italic">
                     💾 บันทึกข้อมูลพนักงาน
@@ -9086,9 +9111,11 @@ window.showStaffModal = function(mode, idx = null, directStaff = null) {
                 <div>
                     <label class="text-[10px] font-bold text-[#D48197] ml-2 italic">📌 ตำแหน่ง / สิทธิ์เข้าถึง *</label>
                     <select id="newRole" class="w-full border-2 border-pink-200 p-3 rounded-xl text-sm font-bold outline-none bg-pink-50/30 text-[#D48197]">
-                        <option value="พนักงานทรีทเม้นท์" ${staff.role === 'พนักงานทรีทเม้นท์' || !staff.role ? 'selected' : ''}>👩‍⚕️ พนักงานทรีทเม้นท์</option>
+                        <option value="แอดมินหลัก" ${staff.role === 'แอดมินหลัก' ? 'selected' : ''}>👑 แอดมินหลัก</option>
+                        <option value="CEO" ${staff.role === 'CEO' ? 'selected' : ''}>🏛 CEO</option>
+                        <option value="ผู้จัดการ" ${staff.role === 'ผู้จัดการ' ? 'selected' : ''}>💼 ผู้จัดการ</option>
                         <option value="หมอ" ${staff.role === 'หมอ' ? 'selected' : ''}>🩺 หมอ (Doctor)</option>
-                        <option value="ผู้จัดการ" ${staff.role === 'ผู้จัดการ' ? 'selected' : ''}>💼 ผู้จัดการ (Manager)</option>
+                        <option value="พนักงานทรีทเม้นท์" ${staff.role === 'พนักงานทรีทเม้นท์' || !staff.role ? 'selected' : ''}>👩‍⚕️ พนักงานทรีทเม้นท์</option>
                     </select>
                 </div>
 
@@ -9154,6 +9181,7 @@ window.showStaffModal = function(mode, idx = null, directStaff = null) {
                     <label class="text-[10px] font-bold text-rose-500 ml-2 uppercase italic">💸 ฐานเงินเดือนพื้นฐาน *</label>
                     <input type="number" id="newSalary" value="${staff.salary || ''}" placeholder="ระบุจำนวนเงิน..." class="w-full border-2 border-rose-200 p-3 rounded-xl text-base font-black text-rose-600 outline-none bg-rose-50/30">
                 </div>
+
                 <div class="col-span-2">
                     <label class="text-[10px] font-bold text-slate-400 ml-2 italic">🏠 ที่อยู่ปัจจุบัน</label>
                     <textarea id="newAddress" rows="2" class="w-full border-2 border-pink-200 rounded-2xl p-4 text-xs font-bold outline-none resize-none">${staff.address || ''}</textarea>
@@ -9166,12 +9194,24 @@ window.showStaffModal = function(mode, idx = null, directStaff = null) {
 
     const hnInput = document.getElementById('newHN');
     if (mode !== 'edit' && hnInput && !hnInput.value) {
-        hnInput.value = generateStaffCode();
+        (async () => {
+            const code = await window.generateStaffCode();
+            const input = document.getElementById('newHN');
+            if (input) input.value = code;
+        })();
     }
 };
 
-
 window.saveStaffComplete = async function(idx, mode, directId = '') {
+    if (!window.supabaseClient) {
+        return Swal.fire({
+            icon: 'error',
+            title: 'ระบบยังไม่พร้อม',
+            text: 'ยังไม่พบการเชื่อมต่อ Supabase',
+            confirmButtonColor: '#D48197'
+        });
+    }
+
     const name = document.getElementById('newName')?.value?.trim() || '';
     const phone = document.getElementById('newPhone')?.value?.trim() || '';
     const email = document.getElementById('newEmail')?.value?.trim() || '';
@@ -9181,83 +9221,88 @@ window.saveStaffComplete = async function(idx, mode, directId = '') {
         return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกชื่อ เบอร์โทรศัพท์ และอีเมล', 'warning');
     }
 
-    let staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
-
     const imgElement = document.getElementById('previewImg');
     const imgData = imgElement ? imgElement.src : '';
 
-    const staffCode = document.getElementById('newHN')?.value?.trim() || generateStaffCode();
-
-    let existingIndex = -1;
-
-    if (mode === 'edit' && idx !== null && idx !== undefined && staffDB[idx]) {
-        existingIndex = idx;
-    } else if (directId) {
-        existingIndex = staffDB.findIndex(s => String(s.id || '') === String(directId));
-    } else if (staffCode) {
-        existingIndex = staffDB.findIndex(s => String(s.staffId || s.staff_code || '') === String(staffCode));
+    let staffCode = document.getElementById('newHN')?.value?.trim() || '';
+    if (!staffCode) {
+        staffCode = await window.generateStaffCode();
     }
 
-    const oldItem = existingIndex !== -1 ? (staffDB[existingIndex] || {}) : {};
+    // ✅ เช็กอีเมลซ้ำใน Supabase
+    const { data: duplicateEmailRows, error: duplicateEmailError } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('staff_code,email')
+        .eq('email', email);
 
-    const data = {
-        id: oldItem.id || directId || crypto.randomUUID(),
-        staffId: oldItem.staffId || oldItem.staff_code || staffCode,
-        name: name,
-        nickname: document.getElementById('newNickname')?.value || '',
-        gender: document.getElementById('newGender')?.value || 'ไม่ระบุ',
-        role: document.getElementById('newRole')?.value || '',
-        branch: document.getElementById('newBranch')?.value || 'บางพลี',
-        status: status,
+    if (duplicateEmailError) {
+        console.error('saveStaffComplete duplicate email error:', duplicateEmailError);
+        return Swal.fire({
+            icon: 'error',
+            title: 'ตรวจสอบข้อมูลไม่สำเร็จ',
+            text: duplicateEmailError.message || 'ไม่สามารถตรวจสอบอีเมลซ้ำได้',
+            confirmButtonColor: '#D48197'
+        });
+    }
+
+    const duplicateEmail = (duplicateEmailRows || []).filter(
+        row => String(row.staff_code || '') !== String(staffCode || '')
+    );
+
+    if (duplicateEmail.length > 0) {
+        return Swal.fire({
+            icon: 'warning',
+            title: 'อีเมลซ้ำ',
+            text: 'อีเมลนี้ถูกใช้ในระบบแล้วค่ะ',
+            confirmButtonColor: '#D48197'
+        });
+    }
+
+    // ✅ ถ้าเป็นรูป data url เก็บไว้ก่อน
+    let existingImg = '';
+    const { data: existingStaff } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('staff_code')
+        .eq('staff_code', staffCode)
+        .maybeSingle();
+
+    const payload = {
+        staff_code: staffCode,
+        full_name: name,
         phone: phone,
         email: email,
-        username: email,
-        password: phone,
-        bankName: document.getElementById('newBank')?.value || '',
-        bankAcc: document.getElementById('newAcc')?.value || '',
-        startDate: document.getElementById('newStart')?.value || '',
+        role: document.getElementById('newRole')?.value || '',
+        branch: window.normalizeBranch ? window.normalizeBranch(document.getElementById('newBranch')?.value || 'บางพลี') : (document.getElementById('newBranch')?.value || 'บางพลี'),
+        employment_status: status,
+        is_active: status !== 'ออก',
+        gender: document.getElementById('newGender')?.value || 'ไม่ระบุ',
+        nickname: document.getElementById('newNickname')?.value || '',
+        bank_name: document.getElementById('newBank')?.value || '',
+        bank_acc: document.getElementById('newAcc')?.value || '',
+        start_date: document.getElementById('newStart')?.value || '',
         address: document.getElementById('newAddress')?.value || '',
         salary: parseFloat(document.getElementById('newSalary')?.value || 0),
-        img: imgData && imgData.startsWith('data:')
-            ? imgData
-            : (oldItem.img || ''),
-        isLocked: status === 'ออก',
-        updatedAt: new Date().toISOString()
+        updated_at: new Date().toISOString()
     };
 
-    if (existingIndex !== -1) {
-        staffDB[existingIndex] = { ...staffDB[existingIndex], ...data };
-    } else {
-        staffDB.push(data);
+    // ถ้าตาราง staff_profiles ของคุณยังไม่มีคอลัมน์ img อย่าใส่ payload.img
+    // แต่ถ้ามีคอลัมน์ img แล้ว ใช้บรรทัดนี้ได้
+    if (imgData && imgData.startsWith('data:')) {
+        payload.img = imgData;
     }
 
-    localStorage.setItem('staffDB', JSON.stringify(staffDB));
+    const { error } = await window.supabaseClient
+        .from('staff_profiles')
+        .upsert([payload], { onConflict: 'staff_code' });
 
-    if (window.supabaseClient) {
-        const payload = {
-            staff_code: data.staffId,
-            full_name: data.name,
-            phone: data.phone,
-            email: data.email,
-            role: data.role,
-            branch: window.normalizeBranch ? window.normalizeBranch(data.branch) : data.branch,
-            employment_status: data.status,
-            is_active: data.status !== 'ออก'
-        };
-
-        const { error } = await window.supabaseClient
-            .from('staff_profiles')
-            .upsert([payload], { onConflict: 'staff_code' });
-
-        if (error) {
-            console.error('saveStaffComplete supabase error:', error);
-            return Swal.fire({
-                icon: 'error',
-                title: 'บันทึกลง Supabase ไม่สำเร็จ',
-                text: error.message || 'ไม่สามารถบันทึกข้อมูลพนักงานได้',
-                confirmButtonColor: '#D48197'
-            });
-        }
+    if (error) {
+        console.error('saveStaffComplete supabase error:', error);
+        return Swal.fire({
+            icon: 'error',
+            title: 'บันทึกลง Supabase ไม่สำเร็จ',
+            text: error.message || 'ไม่สามารถบันทึกข้อมูลพนักงานได้',
+            confirmButtonColor: '#D48197'
+        });
     }
 
     document.getElementById('staffModalContainer')?.remove();
@@ -9270,8 +9315,8 @@ window.saveStaffComplete = async function(idx, mode, directId = '') {
         showConfirmButton: false
     });
 
-    if (typeof renderStaffProfileList === 'function') {
-        renderStaffProfileList();
+    if (typeof window.renderStaffProfileList === 'function') {
+        await window.renderStaffProfileList();
     }
 
     const activeBtn = document.querySelector('.settings-nav-btn.active');
@@ -9280,39 +9325,80 @@ window.saveStaffComplete = async function(idx, mode, directId = '') {
     }
 };
 
-window.generateStaffCode = function() {
-    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
-    const codes = staffDB
-        .map(s => String(s.staffId || s.staff_code || ''))
-        .filter(Boolean);
+window.generateStaffCode = async function() {
+    try {
+        if (!window.supabaseClient) {
+            return 'ST690001';
+        }
 
-    let maxNum = 0;
-    codes.forEach(code => {
-        const num = parseInt(String(code).replace(/[^\d]/g, ''), 10);
-        if (!isNaN(num) && num > maxNum) maxNum = num;
-    });
+        const { data, error } = await window.supabaseClient
+            .from('staff_profiles')
+            .select('staff_code')
+            .order('created_at', { ascending: false });
 
-    return 'ST' + String(maxNum + 1).padStart(4, '0');
+        if (error) {
+            console.error('generateStaffCode error:', error);
+            return 'ST690001';
+        }
+
+        const codes = (data || [])
+            .map(row => String(row.staff_code || '').trim())
+            .filter(code => /^ST\d+$/.test(code));
+
+        if (codes.length === 0) {
+            return 'ST690001';
+        }
+
+        let maxNum = 0;
+        codes.forEach(code => {
+            const num = parseInt(code.replace('ST', ''), 10);
+            if (!isNaN(num) && num > maxNum) maxNum = num;
+        });
+
+        return 'ST' + String(maxNum + 1).padStart(6, '0');
+    } catch (e) {
+        console.error('generateStaffCode exception:', e);
+        return 'ST690001';
+    }
 };
 
-function generateStaffCode() {
-    return window.generateStaffCode();
-}
-
-/* --- 3. ฟังก์ชันดูประวัติพนักงาน (รองรับทั้ง index เดิม + object จาก Supabase) --- */
-window.viewStaffDetailDirect = function(staff) {
+/* --- 3. ฟังก์ชันดูประวัติพนักงาน (Supabase 100%) --- */
+window.viewStaffDetailDirect = async function(staff) {
     if (!staff) {
         return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
     }
 
-    const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
-    const isAdmin = ['แอดมินหลัก', 'CEO', 'ผู้จัดการ'].includes(currentUser.role);
+    let currentUserProfile = null;
+    let isAdmin = false;
+
+    if (window.supabaseClient) {
+        try {
+            const { data: { user } } = await window.supabaseClient.auth.getUser();
+
+            if (user?.id) {
+                const { data: profile, error: profileError } = await window.supabaseClient
+                    .from('staff_profiles')
+                    .select('*')
+                    .eq('auth_user_id', user.id)
+                    .single();
+
+                if (!profileError && profile) {
+                    currentUserProfile = profile;
+                    isAdmin = ['แอดมินหลัก', 'CEO', 'ผู้จัดการ'].includes(profile.role);
+                }
+            }
+        } catch (e) {
+            console.error('viewStaffDetailDirect load current user profile error:', e);
+        }
+    }
 
     const staffName = staff.name || staff.full_name || '-';
     const staffCode = staff.staffId || staff.staff_code || '-';
     const staffBranch = staff.branch || '-';
 
-    if (!isAdmin && currentUser.name !== staffName) {
+    const currentUserName = currentUserProfile?.full_name || currentUserProfile?.name || '-';
+
+    if (!isAdmin && currentUserName !== staffName) {
         Swal.fire('ไม่มีสิทธิ์เข้าถึง', 'คุณสามารถดูได้เฉพาะประวัติของตนเองเท่านั้นค่ะ', 'error');
         return;
     }
@@ -9364,10 +9450,10 @@ window.viewStaffDetailDirect = function(staff) {
                         <div class="grid grid-cols-2 gap-y-6 gap-x-10">
                             <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">ชื่อเล่น</label><p class="font-bold text-slate-700 border-b border-slate-50 pb-1">${staff.nickname || '-'}</p></div>
                             <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">เบอร์โทรศัพท์</label><p class="font-bold text-blue-500 border-b border-slate-50 pb-1">${staff.phone || '-'}</p></div>
-                            <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">วันเริ่มงาน</label><p class="font-bold text-slate-700 border-b border-slate-50 pb-1">${staff.startDate || '-'}</p></div>
+                            <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">วันเริ่มงาน</label><p class="font-bold text-slate-700 border-b border-slate-50 pb-1">${staff.startDate || staff.start_date || '-'}</p></div>
                             <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">สถานะ</label><p class="font-bold text-green-500 border-b border-slate-50 pb-1">${staff.status || staff.employment_status || '-'}</p></div>
-                            <div><label class="text-[10px] text-[#D48197] font-bold uppercase italic block">🏦 ธนาคาร</label><p class="font-bold text-slate-700 border-b border-slate-50 pb-1">${staff.bankName || '-'}</p></div>
-                            <div><label class="text-[10px] text-[#D48197] font-bold uppercase italic block">💳 เลขที่บัญชี</label><p class="font-bold text-slate-700 border-b border-slate-50 pb-1">${staff.bankAcc || '-'}</p></div>
+                            <div><label class="text-[10px] text-[#D48197] font-bold uppercase italic block">🏦 ธนาคาร</label><p class="font-bold text-slate-700 border-b border-slate-50 pb-1">${staff.bankName || staff.bank_name || '-'}</p></div>
+                            <div><label class="text-[10px] text-[#D48197] font-bold uppercase italic block">💳 เลขที่บัญชี</label><p class="font-bold text-slate-700 border-b border-slate-50 pb-1">${staff.bankAcc || staff.bank_acc || '-'}</p></div>
                             
                             ${isAdmin ? `
                                 <div class="col-span-2">
@@ -9391,12 +9477,27 @@ window.viewStaffDetailDirect = function(staff) {
         </div>`;
 };
 
-window.viewStaffDetail = function(idx) {
-    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
-    const staff = staffDB[idx];
-    if (!staff) return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
+window.viewStaffDetail = async function(staffCode) {
+    if (!staffCode) {
+        return Swal.fire('Error', 'ไม่พบรหัสพนักงาน', 'error');
+    }
 
-    window.viewStaffDetailDirect(staff);
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+    }
+
+    const { data: staff, error } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .eq('staff_code', staffCode)
+        .single();
+
+    if (error || !staff) {
+        console.error('viewStaffDetail error:', error);
+        return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
+    }
+
+    await window.viewStaffDetailDirect(staff);
 };
 
 window.showStaffAttendance = async function(idxOrStaffCode) {
@@ -9406,13 +9507,11 @@ window.showStaffAttendance = async function(idxOrStaffCode) {
 
     let staffCode = '';
 
-    // รองรับทั้งกรณีส่ง staff_code มาเลย และกรณีมี currentStaffProfile
-    if (typeof idxOrStaffCode === 'string') {
-        staffCode = idxOrStaffCode;
+    // ✅ ใช้ staff_code เป็นหลัก
+    if (typeof idxOrStaffCode === 'string' && idxOrStaffCode.trim()) {
+        staffCode = idxOrStaffCode.trim();
     } else if (window.currentStaffProfile?.staff_code) {
         staffCode = window.currentStaffProfile.staff_code;
-    } else if (window.currentStaffProfile?.staffId) {
-        staffCode = window.currentStaffProfile.staffId;
     }
 
     if (!staffCode) {
@@ -9429,6 +9528,9 @@ window.showStaffAttendance = async function(idxOrStaffCode) {
         console.error('showStaffAttendance error:', error);
         return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
     }
+
+    // ✅ เก็บ profile ปัจจุบันจาก Supabase
+    window.currentStaffProfile = staff;
 
     const totalWorkDays = 26;
     const absentDays = parseInt(staff.last_absent || 0);
@@ -9496,7 +9598,10 @@ window.openAttendanceEntryModalById = async function(staffId) {
         return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
     }
 
-    const staffName = staff.full_name || staff.name || '-';
+    // ✅ sync current profile จาก Supabase
+    window.currentStaffProfile = staff;
+
+    const staffName = staff.full_name || '-';
     const staffCode = staff.staff_code || staffId;
 
     document.getElementById('staffSubDisplay').innerHTML = `
@@ -9538,7 +9643,8 @@ window.saveAttendanceDataById = async function(staffId) {
         .update({
             last_late: lateVal,
             last_absent: absentVal,
-            last_leave: leaveVal
+            last_leave: leaveVal,
+            updated_at: new Date().toISOString()
         })
         .eq('staff_code', staffId);
 
@@ -9549,6 +9655,16 @@ window.saveAttendanceDataById = async function(staffId) {
             title: 'บันทึกไม่สำเร็จ',
             text: error.message || 'ไม่สามารถบันทึกสถิติพนักงานได้'
         });
+    }
+
+    const { data: refreshedStaff } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .eq('staff_code', staffId)
+        .single();
+
+    if (refreshedStaff) {
+        window.currentStaffProfile = refreshedStaff;
     }
 
     Swal.fire({
@@ -9578,6 +9694,8 @@ window.openSalaryAdjustmentModalById = async function(staffId) {
         console.error('openSalaryAdjustmentModalById error:', error);
         return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
     }
+
+    window.currentStaffProfile = staff;
 
     const staffCode = staff.staff_code || staffId;
 
@@ -9624,7 +9742,6 @@ window.saveStaffProfile = async function(staffId) {
         return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกชื่อ เบอร์โทรศัพท์ และอีเมล', 'warning');
     }
 
-    // ✅ เช็คอีเมลซ้ำ โดยต้องใช้ window.supabaseClient
     const { data: exist, error: checkError } = await window.supabaseClient
         .from('staff_profiles')
         .select('staff_code,email')
@@ -9662,16 +9779,19 @@ window.saveStaffProfile = async function(staffId) {
         .from('staff_profiles')
         .update(payload)
         .eq('staff_code', staffId)
-        .select();
+        .select()
+        .single();
 
     if (error) {
         console.error('saveStaffProfile error:', error);
         return Swal.fire('บันทึกไม่สำเร็จ', error.message || 'เกิดข้อผิดพลาด', 'error');
     }
 
-    if (!data || data.length === 0) {
+    if (!data) {
         return Swal.fire('บันทึกไม่สำเร็จ', 'ไม่พบ staff_code ที่ต้องการแก้ไข', 'error');
     }
+
+    window.currentStaffProfile = data;
 
     Swal.fire({
         icon: 'success',
@@ -9717,14 +9837,20 @@ window.toggleUserStatusByCode = async function(staffCode) {
             updated_at: new Date().toISOString()
         };
 
-    const { error } = await window.supabaseClient
+    const { data: updatedStaff, error } = await window.supabaseClient
         .from('staff_profiles')
         .update(payload)
-        .eq('staff_code', staffCode);
+        .eq('staff_code', staffCode)
+        .select()
+        .single();
 
     if (error) {
         console.error('toggleUserStatusByCode update error:', error);
         return Swal.fire('ผิดพลาด', error.message || 'ไม่สามารถเปลี่ยนสถานะได้', 'error');
+    }
+
+    if (updatedStaff) {
+        window.currentStaffProfile = updatedStaff;
     }
 
     Swal.fire({
@@ -9767,6 +9893,10 @@ window.deleteStaffUserByCode = async function(staffCode) {
         return Swal.fire('ลบไม่สำเร็จ', error.message || 'เกิดข้อผิดพลาด', 'error');
     }
 
+    if (window.currentStaffProfile?.staff_code === staffCode) {
+        window.currentStaffProfile = null;
+    }
+
     Swal.fire({
         icon: 'success',
         title: 'ลบเรียบร้อย',
@@ -9779,7 +9909,6 @@ window.deleteStaffUserByCode = async function(staffCode) {
         await window.switchSettingsTab('users', activeBtn);
     }
 };
-
 
 window.saveSalaryAdjustmentById = async function(staffId) {
     if (!window.supabaseClient) {
@@ -9801,10 +9930,15 @@ window.saveSalaryAdjustmentById = async function(staffId) {
         });
     }
 
-    const { error } = await window.supabaseClient
+    const { data: updatedStaff, error } = await window.supabaseClient
         .from('staff_profiles')
-        .update({ salary: newSalary })
-        .eq('staff_code', staffId);
+        .update({
+            salary: newSalary,
+            updated_at: new Date().toISOString()
+        })
+        .eq('staff_code', staffId)
+        .select()
+        .single();
 
     if (error) {
         console.error('saveSalaryAdjustmentById error:', error);
@@ -9813,6 +9947,10 @@ window.saveSalaryAdjustmentById = async function(staffId) {
             title: 'เกิดข้อผิดพลาด',
             text: error.message || 'ไม่สามารถบันทึกฐานเงินเดือนได้'
         });
+    }
+
+    if (updatedStaff) {
+        window.currentStaffProfile = updatedStaff;
     }
 
     Swal.fire({
@@ -9837,19 +9975,51 @@ window.renderPayrollSystem = async function() {
         return;
     }
 
-    const currentUser = JSON.parse(localStorage.getItem('currentUser')) || [];
-    const payrollHistory = JSON.parse(localStorage.getItem('payrollHistoryDB')) || [];
+    // ✅ ดึง user จริงจาก Supabase Auth + profile จริงจาก staff_profiles
+    let currentUserProfile = null;
+    let viewingBranch = 'ทุกสาขา';
 
-    const viewingBranchRaw = currentUser.branch || 'ทุกสาขา';
-    const viewingBranch = String(viewingBranchRaw).replace('สาขา', '').trim();
+    try {
+        const { data: { user } } = await window.supabaseClient.auth.getUser();
+
+        if (user?.id) {
+            const { data: profile } = await window.supabaseClient
+                .from('staff_profiles')
+                .select('*')
+                .eq('auth_user_id', user.id)
+                .single();
+
+            if (profile) {
+                currentUserProfile = profile;
+                viewingBranch = String(profile.branch || 'ทุกสาขา').replace('สาขา', '').trim();
+            }
+        }
+    } catch (e) {
+        console.error('renderPayrollSystem load current user profile error:', e);
+    }
+
+    // ✅ ดึง payroll_history จาก Supabase
+    const { data: payrollHistory, error: payrollHistoryError } = await window.supabaseClient
+        .from('payroll_history')
+        .select('*');
+
+    if (payrollHistoryError) {
+        console.error('renderPayrollSystem payroll_history error:', payrollHistoryError);
+        target.innerHTML = `<div class="glass-card py-20 text-center text-red-400 font-bold">โหลดประวัติเงินเดือนไม่สำเร็จ</div>`;
+        return;
+    }
 
     let query = window.supabaseClient
         .from('staff_profiles')
         .select('*')
         .order('created_at', { ascending: false });
 
-    if (!(typeof window.canViewAllBranches === 'function' && window.canViewAllBranches()) && viewingBranch !== 'ทุกสาขา') {
-        query = query.eq('branch', window.normalizeBranch ? window.normalizeBranch(viewingBranch) : viewingBranch);
+    // ✅ ถ้าไม่ใช่ทุกสาขา ค่อย filter
+    if (viewingBranch !== 'ทุกสาขา') {
+        query = query.eq(
+            'branch',
+            window.normalizeBranch ? window.normalizeBranch(viewingBranch) : viewingBranch
+        );
     }
 
     const { data: allStaff, error } = await query;
@@ -9861,7 +10031,7 @@ window.renderPayrollSystem = async function() {
     }
 
     const filteredStaff = (allStaff || []).filter(s => {
-        const status = s.employment_status || s.status || 'ทำงาน';
+        const status = s.employment_status || 'ทำงาน';
         return status === 'ทำงาน';
     });
 
@@ -9899,9 +10069,12 @@ window.renderPayrollSystem = async function() {
 
             <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                 ${filteredStaff.length > 0 ? filteredStaff.map((s) => {
-                    const staffCode = s.staff_code || s.staffId || '';
-                    const staffName = s.full_name || s.name || '-';
-                    const record = payrollHistory.find(p => String(p.staffId) === String(staffCode) && p.period === selectedPeriod);
+                    const staffCode = s.staff_code || '';
+                    const staffName = s.full_name || '-';
+                    const record = (payrollHistory || []).find(p =>
+                        String(p.staff_code || '') === String(staffCode) &&
+                        String(p.period || '') === String(selectedPeriod)
+                    );
 
                     return `
                     <div class="bg-white rounded-[2.5rem] p-6 border border-slate-50 shadow-lg hover:shadow-2xl transition-all text-center relative overflow-hidden group">
@@ -9946,8 +10119,17 @@ window.openLuxuryPayroll = async function(staffId, period) {
         return Swal.fire('Error', 'ไม่พบข้อมูลพนักงานในระบบ', 'error');
     }
 
-    const history = JSON.parse(localStorage.getItem('payrollHistoryDB')) || [];
-    const prev = history.find(p => String(p.staffId) === String(staffId) && p.period === period);
+    // ✅ ดึงประวัติ payroll จาก Supabase แทน localStorage
+    const { data: prev, error: historyError } = await window.supabaseClient
+        .from('payroll_history')
+        .select('*')
+        .eq('staff_code', staffId)
+        .eq('period', period)
+        .maybeSingle();
+
+    if (historyError) {
+        console.error('openLuxuryPayroll payroll_history error:', historyError);
+    }
 
     const staffName = staff.full_name || staff.name || '-';
 
@@ -10015,17 +10197,17 @@ window.openLuxuryPayroll = async function(staffId, period) {
                                     <p class="text-[9px] font-black text-red-500 mb-1 uppercase underline underline-offset-4">⚠️ รายละเอียดวินัยและการลา</p>
                                     <div class="flex flex-col gap-0.5">
                                         <div class="flex justify-between items-center"><label class="text-[10px] text-slate-500">ขาดงาน (วัน)</label>
-                                        <input type="number" id="mAbsDays" oninput="calcPayrollLogic()" value="${prev ? prev.absDays : 0}" class="w-14 bg-white border border-red-100 p-1 rounded-lg text-center font-black text-red-500 text-xs"></div>
+                                        <input type="number" id="mAbsDays" oninput="calcPayrollLogic()" value="${prev ? (prev.abs_days ?? prev.absDays ?? 0) : 0}" class="w-14 bg-white border border-red-100 p-1 rounded-lg text-center font-black text-red-500 text-xs"></div>
                                         <div class="text-[8px] text-right text-red-400 font-black italic" id="valAbsDayDeduct">หัก: ฿0.00</div>
                                     </div>
                                     <div class="flex flex-col gap-0.5">
                                         <div class="flex justify-between items-center"><label class="text-[10px] text-slate-500">หักชั่วโมง (เช่น 1.30)</label>
-                                        <input type="number" id="mAbsHours" oninput="calcPayrollLogic()" value="${prev ? prev.absHours : 0}" class="w-14 bg-white border border-red-100 p-1 rounded-lg text-center font-black text-red-500 text-xs"></div>
+                                        <input type="number" id="mAbsHours" oninput="calcPayrollLogic()" value="${prev ? (prev.abs_hours ?? prev.absHours ?? 0) : 0}" class="w-14 bg-white border border-red-100 p-1 rounded-lg text-center font-black text-red-500 text-xs"></div>
                                         <div class="text-[8px] text-right text-red-400 font-black italic" id="valAbsHourDeduct">หัก: ฿0.00</div>
                                     </div>
                                     <div class="flex flex-col gap-0.5">
                                         <div class="flex justify-between items-center"><label class="text-[10px] text-slate-500">มาสาย (นาที)</label>
-                                        <input type="number" id="mLateMin" oninput="calcPayrollLogic()" value="${prev ? prev.lateMins : 0}" class="w-14 bg-white border border-red-100 p-1 rounded-lg text-center font-black text-red-500 text-xs"></div>
+                                        <input type="number" id="mLateMin" oninput="calcPayrollLogic()" value="${prev ? (prev.late_mins ?? prev.lateMins ?? 0) : 0}" class="w-14 bg-white border border-red-100 p-1 rounded-lg text-center font-black text-red-500 text-xs"></div>
                                         <div class="text-[8px] text-right text-red-400 font-black italic" id="valLateDeduct">หัก: ฿0.00</div>
                                     </div>
                                     <div class="pt-2 border-t border-red-200 flex justify-between items-center"><span class="text-[11px] font-black text-red-600">รวมหักวินัย:</span><span id="resDeductTotal" class="text-[12px] font-black text-red-600">- ฿0.000</span></div>
@@ -10048,48 +10230,65 @@ window.openLuxuryPayroll = async function(staffId, period) {
 };
 
 window.calcPayrollLogic = function() {
-    // 1. ดึงค่าจาก Input (แก้ไข ID ให้ตรงกับ HTML)
-    const salary = parseFloat(document.getElementById('mSalary').value) || 0;
-    const comm = parseFloat(document.getElementById('mComm').value) || 0;
-    const df = parseFloat(document.getElementById('mDF').value) || 0;
-    const ot = parseFloat(document.getElementById('mOT').value) || 0;
-    const tax = parseFloat(document.getElementById('mTax').value) || 0;
-    
-    // ดึงค่ารายการหัก (ใช้ mLateMin ให้ตรงกับ HTML ในบรรทัดที่ 2187)
-    const absD = parseFloat(document.getElementById('mAbsDays').value) || 0;
-    const absHIn = parseFloat(document.getElementById('mAbsHours').value) || 0;
-    const lateM = parseFloat(document.getElementById('mLateMin').value) || 0; 
+    const salary = parseFloat(document.getElementById('mSalary')?.value || 0) || 0;
+    const comm = parseFloat(document.getElementById('mComm')?.value || 0) || 0;
+    const df = parseFloat(document.getElementById('mDF')?.value || 0) || 0;
+    const ot = parseFloat(document.getElementById('mOT')?.value || 0) || 0;
+    const tax = parseFloat(document.getElementById('mTax')?.value || 0) || 0;
+
+    const absD = parseFloat(document.getElementById('mAbsDays')?.value || 0) || 0;
+    const absHIn = parseFloat(document.getElementById('mAbsHours')?.value || 0) || 0;
+    const lateM = parseFloat(document.getElementById('mLateMin')?.value || 0) || 0;
 
     const hourRate = (salary / 30) / 8;
 
-    // 2. คำนวณรายการหัก
     const absDayDeduct = absD * (salary / 30);
     const commDeduct = (absD > 0) ? (comm / 30) * absD : 0;
-    document.getElementById('valAbsDayDeduct').innerText = `หัก: ฿${(absDayDeduct + commDeduct).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+    const absDayTotal = absDayDeduct + commDeduct;
+
+    const valAbsDayDeduct = document.getElementById('valAbsDayDeduct');
+    if (valAbsDayDeduct) {
+        valAbsDayDeduct.innerText = `หัก: ฿${absDayTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+    }
 
     const h = Math.floor(absHIn);
     const m = (absHIn - h) * 100;
-    const absHourDeduct = (h + (m/60)) * hourRate;
-    document.getElementById('valAbsHourDeduct').innerText = `หัก: ฿${absHourDeduct.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+    const absHourDeduct = (h + (m / 60)) * hourRate;
+
+    const valAbsHourDeduct = document.getElementById('valAbsHourDeduct');
+    if (valAbsHourDeduct) {
+        valAbsHourDeduct.innerText = `หัก: ฿${absHourDeduct.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+    }
 
     let lateDeduct = 0;
     if (lateM > 10 && lateM <= 30) lateDeduct = lateM * 5;
     else if (lateM > 30) lateDeduct = (lateM / 60) * hourRate;
-    document.getElementById('valLateDeduct').innerText = `หัก: ฿${lateDeduct.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
 
-    const totalD = absDayDeduct + commDeduct + absHourDeduct + lateDeduct;
-    document.getElementById('resDeductTotal').innerText = `- ฿${totalD.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+    const valLateDeduct = document.getElementById('valLateDeduct');
+    if (valLateDeduct) {
+        valLateDeduct.innerText = `หัก: ฿${lateDeduct.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+    }
 
-    // 3. คำนวณประกันสังคม (SSO)
-    const sso = Math.min(750, salary * 0.05); // ปกติฐานสูงสุดคือ 15,000 หัก 750
-    document.getElementById('mSSO').value = sso.toFixed(0);
+    const totalD = absDayTotal + absHourDeduct + lateDeduct;
 
-    // 4. คำนวณยอดสุทธิ (Net Pay)
+    const resDeductTotal = document.getElementById('resDeductTotal');
+    if (resDeductTotal) {
+        resDeductTotal.innerText = `- ฿${totalD.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+    }
+
+    const sso = Math.min(750, salary * 0.05);
+    const mSSO = document.getElementById('mSSO');
+    if (mSSO) {
+        mSSO.value = sso.toFixed(0);
+    }
+
     const income = salary + comm + df + ot;
     const net = income - totalD - sso - tax;
-    
-    // แสดงผลยอดรับสุทธิ
-    document.getElementById('mNet').innerText = `฿${net.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+
+    const mNet = document.getElementById('mNet');
+    if (mNet) {
+        mNet.innerText = `฿${net.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+    }
 };
 
 window.saveAndPrintPayrollById = async function(staffId, period) {
@@ -10108,6 +10307,9 @@ window.saveAndPrintPayrollById = async function(staffId, period) {
         return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
     }
 
+    const netPayNumber =
+        parseFloat(String(document.getElementById('mNet')?.innerText || '0').replace(/[^\d.-]/g, '')) || 0;
+
     const payload = {
         staff_code: staffId,
         period: period,
@@ -10120,7 +10322,7 @@ window.saveAndPrintPayrollById = async function(staffId, period) {
         abs_hours: parseFloat(document.getElementById('mAbsHours')?.value || 0),
         late_mins: parseFloat(document.getElementById('mLateMin')?.value || 0),
         sick_days: 0,
-        net_pay: document.getElementById('mNet')?.innerText || '฿0.00',
+        net_pay: netPayNumber,
         updated_at: new Date().toISOString()
     };
 
@@ -10187,13 +10389,35 @@ window.renderAttendanceRecord = async function() {
     }
 
     const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
-    const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
+
+    // ✅ ดึง current user profile จาก Supabase แทน localStorage
+    let currentUserProfile = null;
+    let viewingBranch = 'ทุกสาขา';
+
+    try {
+        const { data: { user } } = await window.supabaseClient.auth.getUser();
+
+        if (user?.id) {
+            const { data: profile } = await window.supabaseClient
+                .from('staff_profiles')
+                .select('*')
+                .eq('auth_user_id', user.id)
+                .single();
+
+            if (profile) {
+                currentUserProfile = profile;
+                viewingBranch = String(profile.branch || 'ทุกสาขา').replace('สาขา', '').trim();
+            }
+        }
+    } catch (e) {
+        console.error('renderAttendanceRecord load current user profile error:', e);
+    }
 
     if (!window.attViewMode) window.attViewMode = 'monthly';
     const selMonth = window.selectedAttMonth || String(new Date().getMonth() + 1).padStart(2, '0');
     const selYearThai = window.selectedAttYear || "2569";
 
-    // ✅ ดึงข้อมูล payroll_history จาก Supabase
+    // ✅ ดึง payroll_history จาก Supabase
     const { data: payrollHistory, error: payrollError } = await window.supabaseClient
         .from('payroll_history')
         .select('*');
@@ -10204,16 +10428,16 @@ window.renderAttendanceRecord = async function() {
         return;
     }
 
-    // ✅ ดึงข้อมูล staff_profiles จาก Supabase
+    // ✅ ดึง staff_profiles จาก Supabase
     let staffQuery = window.supabaseClient
         .from('staff_profiles')
         .select('*');
 
-    const viewingBranchRaw = currentUser.branch || 'ทุกสาขา';
-    const viewingBranch = String(viewingBranchRaw).replace('สาขา', '').trim();
-
-    if (!(typeof window.canViewAllBranches === 'function' && window.canViewAllBranches()) && viewingBranch !== 'ทุกสาขา') {
-        staffQuery = staffQuery.eq('branch', window.normalizeBranch ? window.normalizeBranch(viewingBranch) : viewingBranch);
+    if (viewingBranch !== 'ทุกสาขา') {
+        staffQuery = staffQuery.eq(
+            'branch',
+            window.normalizeBranch ? window.normalizeBranch(viewingBranch) : viewingBranch
+        );
     }
 
     const { data: staffProfiles, error: staffError } = await staffQuery;
@@ -10226,7 +10450,7 @@ window.renderAttendanceRecord = async function() {
 
     const staffMap = {};
     (staffProfiles || []).forEach(s => {
-        const code = String(s.staff_code || s.staffId || '');
+        const code = String(s.staff_code || '');
         if (code) staffMap[code] = s;
     });
 
@@ -10238,30 +10462,28 @@ window.renderAttendanceRecord = async function() {
         titleText = `สรุปสถิติงวดเดือน ${monthNames[parseInt(selMonth) - 1]} ${selYearThai}`;
 
         displayData = (payrollHistory || [])
-            .filter(p => p.period === periodKey)
+            .filter(p => String(p.period || '') === String(periodKey))
             .filter(record => {
-                const staffCode = String(record.staff_code || record.staffId || '');
-                if (typeof window.canViewAllBranches === 'function' && window.canViewAllBranches()) return true;
-
+                const staffCode = String(record.staff_code || '');
                 const staffInfo = staffMap[staffCode];
+
+                if (viewingBranch === 'ทุกสาขา') return true;
                 if (!staffInfo) return false;
 
                 const staffBranch = String(staffInfo.branch || '').replace('สาขา', '').trim();
-                return viewingBranch === 'ทุกสาขา' || staffBranch === viewingBranch;
+                return staffBranch === viewingBranch;
             })
             .map(record => {
-                const staffCode = String(record.staff_code || record.staffId || '');
+                const staffCode = String(record.staff_code || '');
                 const staffInfo = staffMap[staffCode];
 
                 return {
                     ...record,
-                    displayName: staffInfo ? (staffInfo.full_name || staffInfo.name || 'ไม่ระบุชื่อ') : (record.name || 'ไม่ระบุชื่อ'),
-                    lateMins: parseFloat(record.late_mins || record.lateMins || record.lateCount || 0),
-                    absDays: parseFloat(record.abs_days || record.absDays || 0),
-                    sickDays: parseFloat(record.sick_days || record.sickDays || 0),
-                    netAmount: parseFloat(
-                        String(record.net_pay || record.netPay || record.netAmount || 0).replace(/[^\d.-]/g, '')
-                    ) || 0
+                    displayName: staffInfo ? (staffInfo.full_name || 'ไม่ระบุชื่อ') : 'ไม่ระบุชื่อ',
+                    lateMins: parseFloat(record.late_mins || 0),
+                    absDays: parseFloat(record.abs_days || 0),
+                    sickDays: parseFloat(record.sick_days || 0),
+                    netAmount: parseFloat(String(record.net_pay || 0).replace(/[^\d.-]/g, '')) || 0
                 };
             });
 
@@ -10272,19 +10494,19 @@ window.renderAttendanceRecord = async function() {
         (payrollHistory || []).forEach(record => {
             if (!record.period || !String(record.period).endsWith(selYearThai)) return;
 
-            const staffCode = String(record.staff_code || record.staffId || '');
+            const staffCode = String(record.staff_code || '');
             const staffInfo = staffMap[staffCode];
 
-            if (!(typeof window.canViewAllBranches === 'function' && window.canViewAllBranches())) {
+            if (viewingBranch !== 'ทุกสาขา') {
                 if (!staffInfo) return;
                 const staffBranch = String(staffInfo.branch || '').replace('สาขา', '').trim();
-                if (!(viewingBranch === 'ทุกสาขา' || staffBranch === viewingBranch)) return;
+                if (staffBranch !== viewingBranch) return;
             }
 
             if (!yearlyMap[staffCode]) {
                 yearlyMap[staffCode] = {
                     staffCode: staffCode,
-                    displayName: staffInfo ? (staffInfo.full_name || staffInfo.name || 'ไม่ระบุชื่อ') : (record.name || 'ไม่ระบุชื่อ'),
+                    displayName: staffInfo ? (staffInfo.full_name || 'ไม่ระบุชื่อ') : 'ไม่ระบุชื่อ',
                     lateMins: 0,
                     absDays: 0,
                     sickDays: 0,
@@ -10293,12 +10515,10 @@ window.renderAttendanceRecord = async function() {
                 };
             }
 
-            yearlyMap[staffCode].lateMins += parseFloat(record.late_mins || record.lateMins || record.lateCount || 0);
-            yearlyMap[staffCode].absDays += parseFloat(record.abs_days || record.absDays || 0);
-            yearlyMap[staffCode].sickDays += parseFloat(record.sick_days || record.sickDays || 0);
-            yearlyMap[staffCode].netAmount += parseFloat(
-                String(record.net_pay || record.netPay || record.netAmount || 0).replace(/[^\d.-]/g, '')
-            ) || 0;
+            yearlyMap[staffCode].lateMins += parseFloat(record.late_mins || 0);
+            yearlyMap[staffCode].absDays += parseFloat(record.abs_days || 0);
+            yearlyMap[staffCode].sickDays += parseFloat(record.sick_days || 0);
+            yearlyMap[staffCode].netAmount += parseFloat(String(record.net_pay || 0).replace(/[^\d.-]/g, '')) || 0;
             yearlyMap[staffCode].monthsCount += 1;
         });
 
@@ -10370,7 +10590,6 @@ window.renderAttendanceRecord = async function() {
         </div>
     `;
 };
-
 
 window.renderStaffCalendar = async function() {
     const target = document.getElementById('dynamicContent');
@@ -10897,7 +11116,7 @@ else if (tab === 'users') {
         ? window.getCurrentUserSafe()
         : (JSON.parse(localStorage.getItem('currentUser')) || {});
 
-    const viewingBranch = String(currentUser.branch || 'ทุกสาขา').replace('สาขา', '').trim();
+    const viewingBranch = window.normalizeBranchView(currentUser.branch || 'ทุกสาขา');
 
     let query = window.supabaseClient
         .from('staff_profiles')
@@ -11159,13 +11378,40 @@ else if (tab === 'users') {
     }
 
     // --- 5. สมัครใช้สิทธิ์ใหม่ ---
-    else if (tab === 'register') {
-    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
+   else if (tab === 'register') {
+    if (!window.supabaseClient) {
+        area.innerHTML = `
+            <div class="bg-white p-10 rounded-[3.5rem] shadow-xl border border-pink-50 text-center text-red-400 font-bold">
+                ยังไม่พบการเชื่อมต่อ Supabase
+            </div>`;
+        return;
+    }
+
+    const { data: staffDB, error } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .eq('is_active', true)
+        .eq('employment_status', 'ทำงาน')
+        .order('full_name', { ascending: true });
+
+    if (error) {
+        console.error('register tab load staff_profiles error:', error);
+        area.innerHTML = `
+            <div class="bg-white p-10 rounded-[3.5rem] shadow-xl border border-pink-50 text-center text-red-400 font-bold">
+                โหลดรายชื่อพนักงานไม่สำเร็จ
+            </div>`;
+        return;
+    }
+
+    window.registerStaffSource = staffDB || [];
 
     area.innerHTML = `
         <div class="bg-white p-10 rounded-[3.5rem] shadow-xl border border-pink-50 animate-in slide-in-from-right text-left">
             <h3 class="text-2xl font-black text-slate-800 italic uppercase mb-8">🔑 สมัครใช้สิทธิ์เข้าใช้งาน</h3>
             <div class="bg-slate-50 p-10 rounded-[4rem] border border-white shadow-sm max-w-2xl mx-auto space-y-6">
+
+                <input type="hidden" id="regStaffCode">
+                <input type="hidden" id="regAuthUserId">
 
                 <div>
                     <label class="text-[10px] font-black text-[#D48197] uppercase ml-2 block mb-2">เลือกชื่อพนักงาน</label>
@@ -11178,7 +11424,9 @@ else if (tab === 'users') {
                         class="w-full p-4 rounded-3xl border-none shadow-inner font-bold text-sm"
                     >
                     <datalist id="staffNameList">
-                        ${staffDB.map(s => `<option value="${String(s.name || '').replace(/"/g, '&quot;')}"></option>`).join('')}
+                        ${window.registerStaffSource.map(s => `
+                            <option value="${String(s.full_name || '').replace(/"/g, '&quot;')}"></option>
+                        `).join('')}
                     </datalist>
                 </div>
 
@@ -11197,10 +11445,11 @@ else if (tab === 'users') {
                     <div>
                         <label class="text-[10px] font-black text-[#D48197] uppercase ml-2 block mb-2">ระบุบทบาท (Role)</label>
                         <select id="regRole" class="w-full p-4 rounded-3xl border-none shadow-inner font-bold text-sm bg-white cursor-pointer">
-                            <option value="พนักงานทรีทเม้นท์">พนักงานทรีทเม้นท์</option>
+                            <option value="แอดมินหลัก">แอดมินหลัก</option>
+                            <option value="CEO">ผู้บริหาร (CEO)</option>
                             <option value="ผู้จัดการ">ผู้จัดการ (Manager)</option>
                             <option value="หมอ">หมอ (Doctor)</option>
-                            <option value="CEO">ผู้บริหาร (CEO)</option>
+                            <option value="พนักงานทรีทเม้นท์">พนักงานทรีทเม้นท์</option>
                         </select>
                     </div>
                     <div>
@@ -11209,6 +11458,7 @@ else if (tab === 'users') {
                             <option value="บางพลี">บางพลี</option>
                             <option value="อุดมสุข">อุดมสุข</option>
                             <option value="ชลบุรี">ชลบุรี</option>
+                            <option value="ทุกสาขา">ทุกสาขา</option>
                         </select>
                     </div>
                 </div>
@@ -11219,7 +11469,6 @@ else if (tab === 'users') {
             </div>
         </div>`;
 }
-
     else {
         area.innerHTML = `<div class="bg-white p-20 rounded-[3rem] text-center italic text-slate-300">ฟังก์ชัน ${tab} กำลังพัฒนา...</div>`;
     }
@@ -11697,14 +11946,19 @@ setTimeout(() => {
 }, 2000);
 
 // -------------------------
-// Registration (PRO)
+// Registration (PRO) - Supabase only
 // -------------------------
 window.processNewRegistration = async function() {
     const name = document.getElementById('regName')?.value.trim() || '';
     const user = document.getElementById('regUser')?.value.trim() || '';   // email
     const pass = document.getElementById('regPass')?.value.trim() || '';   // phone
     const role = document.getElementById('regRole')?.value || '';
-    const branch = window.normalizeBranch(document.getElementById('regBranch')?.value || '');
+    const branch = window.normalizeBranch
+        ? window.normalizeBranch(document.getElementById('regBranch')?.value || '')
+        : (document.getElementById('regBranch')?.value || '');
+
+    const regStaffCode = document.getElementById('regStaffCode')?.value?.trim() || '';
+    const regAuthUserId = document.getElementById('regAuthUserId')?.value?.trim() || '';
 
     if (!name || !user || !pass) {
         return Swal.fire({
@@ -11724,20 +11978,50 @@ window.processNewRegistration = async function() {
         });
     }
 
-    let staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
+    const email = user.toLowerCase();
 
-    const idx = staffDB.findIndex(s => String(s.name || '').trim() === name);
+    // ✅ หาใน Supabase source ก่อน
+    let staff = (window.registerStaffSource || []).find(s =>
+        String(s.staff_code || '').trim() === String(regStaffCode || '').trim()
+    );
 
-    if (idx === -1) {
+    // ✅ ถ้ายังไม่เจอ ค่อย fallback ด้วยชื่อ
+    if (!staff) {
+        staff = (window.registerStaffSource || []).find(s =>
+            String(s.full_name || s.name || '').trim() === String(name).trim()
+        );
+    }
+
+    // ✅ ถ้ายังไม่เจออีก ดึงจาก staff_profiles โดยตรง
+    if (!staff) {
+        let query = window.supabaseClient
+            .from('staff_profiles')
+            .select('*');
+
+        if (regStaffCode) {
+            query = query.eq('staff_code', regStaffCode);
+        } else {
+            query = query.eq('full_name', name);
+        }
+
+        const { data, error } = await query.single();
+
+        if (!error && data) {
+            staff = data;
+        }
+    }
+
+    if (!staff) {
         return Swal.fire({
             icon: 'error',
             title: 'ไม่พบพนักงาน',
-            text: 'กรุณาเพิ่มพนักงานจากหน้า "เพิ่มพนักงานใหม่" ก่อนค่ะ',
+            text: 'ไม่พบข้อมูลพนักงานใน staff_profiles ค่ะ',
             confirmButtonColor: '#D48197'
         });
     }
 
-    if (staffDB[idx].hasLoginAccess || staffDB[idx].authUserId) {
+    // ✅ ถ้ามี auth_user_id แล้ว ถือว่ามีสิทธิ์แล้ว
+    if (staff.auth_user_id || regAuthUserId) {
         return Swal.fire({
             icon: 'warning',
             title: 'มีสิทธิ์แล้ว',
@@ -11746,14 +12030,13 @@ window.processNewRegistration = async function() {
         });
     }
 
-    const email = user.toLowerCase();
-
     const confirmResult = await Swal.fire({
         icon: 'question',
         title: 'ยืนยันสมัครสิทธิ์ใช้งาน',
         html: `
             <div class="text-left text-sm leading-7">
-                <div><b>ชื่อพนักงาน:</b> ${name}</div>
+                <div><b>ชื่อพนักงาน:</b> ${staff.full_name || name}</div>
+                <div><b>รหัสพนักงาน:</b> ${staff.staff_code || '-'}</div>
                 <div><b>ชื่อผู้ใช้:</b> ${email}</div>
                 <div><b>รหัสผ่าน:</b> ${pass}</div>
                 <div><b>สิทธิ์:</b> ${role || '-'}</div>
@@ -11778,7 +12061,7 @@ window.processNewRegistration = async function() {
             didOpen: () => Swal.showLoading()
         });
 
-        // ใช้ client แยก เพื่อไม่ให้ session คนที่กำลังใช้งานอยู่หลุด
+        // ✅ ใช้ client แยก เพื่อไม่ให้ session ปัจจุบันหลุด
         const tempAuthClient = supabase.createClient(
             SUPABASE_URL,
             SUPABASE_KEY,
@@ -11797,10 +12080,10 @@ window.processNewRegistration = async function() {
             password: pass,
             options: {
                 data: {
-                    full_name: name,
+                    full_name: staff.full_name || name,
                     role: role,
                     branch: branch,
-                    staff_code: staffDB[idx]?.staffId || ''
+                    staff_code: staff.staff_code || regStaffCode || ''
                 }
             }
         });
@@ -11827,87 +12110,53 @@ window.processNewRegistration = async function() {
             });
         }
 
-        // 2) อัปเดต staffDB เดิม
-        staffDB[idx] = {
-            ...staffDB[idx],
-            email: email,
-            username: email,
-            phone: pass,
-            password: pass,
-            role: role || staffDB[idx].role || '',
-            branch: branch || staffDB[idx].branch || '',
-            homeBranch: branch || staffDB[idx].homeBranch || '',
-            hasLoginAccess: true,
-            isLocked: false,
-            authUserId: authUserId,
-            updatedAt: new Date().toISOString()
-        };
-
-        localStorage.setItem('staffDB', JSON.stringify(staffDB));
-
-        // 3) upsert staff_profiles
+        // 2) update staff_profiles โดยตรง
         const profilePayload = {
             auth_user_id: authUserId,
-            staff_code: staffDB[idx]?.staffId || '',
-            full_name: staffDB[idx]?.name || name,
+            full_name: staff.full_name || name,
             phone: pass,
             email: email,
-            role: role || staffDB[idx]?.role || '',
-            branch: branch || staffDB[idx]?.branch || '',
-            employment_status: staffDB[idx]?.status || 'ทำงาน',
-            is_active: staffDB[idx]?.status !== 'ออก'
+            role: role || staff.role || '',
+            branch: branch || staff.branch || '',
+            employment_status: staff.employment_status || 'ทำงาน',
+            is_active: (staff.employment_status || 'ทำงาน') !== 'ออก',
+            updated_at: new Date().toISOString()
         };
 
-        // ลอง update ด้วย auth_user_id ก่อน
-        let profileSaved = false;
-
-        const { error: insertProfileError } = await window.supabaseClient
+        const { error: updateProfileError } = await window.supabaseClient
             .from('staff_profiles')
-            .insert([profilePayload]);
-
-        if (!insertProfileError) {
-            profileSaved = true;
-        } else {
-            // ถ้า insert ไม่ได้ ลอง update จาก staff_code
-            const { error: updateProfileError } = await window.supabaseClient
-                .from('staff_profiles')
-                .update({
-                    auth_user_id: authUserId,
-                    full_name: profilePayload.full_name,
-                    phone: profilePayload.phone,
-                    email: profilePayload.email,
-                    role: profilePayload.role,
-                    branch: profilePayload.branch,
-                    employment_status: profilePayload.employment_status,
-                    is_active: profilePayload.is_active
-                })
-                .eq('staff_code', profilePayload.staff_code);
-
-            if (!updateProfileError) {
-                profileSaved = true;
-            } else {
-                console.error('staff_profiles insert error:', insertProfileError);
-                console.error('staff_profiles update error:', updateProfileError);
-            }
-        }
+            .update(profilePayload)
+            .eq('staff_code', staff.staff_code);
 
         Swal.close();
 
-        if (!profileSaved) {
+        if (updateProfileError) {
+            console.error('staff_profiles update error:', updateProfileError);
             return Swal.fire({
                 icon: 'warning',
                 title: 'สร้างบัญชีสำเร็จ แต่บันทึกโปรไฟล์ไม่ครบ',
-                text: 'บัญชีล็อกอินถูกสร้างแล้ว แต่ staff_profiles ยังไม่สมบูรณ์ กรุณาตรวจสอบอีกครั้ง',
+                text: updateProfileError.message || 'อัปเดต staff_profiles ไม่สำเร็จ',
                 confirmButtonColor: '#D48197'
             });
         }
+
+        // 3) refresh source ให้หน้า register ใช้ข้อมูลล่าสุด
+        const { data: refreshedStaff } = await window.supabaseClient
+            .from('staff_profiles')
+            .select('*')
+            .eq('is_active', true)
+            .eq('employment_status', 'ทำงาน')
+            .order('full_name', { ascending: true });
+
+        window.registerStaffSource = refreshedStaff || [];
 
         await Swal.fire({
             icon: 'success',
             title: 'สมัครสิทธิ์สำเร็จ!',
             html: `
                 <div class="text-left text-sm leading-7">
-                    <div><b>ชื่อ:</b> ${name}</div>
+                    <div><b>ชื่อ:</b> ${staff.full_name || name}</div>
+                    <div><b>รหัสพนักงาน:</b> ${staff.staff_code || '-'}</div>
                     <div><b>Username:</b> ${email}</div>
                     <div><b>Password:</b> ${pass}</div>
                     <div><b>สิทธิ์:</b> ${role || '-'}</div>
@@ -11920,12 +12169,14 @@ window.processNewRegistration = async function() {
         if (document.getElementById('regName')) document.getElementById('regName').value = '';
         if (document.getElementById('regUser')) document.getElementById('regUser').value = '';
         if (document.getElementById('regPass')) document.getElementById('regPass').value = '';
+        if (document.getElementById('regRole')) document.getElementById('regRole').value = 'พนักงานทรีทเม้นท์';
+        if (document.getElementById('regBranch')) document.getElementById('regBranch').value = 'บางพลี';
+        if (document.getElementById('regStaffCode')) document.getElementById('regStaffCode').value = '';
+        if (document.getElementById('regAuthUserId')) document.getElementById('regAuthUserId').value = '';
 
-        if (typeof window.switchSettingsTab === 'function') {
-            const activeBtn = document.querySelector('.settings-nav-btn.active');
-            if (activeBtn) {
-                window.switchSettingsTab('users', activeBtn);
-            }
+        const activeBtn = document.querySelector('.settings-nav-btn.active');
+        if (activeBtn && typeof window.switchSettingsTab === 'function') {
+            await window.switchSettingsTab('users', activeBtn);
         }
 
     } catch (e) {
@@ -11944,8 +12195,8 @@ window.fillRegisterByStaffName = function() {
     const name = document.getElementById('regName')?.value?.trim() || '';
     if (!name) return;
 
-    const staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
-    const staff = staffDB.find(s => String(s.name || '').trim() === name);
+    const staffDB = window.registerStaffSource || [];
+    const staff = staffDB.find(s => String(s.full_name || s.name || '').trim() === name);
 
     if (!staff) return;
 
@@ -11953,11 +12204,15 @@ window.fillRegisterByStaffName = function() {
     const regPass = document.getElementById('regPass');
     const regRole = document.getElementById('regRole');
     const regBranch = document.getElementById('regBranch');
+    const regStaffCode = document.getElementById('regStaffCode');
+    const regAuthUserId = document.getElementById('regAuthUserId');
 
-    if (regUser) regUser.value = staff.email || staff.username || '';
-    if (regPass) regPass.value = staff.phone || staff.password || '';
+    if (regUser) regUser.value = staff.email || '';
+    if (regPass) regPass.value = staff.phone || '';
     if (regRole) regRole.value = staff.role || 'พนักงานทรีทเม้นท์';
     if (regBranch) regBranch.value = String(staff.branch || 'บางพลี').replace('สาขา', '').trim();
+    if (regStaffCode) regStaffCode.value = staff.staff_code || '';
+    if (regAuthUserId) regAuthUserId.value = staff.auth_user_id || '';
 };
 
 // -------------------------
@@ -12809,9 +13064,28 @@ window.showBirthdayNotifications = function() {
     });
 };
 
-// สั่งรันอัปเดตตัวเลขทันทีเมื่อโหลดหน้าสำเร็จ
 document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(window.updateNotificationBadges, 800);
+    setTimeout(() => {
+        window.updateNotificationBadges?.();
+        window.initAccountSuggestion?.();
+        window.bindPasswordInputBehavior?.();
+
+        // ✅ เพิ่มตรงนี้
+        const uIn = document.getElementById('uIn');
+        const pIn = document.getElementById('pIn');
+
+        [uIn, pIn].forEach(el => {
+            if (!el) return;
+
+            el.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        window.doLogin?.();
+    }
+});
+        });
+
+    }, 800);
 });
 
 window.saveCustomerToSupabase = async function(payload = {}) {
@@ -12888,10 +13162,23 @@ window.saveCustomerToSupabase = async function(payload = {}) {
 }
 
 
-window.getStaff = function() {
+window.getStaff = async function() {
     try {
-        return JSON.parse(localStorage.getItem('staffDB')) || [];
+        if (!window.supabaseClient) return [];
+
+        const { data, error } = await window.supabaseClient
+            .from('staff_profiles')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('getStaff error:', error);
+            return [];
+        }
+
+        return data || [];
     } catch (e) {
+        console.error('getStaff exception:', e);
         return [];
     }
 };

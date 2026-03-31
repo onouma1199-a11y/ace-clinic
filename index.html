@@ -10553,34 +10553,15 @@ window.renderAttendanceRecord = async function() {
 
     const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
 
-    // ✅ ดึง current user profile จาก Supabase แทน localStorage
-    let currentUserProfile = null;
-    let viewingBranch = 'ทุกสาขา';
-
-    try {
-        const { data: { user } } = await window.supabaseClient.auth.getUser();
-
-        if (user?.id) {
-            const { data: profile } = await window.supabaseClient
-                .from('staff_profiles')
-                .select('*')
-                .eq('auth_user_id', user.id)
-                .single();
-
-            if (profile) {
-                currentUserProfile = profile;
-                viewingBranch = String(profile.branch || 'ทุกสาขา').replace('สาขา', '').trim();
-            }
-        }
-    } catch (e) {
-        console.error('renderAttendanceRecord load current user profile error:', e);
-    }
+    const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
+    const viewingBranch = window.normalizeBranchView
+        ? window.normalizeBranchView(currentUser.branch || 'ทุกสาขา')
+        : String(currentUser.branch || 'ทุกสาขา').replace('สาขา', '').trim();
 
     if (!window.attViewMode) window.attViewMode = 'monthly';
     const selMonth = window.selectedAttMonth || String(new Date().getMonth() + 1).padStart(2, '0');
     const selYearThai = window.selectedAttYear || "2569";
 
-    // ✅ ดึง payroll_history จาก Supabase
     const { data: payrollHistory, error: payrollError } = await window.supabaseClient
         .from('payroll_history')
         .select('*');
@@ -10591,7 +10572,6 @@ window.renderAttendanceRecord = async function() {
         return;
     }
 
-    // ✅ ดึง staff_profiles จาก Supabase
     let staffQuery = window.supabaseClient
         .from('staff_profiles')
         .select('*');
@@ -10641,13 +10621,17 @@ window.renderAttendanceRecord = async function() {
                 const staffInfo = staffMap[staffCode];
 
                 return {
-                    ...record,
-                    displayName: staffInfo ? (staffInfo.full_name || 'ไม่ระบุชื่อ') : 'ไม่ระบุชื่อ',
-                    lateMins: parseFloat(record.late_mins || 0),
-                    absDays: parseFloat(record.abs_days || 0),
-                    sickDays: parseFloat(record.sick_days || 0),
-                    netAmount: parseFloat(String(record.net_pay || 0).replace(/[^\d.-]/g, '')) || 0
-                };
+    ...record,
+    displayName: staffInfo ? (staffInfo.full_name || 'ไม่ระบุชื่อ') : (record.staff_name || 'ไม่ระบุชื่อ'),
+    lateMins: parseFloat(record.late_mins || 0),
+    absDays: parseFloat(record.abs_days || 0),
+    absHours: parseFloat(record.abs_hours || 0),
+    sickDays: parseFloat(record.sick_days || 0),
+    vacationDays: parseFloat(record.vacation_days || 0),
+    netAmount: Math.round(
+    parseFloat(String(record.net_pay || 0).replace(/[^\d.-]/g, '')) || 0
+)
+};
             });
 
     } else {
@@ -10668,21 +10652,25 @@ window.renderAttendanceRecord = async function() {
 
             if (!yearlyMap[staffCode]) {
                 yearlyMap[staffCode] = {
-                    staffCode: staffCode,
-                    displayName: staffInfo ? (staffInfo.full_name || 'ไม่ระบุชื่อ') : 'ไม่ระบุชื่อ',
-                    lateMins: 0,
-                    absDays: 0,
-                    sickDays: 0,
-                    netAmount: 0,
-                    monthsCount: 0
-                };
+    staffCode: staffCode,
+    displayName: staffInfo ? (staffInfo.full_name || 'ไม่ระบุชื่อ') : (record.staff_name || 'ไม่ระบุชื่อ'),
+    lateMins: 0,
+    absDays: 0,
+    absHours: 0,
+    sickDays: 0,
+    vacationDays: 0,
+    netAmount: 0,
+    monthsCount: 0
+};
             }
 
             yearlyMap[staffCode].lateMins += parseFloat(record.late_mins || 0);
-            yearlyMap[staffCode].absDays += parseFloat(record.abs_days || 0);
-            yearlyMap[staffCode].sickDays += parseFloat(record.sick_days || 0);
-            yearlyMap[staffCode].netAmount += parseFloat(String(record.net_pay || 0).replace(/[^\d.-]/g, '')) || 0;
-            yearlyMap[staffCode].monthsCount += 1;
+yearlyMap[staffCode].absDays += parseFloat(record.abs_days || 0);
+yearlyMap[staffCode].absHours += parseFloat(record.abs_hours || 0);
+yearlyMap[staffCode].sickDays += parseFloat(record.sick_days || 0);
+yearlyMap[staffCode].vacationDays += parseFloat(record.vacation_days || 0);
+yearlyMap[staffCode].netAmount += parseFloat(String(record.net_pay || 0).replace(/[^\d.-]/g, '')) || 0;
+yearlyMap[staffCode].monthsCount += 1;
         });
 
         displayData = Object.values(yearlyMap);
@@ -10724,27 +10712,31 @@ window.renderAttendanceRecord = async function() {
                 <table class="w-full text-sm text-center">
                     <thead class="bg-[#F9EBEF] text-[#D48197] font-black uppercase italic text-[10px]">
                         <tr>
-                            <th class="p-5 text-left">ชื่อพนักงาน</th>
-                            <th class="p-5">สาย (นาที)</th>
-                            <th class="p-5">ขาด (วัน)</th>
-                            <th class="p-5">ลาป่วย (วัน)</th>
-                            <th class="p-5">สุทธิที่จ่าย</th>
-                            <th class="p-5 bg-pink-100/30 text-blue-600">ประเมิน (%)</th>
-                        </tr>
+    <th class="p-5 text-left">ชื่อพนักงาน</th>
+    <th class="p-5">สาย (นาที)</th>
+    <th class="p-5">ขาด (วัน)</th>
+    <th class="p-5">หักชั่วโมง</th>
+    <th class="p-5">ลาป่วย (วัน)</th>
+    <th class="p-5">ลาพักร้อน (วัน)</th>
+    <th class="p-5">สุทธิที่จ่าย</th>
+    <th class="p-5 bg-pink-100/30 text-blue-600">ประเมิน (%)</th>
+</tr>
                     </thead>
                     <tbody class="font-bold text-slate-600">
                         ${displayData.length > 0 ? displayData.map(record => `
                             <tr class="border-b border-pink-50 hover:bg-pink-50/10 transition-all">
-                                <td class="p-5 text-left">${record.displayName}</td>
-                                <td class="p-5">${record.lateMins} น.</td>
-                                <td class="p-5">${record.absDays} ว.</td>
-                                <td class="p-5">${record.sickDays} ว.</td>
-                                <td class="p-5 text-[#D48197]">฿${record.netAmount.toLocaleString()}</td>
-                                <td class="p-5 bg-pink-50/20 text-blue-600">5.0%</td>
-                            </tr>
+    <td class="p-5 text-left">${record.displayName}</td>
+    <td class="p-5">${record.lateMins} น.</td>
+    <td class="p-5">${record.absDays} ว.</td>
+    <td class="p-5">${record.absHours}</td>
+    <td class="p-5">${record.sickDays} ว.</td>
+    <td class="p-5">${record.vacationDays} ว.</td>
+    <td class="p-5 text-[#D48197]">฿${Math.round(record.netAmount).toLocaleString()}</td>
+    <td class="p-5 bg-pink-50/20 text-blue-600">5.0%</td>
+</tr>
                         `).join('') : `
                             <tr>
-                                <td colspan="6" class="p-20 text-slate-300 italic">❌ ไม่พบประวัติ</td>
+                                <td colspan="8" class="p-20 text-slate-300 italic">❌ ไม่พบประวัติ</td>
                             </tr>
                         `}
                     </tbody>

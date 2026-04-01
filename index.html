@@ -10782,9 +10782,8 @@ window.getBranchHeaderInfo = function(branchName = '') {
 
 window.getBranchHeaderField = function(branchInfo, keys = [], fallback = '') {
     for (const key of keys) {
-        const value = branchInfo?.[key];
-        if (value !== undefined && value !== null && String(value).trim() !== '') {
-            return value;
+        if (branchInfo && branchInfo[key] !== undefined && branchInfo[key] !== null && branchInfo[key] !== '') {
+            return branchInfo[key];
         }
     }
     return fallback;
@@ -10802,40 +10801,48 @@ window.printSlip = async function(payload, staff, previewWindow = null) {
     })();
 
     const branchInfo = typeof window.getBranchHeaderInfo === 'function'
-        ? window.getBranchHeaderInfo(branch)
+        ? await window.getBranchHeaderInfo(branch)
         : {};
 
     const clinicAddress = typeof window.getBranchHeaderField === 'function'
         ? window.getBranchHeaderField(branchInfo, ['address', 'clinicAddress', 'addr'], '')
-        : '';
+        : (branchInfo?.address || '');
+
     const clinicPhone = typeof window.getBranchHeaderField === 'function'
         ? window.getBranchHeaderField(branchInfo, ['phone', 'tel', 'mobile'], '')
-        : '';
+        : (branchInfo?.phone || '');
+
     const clinicEmail = typeof window.getBranchHeaderField === 'function'
         ? window.getBranchHeaderField(branchInfo, ['email'], '')
-        : '';
+        : (branchInfo?.email || '');
+
     const clinicLine = typeof window.getBranchHeaderField === 'function'
         ? window.getBranchHeaderField(branchInfo, ['lineId', 'line', 'line_id'], '')
-        : '';
+        : (branchInfo?.line_id || branchInfo?.line || '');
+
     const clinicLicense = typeof window.getBranchHeaderField === 'function'
         ? window.getBranchHeaderField(branchInfo, ['licenseNo', 'license_no', 'license'], '')
-        : '';
+        : (branchInfo?.license_no || branchInfo?.license || '');
 
     const clinicLogo = typeof window.getBranchHeaderField === 'function'
         ? window.getBranchHeaderField(branchInfo, ['logoUrl', 'logo', 'logo_url'], '')
-        : '';
+        : (branchInfo?.logo_url || branchInfo?.logo || '');
+
     const clinicQR = typeof window.getBranchHeaderField === 'function'
         ? window.getBranchHeaderField(branchInfo, ['qrUrl', 'qr', 'qr_url'], '')
-        : '';
+        : (branchInfo?.qr_url || branchInfo?.qr || '');
+
     const clinicSign = typeof window.getBranchHeaderField === 'function'
         ? window.getBranchHeaderField(branchInfo, ['signUrl', 'signature', 'sign', 'sign_url'], '')
-        : '';
+        : (branchInfo?.sign_url || branchInfo?.signature || '');
+
     const clinicSignName = typeof window.getBranchHeaderField === 'function'
-        ? window.getBranchHeaderField(branchInfo, ['signName', 'signatureName', 'approverName'], '')
-        : '';
+        ? window.getBranchHeaderField(branchInfo, ['signName', 'signatureName', 'approverName', 'sign_name'], '')
+        : (branchInfo?.sign_name || '');
+
     const clinicSignPosition = typeof window.getBranchHeaderField === 'function'
-        ? window.getBranchHeaderField(branchInfo, ['signPosition', 'signaturePosition', 'approverPosition'], '')
-        : '';
+        ? window.getBranchHeaderField(branchInfo, ['signPosition', 'signaturePosition', 'approverPosition', 'sign_position'], '')
+        : (branchInfo?.sign_position || '');
 
     // ค่าเริ่มต้นจาก payload
     let finalData = {
@@ -10933,16 +10940,16 @@ window.printSlip = async function(payload, staff, previewWindow = null) {
         sso;
 
     if (!previewWindow) {
-    previewWindow = window.open('', '_blank', 'width=920,height=1200');
-}
+        previewWindow = window.open('', '_blank', 'width=920,height=1200');
+    }
 
-if (!previewWindow) {
-    return Swal.fire({
-        icon: 'warning',
-        title: 'เปิดหน้าพรีวิวไม่ได้',
-        text: 'กรุณาอนุญาต pop-up ของเบราว์เซอร์ก่อนค่ะ'
-    });
-}
+    if (!previewWindow) {
+        return Swal.fire({
+            icon: 'warning',
+            title: 'เปิดหน้าพรีวิวไม่ได้',
+            text: 'กรุณาอนุญาต pop-up ของเบราว์เซอร์ก่อนค่ะ'
+        });
+    }
 
     previewWindow.document.write(`
         <html>
@@ -11220,28 +11227,30 @@ if (!previewWindow) {
                                 </div>
 
                                 <div>
-                                    <div class="title">ACE CLINIC</div>
-                                    <div class="small">สลิปเงินเดือน</div>
-                                    <div class="small">งวด ${safePeriod}</div>
+   				 <div class="title">ACE CLINIC</div>
 
-                                    <div class="branch-meta">
-                                        ${branch ? `<div class="small">สาขา${branch}</div>` : ''}
-                                        ${clinicAddress ? `<div class="small">${clinicAddress}</div>` : ''}
-                                        <div class="small">
-                                            ${clinicPhone ? `โทร ${clinicPhone}` : ''}
-                                            ${clinicEmail ? ` ${clinicPhone ? '| ' : ''}อีเมล ${clinicEmail}` : ''}
-                                            ${clinicLine ? ` ${(clinicPhone || clinicEmail) ? '| ' : ''}Line ${clinicLine}` : ''}
-                                        </div>
-                                        ${clinicLicense ? `<div class="small">เลขที่ใบอนุญาต: ${clinicLicense}</div>` : ''}
-                                    </div>
-                                </div>
-                            </div>
+    				<div class="branch-meta">
+      				  ${branch ? `<div class="small">สาขา${branch}</div>` : ''}
+      				  ${clinicAddress ? `<div class="small">${clinicAddress}</div>` : ''}
+       				 <div class="small">
+        			    ${clinicPhone ? `โทร ${clinicPhone}` : ''}
+        			    ${clinicEmail ? ` ${clinicPhone ? '| ' : ''}อีเมล ${clinicEmail}` : ''}
+         		   ${clinicLine ? ` ${(clinicPhone || clinicEmail) ? '| ' : ''}Line ${clinicLine}` : ''}
+      				  </div>
+      			  ${clinicLicense ? `<div class="small">เลขที่ใบอนุญาต: ${clinicLicense}</div>` : ''}
+   			 </div>
+			</div>
+			</div>
 
-                            <div class="small" style="text-align:right">
-                                ${new Date().toLocaleDateString('th-TH')}<br>
-                                ${new Date().toLocaleTimeString('th-TH')}
-                            </div>
-                        </div>
+			<!-- 👉 ขวาบน -->
+			<div class="small" style="text-align:right">
+   			 <div style="font-weight:700; color:#111">สลิปเงินเดือน</div>
+   			 <div style="margin-bottom:4px;">งวด ${safePeriod}</div>
+	
+   			 ${new Date().toLocaleDateString('th-TH')}<br>
+  			  ${new Date().toLocaleTimeString('th-TH')}
+			</div>
+			</div>
 
                         <div class="grid2">
                             <div class="box">
@@ -12177,7 +12186,13 @@ if (tab === 'clinic') {
                 </button>
             </div>
         </div>`;
+   setTimeout(async () => {
+        if (typeof window.loadClinicConfigFromDB === 'function') {
+            await window.loadClinicConfigFromDB();
+        }
+    }, 100);
 }
+
  // --- 2. จัดการผู้ใช้งาน (Supabase + Online Realtime) ---
 else if (tab === 'users') {
     window.currentSettingsTab = 'users';
@@ -12622,16 +12637,22 @@ window.uploadClinicAsset = async function(branchIndex, type) {
     const names = ['บางพลี', 'อุดมสุข', 'ชลบุรี'];
     const branchName = names[branchIndex] || `branch_${branchIndex}`;
 
-    const isLogo = type === 'logo';
-    const fileInput = document.getElementById(isLogo ? `brLogoFile_${branchIndex}` : `brQrFile_${branchIndex}`);
-    const file = fileInput?.files?.[0];
+    const branchMap = {
+        'บางพลี': 'bangplee',
+        'อุดมสุข': 'udomsuk',
+        'ชลบุรี': 'chonburi'
+    };
 
+    const safeBranch = branchMap[branchName] || `branch_${branchIndex}`;
+    const isLogo = type === 'logo';
+
+    const fileInput = document.getElementById(
+        isLogo ? `brLogoFile_${branchIndex}` : `brQrFile_${branchIndex}`
+    );
+    const file = fileInput?.files?.[0];
     if (!file) return;
 
     const ext = (file.name.split('.').pop() || 'png').toLowerCase();
-    const safeBranch = branchName
-    .replace(/\s+/g, '_')
-    .replace(/[^\w\-]/g, ''); // 🔥 ลบภาษาไทยออก
     const folder = isLogo ? 'logos' : 'qrs';
     const filePath = `${folder}/${safeBranch}_${Date.now()}.${ext}`;
 
@@ -12717,6 +12738,10 @@ window.saveClinicFullConfig = async function() {
     if (error) {
         console.error('saveClinicFullConfig error:', error);
         return Swal.fire('Error', error.message || 'บันทึกข้อมูลสาขาไม่สำเร็จ', 'error');
+    }
+
+    if (typeof window.loadClinicConfigFromDB === 'function') {
+        await window.loadClinicConfigFromDB();
     }
 
     Swal.fire({
@@ -12813,16 +12838,11 @@ window.getBranchHeaderInfo = async function(branchName = '') {
 
     const clean = String(branchName || '').replace('สาขา', '').trim();
 
-    const { data, error } = await window.supabaseClient
+    const { data } = await window.supabaseClient
         .from('clinic_branches')
         .select('*')
         .eq('branch_name', clean)
         .maybeSingle();
-
-    if (error) {
-        console.error('getBranchHeaderInfo error:', error);
-        return {};
-    }
 
     return data || {};
 };

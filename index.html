@@ -742,7 +742,7 @@ window.getCustomersFromSupabase = async function() {
         let query = window.supabaseClient
             .from('customers')
             .select('*')
-            .order('created_at', { ascending: false });
+            .order('created_at', { ascending: true });
 
         if (!(typeof window.canViewAllBranches === 'function' && window.canViewAllBranches()) && viewingBranch !== 'ทุกสาขา') {
             const safeBranch = window.normalizeBranch(viewingBranch);
@@ -2197,17 +2197,34 @@ document.addEventListener('click', function(event) {
 window.getCustomersFromSupabase = async function () {
     if (!window.supabaseClient) return [];
 
-    const { data, error } = await window.supabaseClient
-        .from('customers')
-        .select('*')
-        .order('created_at', { ascending: false });
+    const pageSize = 1000;
+    let from = 0;
+    let allRows = [];
+    let hasMore = true;
 
-    if (error) {
-        console.error('load customers error:', error);
-        return [];
+    while (hasMore) {
+        const { data, error } = await window.supabaseClient
+            .from('customers')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .range(from, from + pageSize - 1);
+
+        if (error) {
+            console.error('load customers error:', error);
+            return allRows;
+        }
+
+        const rows = data || [];
+        allRows = allRows.concat(rows);
+
+        if (rows.length < pageSize) {
+            hasMore = false;
+        } else {
+            from += pageSize;
+        }
     }
 
-    return data || [];
+    return allRows;
 };
 
 // --- ฟังก์ชันเมื่อกดปุ่ม + เพิ่มใบเสร็จ จากหน้าหลัก ---
@@ -3627,73 +3644,82 @@ window.renderCustomerList = function (target) {
     window.__customerLastTarget = target;
     target.innerHTML = `
       <div class="animate-in fade-in duration-500 p-4 -mt-6 text-left">
-          <div class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-pink-100 mb-6 flex flex-wrap items-end gap-4">
-            
-            <div class="flex flex-col gap-1">
-              <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">แสดงลำดับ</label>
-              <select id="pageSizeSelect" onchange="window.applyCustomerFilter()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[12px] font-light bg-white outline-none shadow-sm min-w-[120px] text-slate-600 appearance-none cursor-pointer">
-                <option value="10">10 รายการ</option>
-                <option value="25">25 รายการ</option>
-                <option value="50">50 รายการ</option>
-              </select>
-            </div>
+          
+         <div class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-pink-100 mb-6 overflow-x-auto">
+  <div class="flex items-end gap-4 min-w-max whitespace-nowrap">
 
-            <div class="flex flex-col gap-1">
-              <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">เลือกสาขา</label>
-              <select id="branchFilterSelect" onchange="window.applyCustomerFilter()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[12px] font-light bg-white outline-none shadow-sm min-w-[150px] text-slate-600 appearance-none cursor-pointer">
-                <option value="ทั้งหมด">ทุกสาขา</option>
-                <option value="บางพลี">สาขาบางพลี</option>
-                <option value="ชลบุรี">สาขาชลบุรี</option>
-                <option value="อุดมสุข">สาขาอุดมสุข</option>
-              </select>
-            </div>
+    <div class="flex flex-col gap-1 flex-shrink-0">
+      <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">แสดงลำดับ</label>
+      <select id="pageSizeSelect" onchange="window.currentCustomerPage = 1; window.applyCustomerFilter()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[12px] font-light bg-white outline-none shadow-sm min-w-[120px] text-slate-600 appearance-none cursor-pointer">
+        <option value="10">10 รายการ</option>
+        <option value="25">25 รายการ</option>
+        <option value="50">50 รายการ</option>
+      </select>
+    </div>
 
-            <div class="flex flex-col gap-1 flex-1 min-w-[250px]">
-              <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">ค้นหาประวัติ (ชื่อ/HN/เบอร์โทร)</label>
-              <div class="flex gap-2">
-                <div class="relative flex-1">
-                  <input id="customerSearchInput" type="text" placeholder="พิมพ์เพื่อค้นหา..." onkeyup="if(event.key === 'Enter') window.applyCustomerFilter()"
-                    class="w-full border border-pink-100 pl-10 pr-4 py-2.5 rounded-2xl text-[13px] font-light bg-white outline-none focus:ring-1 focus:ring-pink-200 transition-all text-slate-700">
-                  <span class="absolute left-4 top-2.5 text-slate-300">🔍</span>
-                </div>
-                <button onclick="window.applyCustomerFilter()" class="bg-[#D48197] text-white px-6 py-2 rounded-2xl text-[11px] font-bold shadow-md hover:bg-black transition-all shrink-0">ค้นหา</button>
-              </div>
-            </div>
-<div class="flex items-end gap-2">
-  <div class="flex flex-col gap-1">
-    <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">นำเข้าจากระบบเก่า</label>
+    <div class="flex flex-col gap-1 flex-shrink-0">
+      <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">เลือกสาขา</label>
+      <select id="branchFilterSelect" onchange="window.currentCustomerPage = 1; window.applyCustomerFilter()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[12px] font-light bg-white outline-none shadow-sm min-w-[150px] text-slate-600 appearance-none cursor-pointer">
+        <option value="ทั้งหมด">ทุกสาขา</option>
+        <option value="บางพลี">สาขาบางพลี</option>
+        <option value="ชลบุรี">สาขาชลบุรี</option>
+        <option value="อุดมสุข">สาขาอุดมสุข</option>
+      </select>
+    </div>
 
-    <select id="legacyImportBranch"
-      class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[12px] font-light bg-white outline-none shadow-sm min-w-[140px] text-slate-600 appearance-none cursor-pointer">
-      
-      <option value="สาขาบางพลี">สาขาบางพลี</option>
-      <option value="สาขาชลบุรี">สาขาชลบุรี</option>
-      <option value="สาขาอุดมสุข">สาขาอุดมสุข</option>
+    <div class="flex flex-col gap-1 flex-shrink-0">
+      <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">ค้นหาประวัติ (ชื่อ/HN/เบอร์โทร)</label>
+      <div class="flex gap-2">
+        <div class="relative w-[420px] flex-shrink-0">
+          <input
+            id="customerSearchInput"
+            type="text"
+            placeholder="พิมพ์เพื่อค้นหา..."
+            onkeyup="if(event.key === 'Enter'){ window.currentCustomerPage = 1; window.applyCustomerFilter(); }"
+            class="w-full border border-pink-100 pl-10 pr-4 py-2.5 rounded-2xl text-[13px] font-light bg-white outline-none focus:ring-1 focus:ring-pink-200 transition-all text-slate-700"
+          >
+          <span class="absolute left-4 top-2.5 text-slate-300">🔍</span>
+        </div>
+        <button
+          onclick="window.currentCustomerPage = 1; window.applyCustomerFilter()"
+          class="bg-[#D48197] text-white px-6 py-2.5 rounded-2xl text-[11px] font-bold shadow-md hover:bg-black transition-all flex-shrink-0">
+          ค้นหา
+        </button>
 
-    </select>
+        <button onclick="window.openModalForAdd()" class="bg-black text-white px-6 py-2.5 rounded-2xl text-[11px] font-bold shadow-xl hover:bg-[#D48197] transition-all uppercase flex items-center gap-2 flex-shrink-0">
+          <span class="bg-white text-black w-5 h-5 rounded-full flex items-center justify-center text-sm font-bold">+</span>
+          เพิ่มลูกค้า
+        </button>
+      </div>
+    </div>
+
+    <div class="flex flex-col gap-1 flex-shrink-0">
+      <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">นำเข้าจากระบบเก่า</label>
+      <select
+        id="legacyImportBranch"
+        class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[12px] font-light bg-white outline-none shadow-sm min-w-[160px] text-slate-600 appearance-none cursor-pointer">
+        <option value="บางพลี">สาขาบางพลี</option>
+        <option value="ชลบุรี">สาขาชลบุรี</option>
+        <option value="อุดมสุข">สาขาอุดมสุข</option>
+      </select>
+    </div>
+
+    <input
+      type="file"
+      id="legacyCustomerFile"
+      accept=".xlsx,.xls,.csv"
+      class="hidden"
+      onchange="window.handleLegacyCustomerImport(this.files[0])"
+    >
+
+    <button
+      onclick="document.getElementById('legacyCustomerFile').click()"
+      class="bg-[#D48197] text-white px-6 py-2.5 rounded-2xl text-[11px] font-bold shadow-xl hover:bg-black transition-all uppercase flex-shrink-0">
+      นำเข้าลูกค้าเก่า
+    </button>
+
   </div>
 </div>
-
-  <input
-    type="file"
-    id="legacyCustomerFile"
-    accept=".xlsx,.xls,.csv"
-    class="hidden"
-    onchange="window.handleLegacyCustomerImport(this.files[0])"
-  >
-
-  <button
-    onclick="document.getElementById('legacyCustomerFile').click()"
-    class="bg-[#D48197] text-white px-6 py-2.5 rounded-2xl text-[11px] font-bold shadow-xl hover:bg-black transition-all uppercase mb-0.5">
-    นำเข้าลูกค้าเก่า
-  </button>
-
-  <button onclick="window.openModalForAdd()" class="bg-black text-white px-6 py-2.5 rounded-2xl text-[11px] font-bold shadow-xl hover:bg-[#D48197] transition-all uppercase flex items-center gap-2 mb-0.5">
-    <span class="bg-white text-black w-5 h-5 rounded-full flex items-center justify-center text-sm font-bold">+</span> เพิ่มลูกค้า
-  </button>
-</div>
-          </div>
-
           <div class="bg-white rounded-[3rem] shadow-2xl border border-pink-100 overflow-hidden p-8">
             <table class="w-full text-left text-xs border-collapse">
               <thead>
@@ -3711,10 +3737,19 @@ window.renderCustomerList = function (target) {
               </thead>
               <tbody id="customerTableBody"></tbody>
             </table>
-            <div id="customerPagination" class="flex flex-wrap items-center justify-center gap-2 mt-8"></div>
+
+            <div class="mt-8 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div id="customerTotalCount" class="text-[11px] font-bold text-slate-400 uppercase">
+                ลูกค้าทั้งหมด 0 รายการ
+              </div>
+
+              <div id="customerPagination" class="flex items-center justify-center gap-2"></div>
+            </div>
           </div>
       </div>
     `;
+
+    window.currentCustomerPage = window.currentCustomerPage || 1;
     window.applyCustomerFilter();
 };
 
@@ -3723,61 +3758,86 @@ window.renderCustomerTable = function (data) {
     if (!tbody) return;
     tbody.innerHTML = "";
 
-    const rowsPerPage = parseInt(document.getElementById("pageSizeSelect")?.value || 10);
-    const currentPage = window.currentCustomerPage || 1;
+    const rowsPerPage = parseInt(document.getElementById("pageSizeSelect")?.value || "10", 10);
+    const currentPage = parseInt(window.currentCustomerPage || 1, 10);
     const rowStart = (currentPage - 1) * rowsPerPage;
+
+    const formatCustomerDateTime = (value) => {
+        if (!value) return "-";
+
+        const d = new Date(value);
+        if (isNaN(d.getTime())) return String(value);
+
+        const day = d.getDate();
+        const month = d.getMonth() + 1;
+        const yearThai2 = String(d.getFullYear() + 543).slice(-2);
+        const hours = String(d.getHours()).padStart(2, "0");
+        const minutes = String(d.getMinutes()).padStart(2, "0");
+
+        return `${day}/${month}/${yearThai2} : ${hours}:${minutes}`;
+    };
+
+    const formatBranchLabel = (branch) => {
+        const clean = String(branch || "").trim().replace(/^สาขา/, "");
+        if (!clean) return "-";
+        return `สาขา${clean}`;
+    };
 
     data.forEach((c, index) => {
         const safeId = String(c.id || '').replace(/'/g, "\\'");
         const safeHN = String(c.hn || '').replace(/'/g, "\\'");
         const safeName = String(c.fullname || '').replace(/'/g, "\\'");
+        const createdDisplay = formatCustomerDateTime(c.created_at || c.createdAt || c.updated_at);
+        const branchDisplay = formatBranchLabel(c.branch);
 
         tbody.innerHTML += `
         <tr class="border-b hover:bg-pink-50 transition">
           <td class="p-3 text-[10px]">${rowStart + index + 1}</td>
           <td class="p-3 text-center">
-            <img src="${c.photo || c.avatar_url || "https://placehold.co/150"}" class="shadow-sm mx-auto"style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid #D48197;">
+            <img src="${c.photo || c.avatar_url || "https://placehold.co/150"}" class="shadow-sm mx-auto" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid #D48197;">
           </td>
-          <td class="p-3 text-slate-400 font-bold">${c.createdAt || c.created_at || "-"}</td>
+          <td class="p-3 text-slate-400 font-bold">${createdDisplay}</td>
           <td class="p-3 font-bold text-slate-700">${c.hn || "-"}</td>
           <td class="p-3 font-bold">${c.fullname || "-"}</td>
           <td class="p-3 italic text-slate-500">${c.nickname || "-"}</td>
           <td class="p-3 font-mono">${c.phone || "-"}</td>
-          <td class="p-3"><span class="bg-pink-50 text-[#D48197] px-2 py-1 rounded-lg text-[9px] font-black">${c.branch || "-"}</span></td>
-         <td class="p-3 text-center min-w-[160px] relative">
-  <div class="inline-flex items-center bg-[#D48197] text-white rounded-full p-1 shadow-md relative">
+          <td class="p-3">
+            <span class="bg-pink-50 text-[#D48197] px-2 py-1 rounded-lg text-[9px] font-black">${branchDisplay}</span>
+          </td>
+          <td class="p-3 text-center min-w-[160px] relative">
+            <div class="inline-flex items-center bg-[#D48197] text-white rounded-full p-1 shadow-md relative">
 
-    ${window.hasActionPermission('customer_edit') ? `
-    <button onclick="window.openModalForEdit('${safeId}')" class="px-4 py-1 text-[11px] font-bold border-r border-white/30 hover:bg-white/10 rounded-l-full">แก้ไข</button>
-    ` : ``}
+              ${window.hasActionPermission('customer_edit') ? `
+              <button onclick="window.openModalForEdit('${safeId}')" class="px-4 py-1 text-[11px] font-bold border-r border-white/30 hover:bg-white/10 rounded-l-full">แก้ไข</button>
+              ` : ``}
 
-    <button onclick="window.toggleActionMenu(event, '${safeId}')" class="px-2 py-1 text-[11px] hover:bg-white/10 rounded-r-full transition-all">▼</button>
+              <button onclick="window.toggleActionMenu(event, '${safeId}')" class="px-2 py-1 text-[11px] hover:bg-white/10 rounded-r-full transition-all">▼</button>
 
-    <div id="action-menu-${safeId}" class="hidden absolute right-0 top-10 w-52 bg-white border border-pink-100 rounded-2xl shadow-2xl z-[999] overflow-hidden text-left font-bold italic">
-      
-      <button onclick="window.viewCustomerDetailById('${safeId}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-pink-50 border-b flex items-center gap-2">
-        👁️ ดูข้อมูลลูกค้า
-      </button>
+              <div id="action-menu-${safeId}" class="hidden absolute right-0 top-10 w-52 bg-white border border-pink-100 rounded-2xl shadow-2xl z-[999] overflow-hidden text-left font-bold italic">
+                
+                <button onclick="window.viewCustomerDetailById('${safeId}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-pink-50 border-b flex items-center gap-2">
+                  👁️ ดูข้อมูลลูกค้า
+                </button>
 
-      ${window.hasActionPermission('customer_edit') ? `
-      <button onclick="window.printOPD('${safeId}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-pink-50 border-b flex items-center gap-2">
-        📄 พิมพ์ OPD Card
-      </button>
-      ` : ``}
+                ${window.hasActionPermission('customer_edit') ? `
+                <button onclick="window.printOPD('${safeId}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-pink-50 border-b flex items-center gap-2">
+                  📄 พิมพ์ OPD Card
+                </button>
+                ` : ``}
 
-      <button onclick="window.printLatestReceipt('${safeName}', '${safeHN}', '${safeId}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-blue-50 border-b flex items-center gap-2 font-bold">
-        🖨️ พิมพ์ใบเสร็จล่าสุด
-      </button>
+                <button onclick="window.printLatestReceipt('${safeName}', '${safeHN}', '${safeId}')" class="w-full p-4 text-[11px] text-gray-600 hover:bg-blue-50 border-b flex items-center gap-2 font-bold">
+                  🖨️ พิมพ์ใบเสร็จล่าสุด
+                </button>
 
-      ${window.hasActionPermission('customer_delete') ? `
-      <button onclick="window.deleteCustomer('${safeId}')" class="w-full p-4 text-[11px] text-red-500 hover:bg-red-50 flex items-center gap-2 font-bold">
-        🗑️ ลบข้อมูลคนไข้
-      </button>
-      ` : ``}
+                ${window.hasActionPermission('customer_delete') ? `
+                <button onclick="window.deleteCustomer('${safeId}')" class="w-full p-4 text-[11px] text-red-500 hover:bg-red-50 flex items-center gap-2 font-bold">
+                  🗑️ ลบข้อมูลคนไข้
+                </button>
+                ` : ``}
 
-    </div>
-  </div>
-</td>
+              </div>
+            </div>
+          </td>
         </tr>
       `;
     });
@@ -3788,19 +3848,38 @@ window.applyCustomerFilter = async function () {
     const tableBranchSelect = document.getElementById("branchFilterSelect")?.value || "ทั้งหมด";
     const pageSize = Number(document.getElementById("pageSizeSelect")?.value || "10");
 
+    if (!window.currentCustomerPage || window.currentCustomerPage < 1) {
+        window.currentCustomerPage = 1;
+    }
+
     // ✅ ดึงจาก Supabase โดยตรง
     const db = await window.getCustomersFromSupabase();
 
     const filtered = db.filter((c) => {
-        const fullName = String(c.fullname || `${c.first_name || ''} ${c.last_name || ''}`.trim()).toLowerCase();
+        const fullName = String(
+            c.fullname || `${c.first_name || ''} ${c.last_name || ''}`.trim()
+        ).toLowerCase();
+
+        const nickname = String(c.nickname || '').toLowerCase();
         const hn = String(c.hn || '').toLowerCase();
-        const phone = String(c.phone || '');
+        const phone = String(c.phone || '').toLowerCase();
         const branch = String(c.branch || '').trim();
 
+        // ✅ HN แบบย่อ
+        // เช่น พิมพ์ 0001 / 690001 / BP-690001 / HN-BP-690001 ก็หาเจอ
+        const shortHN = hn
+            .replace(/^hn-/i, '')
+            .replace(/^hn/i, '')
+            .trim();
+
         const k =
+            !keyword ||
             fullName.includes(keyword) ||
+            nickname.includes(keyword) ||
+            phone.includes(keyword) ||
             hn.includes(keyword) ||
-            phone.includes(keyword);
+            shortHN.includes(keyword) ||
+            hn.replace(/-/g, '').includes(keyword.replace(/-/g, ''));
 
         const b =
             tableBranchSelect === "ทั้งหมด" ||
@@ -3814,45 +3893,68 @@ window.applyCustomerFilter = async function () {
     window.currentCustomerFilteredData = filtered;
 
     const totalPages = Math.ceil(filtered.length / pageSize) || 1;
-    if ((window.currentCustomerPage || 1) > totalPages) {
-        window.currentCustomerPage = 1;
+
+    if (window.currentCustomerPage > totalPages) {
+        window.currentCustomerPage = totalPages;
     }
 
-    const start = ((window.currentCustomerPage || 1) - 1) * pageSize;
-    window.renderCustomerTable(filtered.slice(start, start + pageSize));
+    const start = (window.currentCustomerPage - 1) * pageSize;
+    const pageData = filtered.slice(start, start + pageSize);
+
+    // ✅ แสดงจำนวนลูกค้าทั้งหมด
+    const totalCountEl = document.getElementById("customerTotalCount");
+    if (totalCountEl) {
+        totalCountEl.innerText = `ลูกค้าทั้งหมด ${filtered.length.toLocaleString()} รายการ`;
+    }
+
+    window.renderCustomerTable(pageData);
     renderCustomerPagination(filtered.length, pageSize);
 };
 
-
-  function renderCustomerPagination(totalItems, pageSize) {
+function renderCustomerPagination(totalItems, pageSize) {
     const container = document.getElementById("customerPagination");
     if (!container) return;
 
-    const totalPages = Math.ceil(totalItems / pageSize);
+    const totalPages = Math.ceil(totalItems / pageSize) || 1;
+    const currentPage = parseInt(window.currentCustomerPage || 1, 10);
 
     if (totalPages <= 1) {
-      container.innerHTML = "";
-      return;
+        container.innerHTML = "";
+        return;
     }
 
-    let html = "";
+    container.innerHTML = `
+        <button
+            onclick="window.changeCustomerPage(${currentPage - 1})"
+            class="px-4 py-2 rounded-xl text-xs font-bold border border-pink-100 bg-white ${
+                currentPage === 1 ? 'opacity-40 pointer-events-none' : 'hover:bg-pink-50'
+            }">
+            ◀ ก่อนหน้า
+        </button>
 
-    html += `<button onclick="changeCustomerPage(${currentCustomerPage - 1})"
-      class="px-3 py-2 rounded-xl text-xs font-bold border border-pink-100 bg-white ${currentCustomerPage === 1 ? 'opacity-40 pointer-events-none' : 'hover:bg-pink-50'}">ก่อนหน้า</button>`;
+        <div class="px-4 py-2 text-[11px] font-bold text-slate-400">
+            หน้า ${currentPage} / ${totalPages}
+        </div>
 
-    for (let i = 1; i <= totalPages; i++) {
-      html += `<button onclick="changeCustomerPage(${i})"
-        class="px-3 py-2 rounded-xl text-xs font-bold border ${i === currentCustomerPage ? 'bg-[#D48197] text-white border-[#D48197]' : 'bg-white text-slate-600 border-pink-100 hover:bg-pink-50'}">${i}</button>`;
-    }
+        <button
+            onclick="window.changeCustomerPage(${currentPage + 1})"
+            class="px-4 py-2 rounded-xl text-xs font-bold border border-pink-100 bg-white ${
+                currentPage === totalPages ? 'opacity-40 pointer-events-none' : 'hover:bg-pink-50'
+            }">
+            ถัดไป ▶
+        </button>
+    `;
+}
 
-    html += `<button onclick="changeCustomerPage(${currentCustomerPage + 1})"
-      class="px-3 py-2 rounded-xl text-xs font-bold border border-pink-100 bg-white ${currentCustomerPage === totalPages ? 'opacity-40 pointer-events-none' : 'hover:bg-pink-50'}">ถัดไป</button>`;
+window.changeCustomerPage = async function (page) {
+    const pageSize = Number(document.getElementById("pageSizeSelect")?.value || "10");
+    const totalItems = Array.isArray(window.currentCustomerFilteredData) ? window.currentCustomerFilteredData.length : 0;
+    const totalPages = Math.ceil(totalItems / pageSize) || 1;
 
-    container.innerHTML = html;
-  }
+    if (page < 1) page = 1;
+    if (page > totalPages) page = totalPages;
 
-  window.changeCustomerPage = async function (page) {
-    currentCustomerPage = page;
+    window.currentCustomerPage = page;
     await window.applyCustomerFilter();
 };
 
@@ -3865,8 +3967,9 @@ window.applyCustomerFilter = async function () {
             window.openModalForAdd();
             return;
         }
+
         if (e.target.closest("#btnCustomerSearch")) {
-            currentCustomerPage = 1;
+            window.currentCustomerPage = 1;
             await window.applyCustomerFilter();
             return;
         }
@@ -3874,14 +3977,15 @@ window.applyCustomerFilter = async function () {
 
     target.addEventListener("keydown", async (e) => {
         if (e.target.matches("#customerSearchInput") && e.key === "Enter") {
-            currentCustomerPage = 1;
+            e.preventDefault();
+            window.currentCustomerPage = 1;
             await window.applyCustomerFilter();
         }
     });
 
     target.addEventListener("change", async (e) => {
         if (e.target.matches("#pageSizeSelect, #branchFilterSelect")) {
-            currentCustomerPage = 1;
+            window.currentCustomerPage = 1;
             await window.applyCustomerFilter();
         }
     });
@@ -3892,9 +3996,9 @@ window.applyCustomerFilter = async function () {
 window.normalizeImportBranch = function(branch = '') {
     const raw = String(branch || '').trim().replace('สาขา', '').trim();
 
-    if (raw.includes('บางพลี')) return 'บางพลี';
-    if (raw.includes('ชลบุรี')) return 'ชลบุรี';
-    if (raw.includes('อุดมสุข')) return 'อุดมสุข';
+    if (raw.includes('บางพลี')) return 'สาขาบางพลี';
+    if (raw.includes('ชลบุรี')) return 'สาขาชลบุรี';
+    if (raw.includes('อุดมสุข')) return 'สาขาอุดมสุข';
 
     return raw;
 };
@@ -4009,11 +4113,16 @@ window.getNextCustomerHNRunning = async function(branch) {
         const hn = String(item.hn || '').trim().toUpperCase();
         if (!hn.startsWith(prefix)) return;
 
-        const match = hn.match(/(\d+)$/);
-        if (!match) return;
+        // ✅ ตัด prefix ออกก่อน เช่น HN-BP-69 เหลือ 0001
+        const runningPart = hn.slice(prefix.length);
 
-        const running = parseInt(match[1], 10);
-        if (running > maxNo) maxNo = running;
+        // ✅ ต้องเป็นตัวเลขล้วนเท่านั้น
+        if (!/^\d+$/.test(runningPart)) return;
+
+        const running = parseInt(runningPart, 10);
+        if (!isNaN(running) && running > maxNo) {
+            maxNo = running;
+        }
     });
 
     return maxNo + 1;
@@ -4072,6 +4181,33 @@ window.handleLegacyCustomerImport = async function(file) {
     }
 };
 
+window.buildImportAddress = function(row) {
+    const addr1 = window.cleanImportText(window.pickImportField(row, [
+        'address', 'ที่อยู่', 'บ้านเลขที่', 'เลขที่'
+    ]));
+
+    const subdistrict = window.cleanImportText(window.pickImportField(row, [
+        'ตำบล', 'แขวง', 'ตำบล/แขวง'
+    ]));
+
+    const district = window.cleanImportText(window.pickImportField(row, [
+        'อำเภอ', 'เขต', 'อำเภอ/เขต'
+    ]));
+
+    const province = window.cleanImportText(window.pickImportField(row, [
+        'จังหวัด'
+    ]));
+
+    const zipcode = window.cleanImportText(window.pickImportField(row, [
+        'รหัสไปรษณีย์', 'ไปรษณีย์', 'zipcode', 'postal_code'
+    ]));
+
+    return [addr1, subdistrict, district, province, zipcode]
+        .filter(v => String(v || '').trim() !== '')
+        .join(' ')
+        .trim();
+};
+
 window.importLegacyCustomersToSupabase = async function(rows, selectedBranch) {
     const branch = window.normalizeImportBranch(selectedBranch);
 
@@ -4100,108 +4236,106 @@ window.importLegacyCustomersToSupabase = async function(rows, selectedBranch) {
     const skipped = [];
 
     rows.forEach((row, index) => {
-    const oldHNRaw = window.pickImportField(row, [
-        'hn', 'HN', 'Hn', 'old_hn', 'Old HN', 'รหัสลูกค้า', 'รหัสผู้ป่วย', 'เลขที่ HN'
-    ]);
+        const oldHNRaw = window.pickImportField(row, [
+            'hn', 'HN', 'Hn', 'old_hn', 'Old HN', 'รหัสลูกค้า', 'รหัสผู้ป่วย', 'เลขที่ HN'
+        ]);
 
-    const oldHN = String(oldHNRaw || '').trim().toUpperCase();
+        const oldHN = String(oldHNRaw || '').trim().toUpperCase();
 
-    const fullnameRaw = window.pickImportField(row, [
-        'fullname', 'full_name', 'ชื่อ-นามสกุล', 'ชื่อ นามสกุล', 'ชื่อสกุล'
-    ]);
+        const fullnameRaw = window.pickImportField(row, [
+            'fullname', 'full_name', 'ชื่อ-นามสกุล', 'ชื่อ นามสกุล', 'ชื่อสกุล'
+        ]);
 
-    const firstNameRaw = window.pickImportField(row, [
-        'first_name', 'ชื่อจริง', 'ชื่อ'
-    ]);
+        const firstNameRaw = window.pickImportField(row, [
+            'first_name', 'ชื่อจริง', 'ชื่อ'
+        ]);
 
-    const lastNameRaw = window.pickImportField(row, [
-        'last_name', 'นามสกุล'
-    ]);
+        const lastNameRaw = window.pickImportField(row, [
+            'last_name', 'นามสกุล'
+        ]);
 
-    const nickname = window.cleanImportText(window.pickImportField(row, [
-        'nickname', 'nick_name', 'ชื่อเล่น'
-    ]));
+        const nickname = window.cleanImportText(window.pickImportField(row, [
+            'nickname', 'nick_name', 'ชื่อเล่น'
+        ]));
 
-    const phone = window.cleanImportPhone(window.pickImportField(row, [
-        'phone', 'เบอร์โทร', 'โทรศัพท์', 'โทร', 'mobile', 'mobile_phone'
-    ]));
+        const phone = window.cleanImportPhone(window.pickImportField(row, [
+            'phone', 'เบอร์โทร', 'โทรศัพท์', 'โทร', 'mobile', 'mobile_phone'
+        ]));
 
-    const email = window.cleanImportText(window.pickImportField(row, [
-        'email', 'อีเมล'
-    ]));
+        const email = window.cleanImportText(window.pickImportField(row, [
+            'email', 'อีเมล'
+        ]));
 
-    const lineId = window.cleanImportText(window.pickImportField(row, [
-        'line_id', 'line', 'ไลน์', 'lineid'
-    ]));
+        const lineId = window.cleanImportText(window.pickImportField(row, [
+            'line_id', 'line', 'ไลน์', 'lineid'
+        ]));
 
-    const citizenId = window.cleanImportCitizenId(window.pickImportField(row, [
-        'citizen_id', 'เลขบัตรประชาชน', 'เลขประชาชน', 'id_card'
-    ]));
+        const citizenId = window.cleanImportCitizenId(window.pickImportField(row, [
+            'citizen_id', 'เลขบัตรประชาชน', 'เลขประชาชน', 'id_card'
+        ]));
 
-    const birthDate = window.parseImportBirthDate(window.pickImportField(row, [
-        'birth_date', 'วันเกิด', 'dob'
-    ]));
+        const birthDate = window.parseImportBirthDate(window.pickImportField(row, [
+            'birth_date', 'วันเกิด', 'dob'
+        ]));
 
-    const address = window.cleanImportText(window.pickImportField(row, [
-        'address', 'ที่อยู่'
-    ]));
+        const address = window.buildImportAddress(row);
 
-    const allergy = window.cleanImportText(window.pickImportField(row, [
-        'allergy', 'drug_allergy', 'แพ้ยา'
-    ]));
+        const allergy = window.cleanImportText(window.pickImportField(row, [
+            'allergy', 'drug_allergy', 'แพ้ยา'
+        ]));
 
-    const chronic = window.cleanImportText(window.pickImportField(row, [
-        'chronic', 'โรคประจำตัว', 'โรคประจําตัว'
-    ]));
+        const chronic = window.cleanImportText(window.pickImportField(row, [
+            'chronic', 'โรคประจำตัว', 'โรคประจําตัว'
+        ]));
 
-    const status = window.cleanImportText(window.pickImportField(row, [
-        'status', 'สถานะ'
-    ])) || 'active';
+        const status = window.cleanImportText(window.pickImportField(row, [
+            'status', 'สถานะ'
+        ])) || 'active';
 
-    const nameParts = window.extractImportNameParts(fullnameRaw);
+        const nameParts = window.extractImportNameParts(fullnameRaw);
 
-    const first_name = window.cleanImportText(firstNameRaw) || nameParts.first_name;
-    const last_name = window.cleanImportText(lastNameRaw) || nameParts.last_name;
-    const fullname = window.cleanImportText(fullnameRaw) || [first_name, last_name].filter(Boolean).join(' ').trim();
+        const first_name = window.cleanImportText(firstNameRaw) || nameParts.first_name;
+        const last_name = window.cleanImportText(lastNameRaw) || nameParts.last_name;
+        const fullname = window.cleanImportText(fullnameRaw) || [first_name, last_name].filter(Boolean).join(' ').trim();
 
-    if (!oldHN && !fullname && !phone) {
-        skipped.push(`แถว ${index + 2}: ไม่พบ HN/ชื่อ/เบอร์`);
-        return;
-    }
+        if (!oldHN && !fullname && !phone) {
+            skipped.push(`แถว ${index + 2}: ไม่พบ HN/ชื่อ/เบอร์`);
+            return;
+        }
 
-    if (!oldHN) {
-        skipped.push(`แถว ${index + 2}: ไม่มี old_hn`);
-        return;
-    }
+        if (!oldHN) {
+            skipped.push(`แถว ${index + 2}: ไม่มี old_hn`);
+            return;
+        }
 
-    const mapKey = `${oldHN}|${branch}`;
-    let newHN = oldHNMap[mapKey]?.hn || '';
+        const mapKey = `${oldHN}|${branch}`;
+        let newHN = oldHNMap[mapKey]?.hn || '';
 
-    if (!newHN) {
-        newHN = window.buildNewCustomerHN(branch, nextRunningNo);
-        nextRunningNo += 1;
-    }
+        if (!newHN) {
+            newHN = window.buildNewCustomerHN(branch, nextRunningNo);
+            nextRunningNo += 1;
+        }
 
-    payload.push({
-        first_name: first_name || null,
-        last_name: last_name || null,
-        nickname: nickname || null,
-        phone: phone || null,
-        email: email || null,
-        line_id: lineId || null,
-        citizen_id: citizenId || null,
-        birth_date: birthDate || null,
-        address: address || null,
-        allergy: allergy || null,
-        chronic: chronic || null,
-        branch: branch,
-        status: status || null,
-        fullname: fullname || null,
-        hn: newHN,
-        old_hn: oldHN,
-        updated_at: new Date().toISOString()
+        payload.push({
+            first_name: first_name || null,
+            last_name: last_name || null,
+            nickname: nickname || null,
+            phone: phone || null,
+            email: email || null,
+            line_id: lineId || null,
+            citizen_id: citizenId || null,
+            birth_date: birthDate || null,
+            address: address || null,
+            allergy: allergy || null,
+            chronic: chronic || null,
+            branch: branch,
+            status: status || null,
+            fullname: fullname || null,
+            hn: newHN,
+            old_hn: oldHN,
+            updated_at: new Date().toISOString()
+        });
     });
-});
 
     if (!payload.length) {
         Swal.close();

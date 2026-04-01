@@ -2650,6 +2650,12 @@ window.printOPD = async function(customerId) {
                 </div>`;
         }
         printableArea.innerHTML = layoutHtml;
+setTimeout(() => {
+    if (typeof window.loadClinicConfigFromDB === 'function') {
+        window.loadClinicConfigFromDB();
+    }
+}, 100);
+
     };
 
     target.innerHTML = `
@@ -10267,17 +10273,17 @@ window.openLuxuryPayroll = async function(staffId, period) {
                    <div class="space-y-3">
     <button onclick="window.saveAndPrintPayrollById('${staffId}', '${safePeriod}', 'save')" 
         class="w-full bg-[#D48197] text-white py-4 rounded-[1.5rem] text-[11px] font-black shadow-lg hover:bg-black uppercase italic">
-        💾 บันทึกข้อมูล
+        บันทึกข้อมูล
     </button>
 
     <button onclick="window.saveAndPrintPayrollById('${staffId}', '${safePeriod}', 'print')" 
         class="w-full bg-white border-2 border-pink-200 text-[#D48197] py-3.5 rounded-[1.5rem] text-[10px] font-black hover:bg-pink-50 uppercase italic">
-        🖨️ พิมพ์สลิป
+        พิมพ์สลิป
     </button>
 
    <button type="button" onclick="window.sendPayrollEmailPrompt('${staffId}', '${safePeriod}')" 
     class="w-full bg-white border-2 border-pink-200 text-[#D48197] py-3.5 rounded-[1.5rem] text-[10px] font-black hover:bg-pink-50 uppercase italic">
-    📧 ส่งอีเมล
+    ส่งอีเมล
 </button>
 
     <button onclick="document.getElementById('payrollModal')?.remove()" 
@@ -10730,27 +10736,28 @@ window.getBranchHeaderInfo = function(branchName = '') {
         'branchProfileDB',
         'clinicBranchesDB',
         'branchSettingsDB',
-        'clinicProfileDB'
+        'clinicProfileDB',
+        'ace_branch_settings',
+        'ace_clinic_settings'
     ];
 
     for (const key of tryKeys) {
         try {
             const raw = JSON.parse(localStorage.getItem(key)) || [];
-            if (Array.isArray(raw)) {
-                const found = raw.find(item =>
-                    String(item.branch || item.name || item.branchName || '')
-                        .replace('สาขา', '')
-                        .trim() === cleanBranch
-                );
-                if (found) return found;
-            } else if (raw && typeof raw === 'object') {
-                const arr = Object.values(raw);
-                const found = arr.find(item =>
-                    String(item.branch || item.name || item.branchName || '')
-                        .replace('สาขา', '')
-                        .trim() === cleanBranch
-                );
-                if (found) return found;
+            const arr = Array.isArray(raw) ? raw : Object.values(raw || {});
+
+            const found = arr.find(item =>
+                String(
+                    item.branch ||
+                    item.branch_name ||
+                    item.name ||
+                    item.branchName ||
+                    ''
+                ).replace('สาขา', '').trim() === cleanBranch
+            );
+
+            if (found) {
+                return found;
             }
         } catch (e) {
             console.warn('read branch header fail:', key, e);
@@ -10759,6 +10766,7 @@ window.getBranchHeaderInfo = function(branchName = '') {
 
     return {
         branch: cleanBranch || '-',
+        clinicName: 'ACE CLINIC',
         address: '',
         phone: '',
         email: '',
@@ -10774,7 +10782,10 @@ window.getBranchHeaderInfo = function(branchName = '') {
 
 window.getBranchHeaderField = function(branchInfo, keys = [], fallback = '') {
     for (const key of keys) {
-        if (branchInfo && branchInfo[key]) return branchInfo[key];
+        const value = branchInfo?.[key];
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+            return value;
+        }
     }
     return fallback;
 };
@@ -11192,9 +11203,9 @@ if (!previewWindow) {
 
         <body>
             <div class="toolbar">
-                <button class="btn btn-print" onclick="window.print()">🖨️ พิมพ์</button>
-                <button class="btn btn-pdf" onclick="window.saveSlipPDF()">📄 บันทึก PDF</button>
-                <button class="btn btn-img" onclick="window.saveSlipImage()">🖼️ บันทึกรูป</button>
+                <button class="btn btn-print" onclick="window.print()">พิมพ์</button>
+                <button class="btn btn-pdf" onclick="window.saveSlipPDF()">บันทึก PDF</button>
+                <button class="btn btn-img" onclick="window.saveSlipImage()">บันทึกรูป</button>
                 <button class="btn btn-close" onclick="window.close()">ปิด</button>
             </div>
 
@@ -11243,7 +11254,7 @@ if (!previewWindow) {
                             <div class="box">
                                 <div class="row"><span class="label">ขาดงาน</span><span class="value">${absDays} วัน</span></div>
                                 <div class="row"><span class="label">มาสาย</span><span class="value">${lateMins} นาที</span></div>
-                                <div class="row"><span class="label">หักชม.</span><span class="value">${absHours}</span></div>
+                                <div class="row"><span class="label">หักชม.</span><span class="value">${absHours} ซม</span></div>
                                 <div class="row"><span class="label">ลาป่วย</span><span class="value">${sickDays} วัน</span></div>
                                 <div class="row"><span class="label">ลาพักร้อน</span><span class="value">${vacationDays} วัน</span></div>
                             </div>
@@ -12077,36 +12088,96 @@ window.switchSettingsTab = async function(tab, btn) {
     ]};
     const savedPerms = JSON.parse(localStorage.getItem('ace_permissions')) || {};
 
-    // --- 1. ข้อมูลสาขา ---
-    if (tab === 'clinic') {
-        area.innerHTML = `
-            <div class="bg-white p-10 rounded-[3.5rem] shadow-xl border border-pink-50 animate-in slide-in-from-right">
-                <h3 class="text-2xl font-black text-slate-800 italic uppercase mb-8 text-left">🏢 จัดการข้อมูล 3 สาขา</h3>
-                <div class="space-y-6">
-                    ${savedConfig.branches.map((b, i) => `
-                        <div class="p-8 bg-slate-50 rounded-[3rem] border border-white shadow-sm space-y-4 text-left">
-                            <div class="flex items-center gap-3 border-b border-pink-100 pb-3">
-                                <span class="bg-pink-500 text-white w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black">0${i+1}</span>
-                                <span class="text-sm font-black text-slate-700 uppercase italic">สาขา ${b.n}</span>
-                            </div>
-                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div class="md:col-span-2"><label class="text-[9px] font-bold text-slate-400 uppercase ml-2">ที่อยู่สาขา</label>
-                                <input type="text" id="brAddr_${i}" value="${b.addr || ''}" class="w-full p-3 rounded-2xl border-none shadow-inner text-xs font-bold"></div>
-                                <div><label class="text-[9px] font-bold text-slate-400 uppercase ml-2">เลขที่ใบอนุญาต</label>
-                                <input type="text" id="brLic_${i}" value="${b.license || ''}" class="w-full p-3 rounded-2xl border-none shadow-inner text-xs font-bold text-pink-500"></div>
-                                <div><label class="text-[9px] font-bold text-slate-400 uppercase ml-2">เบอร์โทร</label>
-                                <input type="text" id="brTel_${i}" value="${b.tel || ''}" class="w-full p-3 rounded-2xl border-none shadow-inner text-xs font-bold"></div>
-                                <div><label class="text-[9px] font-bold text-slate-400 uppercase ml-2">อีเมล</label>
-                                <input type="text" id="brEmail_${i}" value="${b.email || ''}" class="w-full p-3 rounded-2xl border-none shadow-inner text-xs font-bold"></div>
-                                <div><label class="text-[9px] font-bold text-slate-400 uppercase ml-2">Line ID</label>
-                                <input type="text" id="brLine_${i}" value="${b.line || ''}" class="w-full p-3 rounded-2xl border-none shadow-inner text-xs font-bold"></div>
-                            </div>
-                        </div>`).join('')}
-                </div>
-                <div class="mt-8 flex justify-end"><button onclick="window.saveClinicFullConfig()" class="bg-black text-white px-12 py-4 rounded-full font-black text-xs uppercase italic shadow-xl">💾 บันทึกข้อมูลสาขา</button></div>
-            </div>`;
-    }
+   // --- 1. ข้อมูลสาขา ---
+if (tab === 'clinic') {
+    area.innerHTML = `
+        <div class="bg-white p-10 rounded-[3.5rem] shadow-xl border border-pink-50 animate-in slide-in-from-right">
+            <h3 class="text-2xl font-black text-slate-800 italic uppercase mb-8 text-left">🏢 จัดการข้อมูล 3 สาขา</h3>
+            <div class="space-y-6">
+                ${savedConfig.branches.map((b, i) => `
+                    <div class="p-8 bg-slate-50 rounded-[3rem] border border-white shadow-sm space-y-4 text-left">
+                        <div class="flex items-center gap-3 border-b border-pink-100 pb-3">
+                            <span class="bg-pink-500 text-white w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black">0${i+1}</span>
+                            <span class="text-sm font-black text-slate-700 uppercase italic">สาขา ${b.n}</span>
+                        </div>
 
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="md:col-span-2">
+                                <label class="text-[9px] font-bold text-slate-400 uppercase ml-2">ที่อยู่สาขา</label>
+                                <input type="text" id="brAddr_${i}" value="${b.addr || ''}" class="w-full p-3 rounded-2xl border-none shadow-inner text-xs font-bold">
+                            </div>
+
+                            <div>
+                                <label class="text-[9px] font-bold text-slate-400 uppercase ml-2">เลขที่ใบอนุญาต</label>
+                                <input type="text" id="brLic_${i}" value="${b.license || ''}" class="w-full p-3 rounded-2xl border-none shadow-inner text-xs font-bold text-pink-500">
+                            </div>
+
+                            <div>
+                                <label class="text-[9px] font-bold text-slate-400 uppercase ml-2">เบอร์โทร</label>
+                                <input type="text" id="brTel_${i}" value="${b.tel || ''}" class="w-full p-3 rounded-2xl border-none shadow-inner text-xs font-bold">
+                            </div>
+
+                            <div>
+                                <label class="text-[9px] font-bold text-slate-400 uppercase ml-2">อีเมล</label>
+                                <input type="text" id="brEmail_${i}" value="${b.email || ''}" class="w-full p-3 rounded-2xl border-none shadow-inner text-xs font-bold">
+                            </div>
+
+                            <div>
+                                <label class="text-[9px] font-bold text-slate-400 uppercase ml-2">Line ID</label>
+                                <input type="text" id="brLine_${i}" value="${b.line || ''}" class="w-full p-3 rounded-2xl border-none shadow-inner text-xs font-bold">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                            <div class="bg-white p-4 rounded-2xl border border-pink-100">
+                                <label class="text-[9px] font-bold text-slate-400 uppercase block mb-2">โลโก้คลินิก</label>
+                                <input
+                                    type="file"
+                                    id="brLogoFile_${i}"
+                                    accept="image/*"
+                                    onchange="window.uploadClinicAsset(${i}, 'logo')"
+                                    class="w-full text-xs font-bold"
+                                >
+                                <input type="hidden" id="brLogo_${i}" value="${b.logo_url || ''}">
+                                <div class="mt-3">
+                                    <img
+                                        id="brLogoPreview_${i}"
+                                        src="${b.logo_url || ''}"
+                                        class="w-20 h-20 rounded-xl border border-pink-100 object-contain bg-slate-50 ${b.logo_url ? '' : 'hidden'}"
+                                    >
+                                </div>
+                            </div>
+
+                            <div class="bg-white p-4 rounded-2xl border border-pink-100">
+                                <label class="text-[9px] font-bold text-slate-400 uppercase block mb-2">QR คลินิก</label>
+                                <input
+                                    type="file"
+                                    id="brQrFile_${i}"
+                                    accept="image/*"
+                                    onchange="window.uploadClinicAsset(${i}, 'qr')"
+                                    class="w-full text-xs font-bold"
+                                >
+                                <input type="hidden" id="brQr_${i}" value="${b.qr_url || ''}">
+                                <div class="mt-3">
+                                    <img
+                                        id="brQrPreview_${i}"
+                                        src="${b.qr_url || ''}"
+                                        class="w-20 h-20 rounded-xl border border-pink-100 object-contain bg-slate-50 ${b.qr_url ? '' : 'hidden'}"
+                                    >
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+
+            <div class="mt-8 flex justify-end">
+                <button onclick="window.saveClinicFullConfig()" class="bg-black text-white px-12 py-4 rounded-full font-black text-xs uppercase italic shadow-xl">
+                    💾 บันทึกข้อมูลสาขา
+                </button>
+            </div>
+        </div>`;
+}
  // --- 2. จัดการผู้ใช้งาน (Supabase + Online Realtime) ---
 else if (tab === 'users') {
     window.currentSettingsTab = 'users';
@@ -12543,21 +12614,174 @@ window.calcShare = function(br) {
     }
 };
 
-window.saveClinicFullConfig = function() {
-    const branchData = [];
-    const names = ['บางพลี', 'อุดมสุข', 'ชลบุรี'];
-    for(let i=0; i<3; i++) {
-        branchData.push({
-            n: names[i],
-            addr: document.getElementById(`brAddr_${i}`).value,
-            license: document.getElementById(`brLic_${i}`).value,
-            tel: document.getElementById(`brTel_${i}`).value,
-            email: document.getElementById(`brEmail_${i}`).value,
-            line: document.getElementById(`brLine_${i}`).value
-        });
+window.uploadClinicAsset = async function(branchIndex, type) {
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
     }
-    localStorage.setItem('clinicConfig', JSON.stringify({ branches: branchData }));
-    Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ!', timer: 2000, showConfirmButton: false });
+
+    const names = ['บางพลี', 'อุดมสุข', 'ชลบุรี'];
+    const branchName = names[branchIndex] || `branch_${branchIndex}`;
+
+    const isLogo = type === 'logo';
+    const fileInput = document.getElementById(isLogo ? `brLogoFile_${branchIndex}` : `brQrFile_${branchIndex}`);
+    const file = fileInput?.files?.[0];
+
+    if (!file) return;
+
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+    const safeBranch = branchName
+    .replace(/\s+/g, '_')
+    .replace(/[^\w\-]/g, ''); // 🔥 ลบภาษาไทยออก
+    const folder = isLogo ? 'logos' : 'qrs';
+    const filePath = `${folder}/${safeBranch}_${Date.now()}.${ext}`;
+
+    Swal.fire({
+        title: 'กำลังอัปโหลด',
+        text: isLogo ? 'กำลังอัปโหลดโลโก้...' : 'กำลังอัปโหลด QR...',
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    const { error: uploadError } = await window.supabaseClient
+        .storage
+        .from('clinic-assets')
+        .upload(filePath, file, {
+            cacheControl: '3600',
+            upsert: true
+        });
+
+    if (uploadError) {
+        Swal.close();
+        console.error('uploadClinicAsset error:', uploadError);
+        return Swal.fire('Upload Error', uploadError.message || 'อัปโหลดไฟล์ไม่สำเร็จ', 'error');
+    }
+
+    const { data: publicData } = window.supabaseClient
+        .storage
+        .from('clinic-assets')
+        .getPublicUrl(filePath);
+
+    const publicUrl = publicData?.publicUrl || '';
+
+    if (isLogo) {
+        const hidden = document.getElementById(`brLogo_${branchIndex}`);
+        const preview = document.getElementById(`brLogoPreview_${branchIndex}`);
+        if (hidden) hidden.value = publicUrl;
+        if (preview) {
+            preview.src = publicUrl;
+            preview.classList.remove('hidden');
+        }
+    } else {
+        const hidden = document.getElementById(`brQr_${branchIndex}`);
+        const preview = document.getElementById(`brQrPreview_${branchIndex}`);
+        if (hidden) hidden.value = publicUrl;
+        if (preview) {
+            preview.src = publicUrl;
+            preview.classList.remove('hidden');
+        }
+    }
+
+    Swal.close();
+    Swal.fire({
+        icon: 'success',
+        title: 'อัปโหลดสำเร็จ',
+        timer: 1200,
+        showConfirmButton: false
+    });
+};
+
+window.saveClinicFullConfig = async function() {
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบ Supabase', 'error');
+    }
+
+    const names = ['บางพลี', 'อุดมสุข', 'ชลบุรี'];
+
+    const payload = names.map((name, i) => ({
+        branch_name: name,
+        address: document.getElementById(`brAddr_${i}`)?.value || '',
+        license_no: document.getElementById(`brLic_${i}`)?.value || '',
+        phone: document.getElementById(`brTel_${i}`)?.value || '',
+        email: document.getElementById(`brEmail_${i}`)?.value || '',
+        line_id: document.getElementById(`brLine_${i}`)?.value || '',
+        logo_url: document.getElementById(`brLogo_${i}`)?.value || '',
+        qr_url: document.getElementById(`brQr_${i}`)?.value || '',
+        updated_at: new Date().toISOString()
+    }));
+
+    const { error } = await window.supabaseClient
+        .from('clinic_branches')
+        .upsert(payload, { onConflict: 'branch_name' });
+
+    if (error) {
+        console.error('saveClinicFullConfig error:', error);
+        return Swal.fire('Error', error.message || 'บันทึกข้อมูลสาขาไม่สำเร็จ', 'error');
+    }
+
+    Swal.fire({
+        icon: 'success',
+        title: 'บันทึกสำเร็จ',
+        text: 'ข้อมูลสาขาถูกบันทึกแล้ว',
+        timer: 1500,
+        showConfirmButton: false
+    });
+};
+
+window.loadClinicConfigFromDB = async function() {
+    if (!window.supabaseClient) return;
+
+    const { data, error } = await window.supabaseClient
+        .from('clinic_branches')
+        .select('*');
+
+    if (error) {
+        console.error('loadClinicConfigFromDB error:', error);
+        return;
+    }
+
+    const map = {};
+    (data || []).forEach(row => {
+        const key = String(row.branch_name || '').replace('สาขา', '').trim();
+        map[key] = row;
+    });
+
+    const names = ['บางพลี', 'อุดมสุข', 'ชลบุรี'];
+
+    names.forEach((name, i) => {
+        const row = map[name] || {};
+
+        if (document.getElementById(`brAddr_${i}`)) document.getElementById(`brAddr_${i}`).value = row.address || '';
+        if (document.getElementById(`brLic_${i}`)) document.getElementById(`brLic_${i}`).value = row.license_no || '';
+        if (document.getElementById(`brTel_${i}`)) document.getElementById(`brTel_${i}`).value = row.phone || '';
+        if (document.getElementById(`brEmail_${i}`)) document.getElementById(`brEmail_${i}`).value = row.email || '';
+        if (document.getElementById(`brLine_${i}`)) document.getElementById(`brLine_${i}`).value = row.line_id || '';
+
+        if (document.getElementById(`brLogo_${i}`)) document.getElementById(`brLogo_${i}`).value = row.logo_url || '';
+        if (document.getElementById(`brQr_${i}`)) document.getElementById(`brQr_${i}`).value = row.qr_url || '';
+
+        const logoPreview = document.getElementById(`brLogoPreview_${i}`);
+        if (logoPreview) {
+            if (row.logo_url) {
+                logoPreview.src = row.logo_url;
+                logoPreview.classList.remove('hidden');
+            } else {
+                logoPreview.src = '';
+                logoPreview.classList.add('hidden');
+            }
+        }
+
+        const qrPreview = document.getElementById(`brQrPreview_${i}`);
+        if (qrPreview) {
+            if (row.qr_url) {
+                qrPreview.src = row.qr_url;
+                qrPreview.classList.remove('hidden');
+            } else {
+                qrPreview.src = '';
+                qrPreview.classList.add('hidden');
+            }
+        }
+    });
 };
 
 window.toggleUserStatus = function(idx) {
@@ -12565,7 +12789,9 @@ window.toggleUserStatus = function(idx) {
     db[idx].isLocked = !db[idx].isLocked;
     localStorage.setItem('staffDB', JSON.stringify(db));
     window.switchSettingsTab('users', document.querySelector('.settings-nav-btn.active'));
+
 };
+
 
 window.deleteStaffUser = function(idx) {
     let db = JSON.parse(localStorage.getItem('staffDB')) || [];
@@ -12579,6 +12805,26 @@ window.deleteStaffUser = function(idx) {
             window.switchSettingsTab('users', document.querySelector('.settings-nav-btn.active'));
         }
     });
+};
+
+
+window.getBranchHeaderInfo = async function(branchName = '') {
+    if (!window.supabaseClient) return {};
+
+    const clean = String(branchName || '').replace('สาขา', '').trim();
+
+    const { data, error } = await window.supabaseClient
+        .from('clinic_branches')
+        .select('*')
+        .eq('branch_name', clean)
+        .maybeSingle();
+
+    if (error) {
+        console.error('getBranchHeaderInfo error:', error);
+        return {};
+    }
+
+    return data || {};
 };
 
 window.saveRolePermissions = async function() {

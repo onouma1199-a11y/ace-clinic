@@ -940,6 +940,33 @@ window.startPayrollRealtime = function() {
         });
 };
 
+window.startClinicBranchRealtime = function() {
+    if (!window.supabaseClient) return;
+
+    if (window.clinicBranchRealtimeChannel) {
+        window.supabaseClient.removeChannel(window.clinicBranchRealtimeChannel);
+    }
+
+    window.clinicBranchRealtimeChannel = window.supabaseClient
+        .channel('clinic-branches-live')
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'clinic_branches'
+            },
+            async function() {
+                console.log('clinic_branches changed → reload UI');
+
+                if (window.currentSettingsTab === 'clinic' && typeof window.loadClinicConfigFromDB === 'function') {
+                    await window.loadClinicConfigFromDB();
+                }
+            }
+        )
+        .subscribe();
+};
+
 /* -------------------- DATA HELPERS (ID BASED) -------------------- */
 // ✅ เปลี่ยน Logic จากการหาด้วย Index มาเป็นการหาด้วย ID โดยตรง
 window.getCustomerByID = async function(id) {
@@ -1258,34 +1285,37 @@ window.executeLogin = function(user, loginUserStr, loginPassStr) {
         localStorage.setItem('ace_saved_accounts', JSON.stringify(savedList));
     }
 
-    window.currentUser = user;
-    localStorage.setItem('currentUser', JSON.stringify(user));
+window.currentUser = user;
+localStorage.setItem('currentUser', JSON.stringify(user));
 
-    document.getElementById('loginPage')?.classList.add('hidden');
-    document.getElementById('mainDashboard')?.classList.remove('hidden');
+document.getElementById('loginPage')?.classList.add('hidden');
+document.getElementById('mainDashboard')?.classList.remove('hidden');
 
-    if (typeof window.startCustomerRealtime === 'function') {
-        window.startCustomerRealtime();
-    }
-    if (typeof window.startPermissionRealtime === 'function') {
-        window.startPermissionRealtime();
-    }
-    if (typeof window.startStaffRealtime === 'function') {
-        window.startStaffRealtime();
-    }
-    if (typeof window.startPayrollRealtime === 'function') {
-        window.startPayrollRealtime();
-    }
+if (typeof window.startCustomerRealtime === 'function') {
+    window.startCustomerRealtime();
+}
+if (typeof window.startPermissionRealtime === 'function') {
+    window.startPermissionRealtime();
+}
+if (typeof window.startStaffRealtime === 'function') {
+    window.startStaffRealtime();
+}
+if (typeof window.startPayrollRealtime === 'function') {
+    window.startPayrollRealtime();
+}
+if (typeof window.startClinicBranchRealtime === 'function') {
+    window.startClinicBranchRealtime();
+}
 
-    if (document.getElementById('userNameLabel')) {
-        document.getElementById('userNameLabel').innerText = `${user.name} (${user.role})`;
-    }
-    if (document.getElementById('userBranchBadge')) {
-        document.getElementById('userBranchBadge').innerText = `สาขา: ${user.branch || 'ทุกสาขา'}`;
-    }
-    if (document.getElementById('userInitial')) {
-        document.getElementById('userInitial').innerText = (user.name || 'U').substring(0, 2);
-    }
+if (document.getElementById('userNameLabel')) {
+    document.getElementById('userNameLabel').innerText = `${user.name} (${user.role})`;
+}
+if (document.getElementById('userBranchBadge')) {
+    document.getElementById('userBranchBadge').innerText = `สาขา: ${user.branch || 'ทุกสาขา'}`;
+}
+if (document.getElementById('userInitial')) {
+    document.getElementById('userInitial').innerText = (user.name || 'U').substring(0, 2);
+}
 
     const initialStr = user.name ? user.name.substring(0, 2).toUpperCase() : 'ON';
     if (document.getElementById('topProfileInitial')) document.getElementById('topProfileInitial').innerText = initialStr;

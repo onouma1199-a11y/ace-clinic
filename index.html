@@ -16,6 +16,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
 <style>
 /* 🎯 [ส่วนสำคัญ] ป้องกันหน้าจอซ้อน: ล็อกหน้า Login ให้บังหน้าอื่น 100% */
@@ -2193,6 +2194,21 @@ document.addEventListener('click', function(event) {
 /* =======================================================
     👥 ZONE 3: CUSTOMER MANAGEMENT (ระบบประวัติลูกค้า & OPD)
    ======================================================= */
+window.getCustomersFromSupabase = async function () {
+    if (!window.supabaseClient) return [];
+
+    const { data, error } = await window.supabaseClient
+        .from('customers')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('load customers error:', error);
+        return [];
+    }
+
+    return data || [];
+};
 
 // --- ฟังก์ชันเมื่อกดปุ่ม + เพิ่มใบเสร็จ จากหน้าหลัก ---
 window.openNewBillProcess = function() {
@@ -2316,10 +2332,6 @@ body.innerHTML = `
     `;
     
     if(typeof renderBillItems === 'function') renderBillItems();
-};
-
-window.saveCustomers = function(data = []) {
-    localStorage.setItem('customerDB', JSON.stringify(data));
 };
 
 
@@ -2461,22 +2473,6 @@ window.saveCustomer = async function () {
         });
         return false;
     }
-
-    let customerDB = [];
-    try {
-        customerDB = window.getCustomers() || [];
-    } catch (e) {
-        customerDB = [];
-    }
-
-    const existingIndex = customerDB.findIndex(c => String(c.id || '') === String(data.id || ''));
-    if (existingIndex !== -1) {
-        customerDB[existingIndex] = { ...customerDB[existingIndex], ...data };
-    } else {
-        customerDB.unshift(data);
-    }
-
-    localStorage.setItem("customerDB", JSON.stringify(customerDB));
 
     window.activeCustomer = data;
     window.editingCustomerId = null;
@@ -3046,12 +3042,12 @@ window.bindBranchHNChange = function () {
 };
 
  // 🎯 เปิด modal แก้ไขลูกค้าแบบ ID-based
-window.openModalForEdit = function (customerId) {
+window.openModalForEdit = async function (customerId) {
     ensureCustomerEnhancements();
 
     const db = window.currentCustomerFilteredData?.length
         ? window.currentCustomerFilteredData
-        : (typeof window.getCustomers === "function" ? window.getCustomers() : []);
+        : await window.getCustomersFromSupabase();
 
     const c = db.find(item => String(item.id || "") === String(customerId || ""));
     if (!c) return;
@@ -3187,7 +3183,7 @@ document.addEventListener("click", function (e) {
 // 5. ลบข้อมูลลูกค้าโดยใช้ ID
 window.deleteCustomer = async function (customerId) {
     if (!window.hasActionPermission('customer_delete')) {
-        Swal.fire({
+        await Swal.fire({
             icon: 'warning',
             title: 'ไม่มีสิทธิ์',
             text: 'คุณไม่มีสิทธิ์ลบข้อมูลลูกค้า',
@@ -3198,7 +3194,7 @@ window.deleteCustomer = async function (customerId) {
 
     try {
         if (!window.supabaseClient) {
-            Swal.fire('ข้อผิดพลาด', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+            await Swal.fire('ข้อผิดพลาด', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
             return;
         }
 
@@ -3221,34 +3217,24 @@ window.deleteCustomer = async function (customerId) {
 
         if (error) {
             console.error('deleteCustomer error:', error);
-            Swal.fire('ลบไม่สำเร็จ', error.message || 'เกิดข้อผิดพลาดในการลบข้อมูล', 'error');
+            await Swal.fire('ลบไม่สำเร็จ', error.message || 'เกิดข้อผิดพลาดในการลบข้อมูล', 'error');
             return;
         }
 
-        let db = [];
-        try {
-            db = JSON.parse(localStorage.getItem('customerDB')) || [];
-        } catch (e) {
-            db = [];
-        }
-
-        db = db.filter(c => String(c.id || '') !== String(customerId || ''));
-        localStorage.setItem('customerDB', JSON.stringify(db));
-
-        Swal.fire({
+        await Swal.fire({
             icon: 'success',
             title: 'ลบข้อมูลสำเร็จ',
             timer: 1200,
             showConfirmButton: false
         });
 
-        if (window.__customerLastTarget && typeof window.renderCustomerList === 'function') {
-            await window.renderCustomerList(window.__customerLastTarget);
+        if (typeof window.applyCustomerFilter === 'function') {
+            await window.applyCustomerFilter();
         }
 
     } catch (e) {
         console.error('deleteCustomer catch:', e);
-        Swal.fire('ข้อผิดพลาด', e.message || 'ไม่สามารถลบข้อมูลได้', 'error');
+        await Swal.fire('ข้อผิดพลาด', e.message || 'ไม่สามารถลบข้อมูลได้', 'error');
     }
 };
 
@@ -3382,11 +3368,11 @@ wrap.addEventListener("click", (e) => {
 /* =======================================================
     👁️ ฟังก์ชันดูข้อมูลลูกค้า (Stable ID 100% + UI Reset)
    ======================================================= */
-window.viewCustomerDetailById = function (customerId) {
+window.viewCustomerDetailById = async function(customerId) {
     document.querySelectorAll('[id^="action-menu-"]').forEach(m => m.classList.add('hidden'));
 
-    const db = window.getCustomers() || [];
-    const c = db.find(item => String(item.id || "").trim() === String(customerId || "").trim());
+    const db = await window.getCustomersFromSupabase();
+const c = db.find(item => String(item.id || "").trim() === String(customerId || "").trim());
 
     if (!c) {
         Swal.fire('ไม่พบข้อมูล', 'ไม่สามารถดึงข้อมูลลูกค้าคนนี้ได้ กรุณาลองใหม่ค่ะ', 'error');
@@ -3673,10 +3659,34 @@ window.renderCustomerList = function (target) {
                 <button onclick="window.applyCustomerFilter()" class="bg-[#D48197] text-white px-6 py-2 rounded-2xl text-[11px] font-bold shadow-md hover:bg-black transition-all shrink-0">ค้นหา</button>
               </div>
             </div>
+<div class="flex items-end gap-2">
+  <div class="flex flex-col gap-1">
+    <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">นำเข้าจากระบบเก่า</label>
+    <select id="legacyImportBranch" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[12px] font-light bg-white outline-none shadow-sm min-w-[140px] text-slate-600 appearance-none cursor-pointer">
+      <option value="บางพลี">บางพลี</option>
+      <option value="ชลบุรี">ชลบุรี</option>
+      <option value="อุดมสุข">อุดมสุข</option>
+    </select>
+  </div>
 
-            <button onclick="window.openModalForAdd()" class="bg-black text-white px-6 py-2.5 rounded-2xl text-[11px] font-bold shadow-xl hover:bg-[#D48197] transition-all uppercase flex items-center gap-2 mb-0.5">
-              <span class="bg-white text-black w-5 h-5 rounded-full flex items-center justify-center text-sm font-bold">+</span> เพิ่มลูกค้า
-            </button>
+  <input
+    type="file"
+    id="legacyCustomerFile"
+    accept=".xlsx,.xls,.csv"
+    class="hidden"
+    onchange="window.handleLegacyCustomerImport(this.files[0])"
+  >
+
+  <button
+    onclick="document.getElementById('legacyCustomerFile').click()"
+    class="bg-[#D48197] text-white px-6 py-2.5 rounded-2xl text-[11px] font-bold shadow-xl hover:bg-black transition-all uppercase mb-0.5">
+    นำเข้าลูกค้าเก่า
+  </button>
+
+  <button onclick="window.openModalForAdd()" class="bg-black text-white px-6 py-2.5 rounded-2xl text-[11px] font-bold shadow-xl hover:bg-[#D48197] transition-all uppercase flex items-center gap-2 mb-0.5">
+    <span class="bg-white text-black w-5 h-5 rounded-full flex items-center justify-center text-sm font-bold">+</span> เพิ่มลูกค้า
+  </button>
+</div>
           </div>
 
           <div class="bg-white rounded-[3rem] shadow-2xl border border-pink-100 overflow-hidden p-8">
@@ -3873,6 +3883,358 @@ window.applyCustomerFilter = async function () {
 }
   
 })();
+
+window.normalizeImportBranch = function(branch = '') {
+    const raw = String(branch || '').trim().replace('สาขา', '').trim();
+
+    if (raw.includes('บางพลี')) return 'บางพลี';
+    if (raw.includes('ชลบุรี')) return 'ชลบุรี';
+    if (raw.includes('อุดมสุข')) return 'อุดมสุข';
+
+    return raw;
+};
+
+window.getImportBranchCode = function(branch = '') {
+    const clean = window.normalizeImportBranch(branch);
+
+    if (clean === 'บางพลี') return 'BP';
+    if (clean === 'ชลบุรี') return 'CB';
+    if (clean === 'อุดมสุข') return 'UD';
+
+    return 'OT';
+};
+
+window.cleanImportText = function(val) {
+    const clean = String(val || '').trim();
+    if (!clean || clean === '-' || clean === '0' || clean.toLowerCase() === 'null') return '';
+    return clean;
+};
+
+window.cleanImportPhone = function(val) {
+    const clean = String(val || '').replace(/[^\d]/g, '').trim();
+    if (!clean || clean === '0') return '';
+    return clean;
+};
+
+window.cleanImportCitizenId = function(val) {
+    const clean = String(val || '').replace(/[^\d]/g, '').trim();
+    if (!clean || clean === '0') return '';
+    return clean;
+};
+
+window.parseImportBirthDate = function(val) {
+    if (!val) return null;
+
+    if (val instanceof Date && !isNaN(val.getTime())) {
+        return val.toISOString().split('T')[0];
+    }
+
+    const raw = String(val).trim();
+    if (!raw) return null;
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+    const slash = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (slash) {
+        let day = parseInt(slash[1], 10);
+        let month = parseInt(slash[2], 10);
+        let year = parseInt(slash[3], 10);
+
+        if (year > 2400) year -= 543;
+
+        return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+
+    return null;
+};
+
+window.extractImportNameParts = function(fullname = '') {
+    const clean = String(fullname || '').trim().replace(/\s+/g, ' ');
+    if (!clean) {
+        return {
+            first_name: '',
+            last_name: '',
+            fullname: ''
+        };
+    }
+
+    const parts = clean.split(' ');
+    return {
+        first_name: parts[0] || '',
+        last_name: parts.slice(1).join(' ') || '',
+        fullname: clean
+    };
+};
+
+window.pickImportField = function(row, keys = []) {
+    for (const key of keys) {
+        if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== '') {
+            return row[key];
+        }
+    }
+    return '';
+};
+
+window.getImportThaiYear2Digits = function() {
+    const thaiYear = new Date().getFullYear() + 543;
+    return String(thaiYear).slice(-2);
+};
+
+window.getNextCustomerHNRunning = async function(branch) {
+    if (!window.supabaseClient) return 1;
+
+    const cleanBranch = window.normalizeImportBranch(branch);
+    const branchCode = window.getImportBranchCode(cleanBranch);
+    const yy = window.getImportThaiYear2Digits();
+    const prefix = `HN-${branchCode}-${yy}`;
+
+    const { data, error } = await window.supabaseClient
+        .from('customers')
+        .select('hn')
+        .eq('branch', cleanBranch);
+
+    if (error) {
+        console.error('getNextCustomerHNRunning error:', error);
+        return 1;
+    }
+
+    let maxNo = 0;
+
+    (data || []).forEach(item => {
+        const hn = String(item.hn || '').trim().toUpperCase();
+        if (!hn.startsWith(prefix)) return;
+
+        const match = hn.match(/(\d+)$/);
+        if (!match) return;
+
+        const running = parseInt(match[1], 10);
+        if (running > maxNo) maxNo = running;
+    });
+
+    return maxNo + 1;
+};
+
+window.buildNewCustomerHN = function(branch, runningNo) {
+    const cleanBranch = window.normalizeImportBranch(branch);
+    const branchCode = window.getImportBranchCode(cleanBranch);
+    const yy = window.getImportThaiYear2Digits();
+    return `HN-${branchCode}-${yy}${String(runningNo).padStart(4, '0')}`;
+};
+
+window.handleLegacyCustomerImport = async function(file) {
+    if (!file) return;
+
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+    }
+
+    const branch = window.normalizeImportBranch(
+        document.getElementById('legacyImportBranch')?.value || ''
+    );
+
+    if (!branch) {
+        return Swal.fire('Error', 'กรุณาเลือกสาขาก่อนนำเข้า', 'error');
+    }
+
+    Swal.fire({
+        title: 'กำลังอ่านไฟล์',
+        text: 'กรุณารอสักครู่...',
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    try {
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[firstSheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+        if (!rows.length) {
+            Swal.close();
+            return Swal.fire('ไม่พบข้อมูล', 'ไฟล์นี้ไม่มีข้อมูลลูกค้า', 'warning');
+        }
+
+        await window.importLegacyCustomersToSupabase(rows, branch);
+
+        const fileInput = document.getElementById('legacyCustomerFile');
+        if (fileInput) fileInput.value = '';
+    } catch (err) {
+        Swal.close();
+        console.error('handleLegacyCustomerImport error:', err);
+        Swal.fire('Import Error', err.message || 'อ่านไฟล์ไม่สำเร็จ', 'error');
+    }
+};
+
+window.importLegacyCustomersToSupabase = async function(rows, selectedBranch) {
+    const branch = window.normalizeImportBranch(selectedBranch);
+
+    const { data: existingRows, error: existingError } = await window.supabaseClient
+        .from('customers')
+        .select('id, hn, old_hn, branch')
+        .eq('branch', branch);
+
+    if (existingError) {
+        Swal.close();
+        console.error('load existing customers error:', existingError);
+        return Swal.fire('Error', existingError.message || 'โหลดข้อมูลลูกค้าเดิมไม่สำเร็จ', 'error');
+    }
+
+    const oldHNMap = {};
+    (existingRows || []).forEach(item => {
+        const key = `${String(item.old_hn || '').trim().toUpperCase()}|${window.normalizeImportBranch(item.branch)}`;
+        if (String(item.old_hn || '').trim()) {
+            oldHNMap[key] = item;
+        }
+    });
+
+    let nextRunningNo = await window.getNextCustomerHNRunning(branch);
+
+    const payload = [];
+    const skipped = [];
+
+    rows.forEach((row, index) => {
+    const oldHNRaw = window.pickImportField(row, [
+        'hn', 'HN', 'Hn', 'old_hn', 'Old HN', 'รหัสลูกค้า', 'รหัสผู้ป่วย', 'เลขที่ HN'
+    ]);
+
+    const oldHN = String(oldHNRaw || '').trim().toUpperCase();
+
+    const fullnameRaw = window.pickImportField(row, [
+        'fullname', 'full_name', 'ชื่อ-นามสกุล', 'ชื่อ นามสกุล', 'ชื่อสกุล'
+    ]);
+
+    const firstNameRaw = window.pickImportField(row, [
+        'first_name', 'ชื่อจริง', 'ชื่อ'
+    ]);
+
+    const lastNameRaw = window.pickImportField(row, [
+        'last_name', 'นามสกุล'
+    ]);
+
+    const nickname = window.cleanImportText(window.pickImportField(row, [
+        'nickname', 'nick_name', 'ชื่อเล่น'
+    ]));
+
+    const phone = window.cleanImportPhone(window.pickImportField(row, [
+        'phone', 'เบอร์โทร', 'โทรศัพท์', 'โทร', 'mobile', 'mobile_phone'
+    ]));
+
+    const email = window.cleanImportText(window.pickImportField(row, [
+        'email', 'อีเมล'
+    ]));
+
+    const lineId = window.cleanImportText(window.pickImportField(row, [
+        'line_id', 'line', 'ไลน์', 'lineid'
+    ]));
+
+    const citizenId = window.cleanImportCitizenId(window.pickImportField(row, [
+        'citizen_id', 'เลขบัตรประชาชน', 'เลขประชาชน', 'id_card'
+    ]));
+
+    const birthDate = window.parseImportBirthDate(window.pickImportField(row, [
+        'birth_date', 'วันเกิด', 'dob'
+    ]));
+
+    const address = window.cleanImportText(window.pickImportField(row, [
+        'address', 'ที่อยู่'
+    ]));
+
+    const allergy = window.cleanImportText(window.pickImportField(row, [
+        'allergy', 'drug_allergy', 'แพ้ยา'
+    ]));
+
+    const chronic = window.cleanImportText(window.pickImportField(row, [
+        'chronic', 'โรคประจำตัว', 'โรคประจําตัว'
+    ]));
+
+    const status = window.cleanImportText(window.pickImportField(row, [
+        'status', 'สถานะ'
+    ])) || 'active';
+
+    const nameParts = window.extractImportNameParts(fullnameRaw);
+
+    const first_name = window.cleanImportText(firstNameRaw) || nameParts.first_name;
+    const last_name = window.cleanImportText(lastNameRaw) || nameParts.last_name;
+    const fullname = window.cleanImportText(fullnameRaw) || [first_name, last_name].filter(Boolean).join(' ').trim();
+
+    if (!oldHN && !fullname && !phone) {
+        skipped.push(`แถว ${index + 2}: ไม่พบ HN/ชื่อ/เบอร์`);
+        return;
+    }
+
+    if (!oldHN) {
+        skipped.push(`แถว ${index + 2}: ไม่มี old_hn`);
+        return;
+    }
+
+    const mapKey = `${oldHN}|${branch}`;
+    let newHN = oldHNMap[mapKey]?.hn || '';
+
+    if (!newHN) {
+        newHN = window.buildNewCustomerHN(branch, nextRunningNo);
+        nextRunningNo += 1;
+    }
+
+    payload.push({
+        first_name: first_name || null,
+        last_name: last_name || null,
+        nickname: nickname || null,
+        phone: phone || null,
+        email: email || null,
+        line_id: lineId || null,
+        citizen_id: citizenId || null,
+        birth_date: birthDate || null,
+        address: address || null,
+        allergy: allergy || null,
+        chronic: chronic || null,
+        branch: branch,
+        status: status || null,
+        fullname: fullname || null,
+        hn: newHN,
+        old_hn: oldHN,
+        updated_at: new Date().toISOString()
+    });
+});
+
+    if (!payload.length) {
+        Swal.close();
+        return Swal.fire('ไม่พบข้อมูลที่นำเข้าได้', skipped.slice(0, 10).join('\n') || 'ไม่มีข้อมูล', 'warning');
+    }
+
+    for (let i = 0; i < payload.length; i += 200) {
+        const chunk = payload.slice(i, i + 200);
+
+        const { error } = await window.supabaseClient
+            .from('customers')
+            .upsert(chunk, { onConflict: 'old_hn,branch' });
+
+        if (error) {
+            Swal.close();
+            console.error('upsert customers error:', error);
+            return Swal.fire('Import Error', error.message || 'นำเข้าลูกค้าไม่สำเร็จ', 'error');
+        }
+    }
+
+    Swal.close();
+
+    const msg = [
+        `นำเข้าสำเร็จ ${payload.length} รายการ`,
+        skipped.length ? `ข้าม ${skipped.length} รายการ` : ''
+    ].filter(Boolean).join('\n');
+
+    Swal.fire({
+        icon: 'success',
+        title: 'นำเข้าลูกค้าสำเร็จ',
+        text: msg,
+        confirmButtonColor: '#D48197'
+    });
+
+    if (typeof window.applyCustomerFilter === 'function') {
+        await window.applyCustomerFilter();
+    }
+};
 
 /* =======================================================
    📅 ZONE 4: APPOINTMENT & QUEUE (ระบบนัดหมาย & จัดการคิว)
@@ -10186,7 +10548,7 @@ window.renderPayrollSystem = async function() {
                     <div class="flex flex-col">
                         <label class="text-[8px] font-black text-[#C5A059] uppercase ml-2 mb-0.5 italic">ปี (พ.ศ.)</label>
                         <select id="filterYear" onchange="window.renderPayrollSystem()" class="bg-slate-50 border border-pink-50 rounded-lg px-2 py-1 text-[10px] font-bold outline-none cursor-pointer">
-							 <option value="2569" ${selY == 2569 ? 'selected' : ''}>2569</option>
+                            <option value="2569" ${selY == 2569 ? 'selected' : ''}>2569</option>
                             <option value="2570" ${selY == 2570 ? 'selected' : ''}>2570</option>
                         </select>
                     </div>

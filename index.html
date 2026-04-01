@@ -3662,12 +3662,17 @@ window.renderCustomerList = function (target) {
 <div class="flex items-end gap-2">
   <div class="flex flex-col gap-1">
     <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">นำเข้าจากระบบเก่า</label>
-    <select id="legacyImportBranch" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[12px] font-light bg-white outline-none shadow-sm min-w-[140px] text-slate-600 appearance-none cursor-pointer">
-      <option value="บางพลี">บางพลี</option>
-      <option value="ชลบุรี">ชลบุรี</option>
-      <option value="อุดมสุข">อุดมสุข</option>
+
+    <select id="legacyImportBranch"
+      class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[12px] font-light bg-white outline-none shadow-sm min-w-[140px] text-slate-600 appearance-none cursor-pointer">
+      
+      <option value="สาขาบางพลี">สาขาบางพลี</option>
+      <option value="สาขาชลบุรี">สาขาชลบุรี</option>
+      <option value="สาขาอุดมสุข">สาขาอุดมสุข</option>
+
     </select>
   </div>
+</div>
 
   <input
     type="file"

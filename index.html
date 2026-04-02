@@ -2377,7 +2377,9 @@ window.saveCustomer = async function () {
     const lastName = document.getElementById("modalLastName")?.value?.trim() || "";
     const phone = document.getElementById("modalPhone")?.value?.trim() || "";
     const branchRaw = document.getElementById("modalBranch")?.value || "สาขาบางพลี";
-    const branch = window.normalizeBranch ? window.normalizeBranch(branchRaw) : branchRaw;
+	const branch = window.normalizeImportBranch
+    ? window.normalizeImportBranch(branchRaw)
+    : branchRaw;
 
     if (!firstName || !phone) {
         await Swal.fire({
@@ -2404,29 +2406,30 @@ window.saveCustomer = async function () {
     const oldAvatar = isEdit ? (window.activeCustomer?.avatar_url || window.activeCustomer?.photo || "") : "";
 
     const payload = {
-        id: window.editingCustomerId || crypto.randomUUID(),
-        hn: hn,
-        first_name: firstName,
-        last_name: lastName,
-        fullname: `${firstName} ${lastName}`.trim(),
-        nickname: document.getElementById("modalNickname")?.value?.trim() || "",
-        phone: phone,
-        email: document.getElementById("modalEmail")?.value?.trim() || "",
-        line_id: document.getElementById("modalLine")?.value?.trim() || "",
-        birth_date: typeof convertThaiDateToISO === "function"
-            ? convertThaiDateToISO(document.getElementById("modalBirthDate")?.value)
-            : null,
-        citizen_id: document.getElementById("modalCitizenId")?.value?.trim() || "",
-        address: document.getElementById("modalAddress")?.value?.trim() || "",
-        allergy: document.getElementById("modalAllergy")?.value?.trim() || "ไม่มี",
-        branch: branch,
-        status: document.getElementById("modalStatus")?.value || "ปกติ",
-        photo: window.currentPhotoData || oldPhoto,
-        avatar_url: window.currentPhotoData || oldAvatar,
-        created_at: isEdit
-            ? (window.activeCustomer?.created_at || new Date().toISOString())
-            : new Date().toISOString()
-    };
+    id: window.editingCustomerId || crypto.randomUUID(),
+    hn: hn,
+    first_name: firstName,
+    last_name: lastName,
+    fullname: `${firstName} ${lastName}`.trim(),
+    nickname: document.getElementById("modalNickname")?.value?.trim() || "",
+    phone: phone,
+    email: document.getElementById("modalEmail")?.value?.trim() || "",
+    line_id: document.getElementById("modalLine")?.value?.trim() || "",
+    seller: document.getElementById("modalSeller")?.value?.trim() || "",
+    birth_date: typeof convertThaiDateToISO === "function"
+        ? convertThaiDateToISO(document.getElementById("modalBirthDate")?.value)
+        : null,
+    citizen_id: document.getElementById("modalCitizenId")?.value?.trim() || "",
+    address: document.getElementById("modalAddress")?.value?.trim() || "",
+    allergy: document.getElementById("modalAllergy")?.value?.trim() || "ไม่มี",
+    branch: branch,
+    status: document.getElementById("modalStatus")?.value || "ปกติ",
+    photo: window.currentPhotoData || oldPhoto,
+    avatar_url: window.currentPhotoData || oldAvatar,
+    created_at: isEdit
+        ? (window.activeCustomer?.created_at || new Date().toISOString())
+        : new Date().toISOString()
+};
 
     if (!window.supabaseClient) {
         await Swal.fire({
@@ -2445,24 +2448,25 @@ window.saveCustomer = async function () {
         ({ data, error } = await window.supabaseClient
             .from("customers")
             .update({
-                hn: payload.hn,
-                first_name: payload.first_name,
-                last_name: payload.last_name,
-                fullname: payload.fullname,
-                nickname: payload.nickname,
-                phone: payload.phone,
-                email: payload.email,
-                line_id: payload.line_id,
-                birth_date: payload.birth_date,
-                citizen_id: payload.citizen_id,
-                address: payload.address,
-                allergy: payload.allergy,
-                branch: payload.branch,
-                status: payload.status,
-                photo: payload.photo,
-                avatar_url: payload.avatar_url,
-                updated_at: new Date().toISOString()
-            })
+    hn: payload.hn,
+    first_name: payload.first_name,
+    last_name: payload.last_name,
+    fullname: payload.fullname,
+    nickname: payload.nickname,
+    phone: payload.phone,
+    email: payload.email,
+    line_id: payload.line_id,
+    seller: payload.seller,
+    birth_date: payload.birth_date,
+    citizen_id: payload.citizen_id,
+    address: payload.address,
+    allergy: payload.allergy,
+    branch: payload.branch,
+    status: payload.status,
+    photo: payload.photo,
+    avatar_url: payload.avatar_url,
+    updated_at: new Date().toISOString()
+})
             .eq("id", payload.id)
             .select()
             .single());
@@ -3008,38 +3012,53 @@ window.generateHN = async function () {
     const el = document.getElementById("modalHN");
     if (!el || window.editingCustomerId) return;
 
-    const branch = document.getElementById("modalBranch")?.value || "สาขาบางพลี";
-    const branchCode = window.getBranchCode(branch);
-    const thaiYear = (new Date().getFullYear() + 543).toString().slice(-2);
-
-    const { data, error } = await window.supabaseClient
-        .from("customers")
-        .select("hn")
-        .eq("branch", window.normalizeBranch(branch));
-
-    if (error) {
-        console.error("generateHN error:", error);
-        el.value = `HN-${branchCode}-${thaiYear}0001`;
+    if (!window.supabaseClient) {
+        console.error("generateHN: ยังไม่พบ supabaseClient");
+        el.value = "กำลังโหลด...";
         return;
     }
 
-    const list = Array.isArray(data) ? data : [];
+    const branchRaw = document.getElementById("modalBranch")?.value || "สาขาบางพลี";
+    const cleanBranch = window.normalizeImportBranch
+        ? window.normalizeImportBranch(branchRaw)
+        : String(branchRaw || "").replace("สาขา", "").trim();
 
-    const sameBranchSameYear = list
-        .map(x => String(x.hn || "").trim())
-        .filter(hn => hn.startsWith(`HN-${branchCode}-${thaiYear}`));
+    const branchCode = window.getImportBranchCode
+        ? window.getImportBranchCode(cleanBranch)
+        : "OT";
 
-    let maxRunning = 0;
+    const possibleBranches = [cleanBranch, `สาขา${cleanBranch}`];
+    const prefix = `HN-${branchCode}-`;
 
-    sameBranchSameYear.forEach(hn => {
-        const runningPart = parseInt(hn.slice(-4), 10);
-        if (!isNaN(runningPart) && runningPart > maxRunning) {
-            maxRunning = runningPart;
+    const { data, error } = await window.supabaseClient
+        .from("customers")
+        .select("hn, branch")
+        .in("branch", possibleBranches)
+        .ilike("hn", `${prefix}%`)
+        .order("hn", { ascending: false })
+        .limit(1);
+
+    if (error) {
+        console.error("generateHN error:", error);
+        el.value = `${prefix}690001`;
+        return;
+    }
+
+    let nextNumber = 690001;
+
+    if (Array.isArray(data) && data.length > 0) {
+        const latestHN = String(data[0].hn || "").trim().toUpperCase();
+        const match = latestHN.match(/(\d+)$/);
+
+        if (match) {
+            const currentNumber = parseInt(match[1], 10);
+            if (!isNaN(currentNumber)) {
+                nextNumber = currentNumber + 1;
+            }
         }
-    });
+    }
 
-    const nextRunning = String(maxRunning + 1).padStart(4, "0");
-    el.value = `HN-${branchCode}-${thaiYear}${nextRunning}`;
+    el.value = `${prefix}${nextNumber}`;
 };
 
 window.bindBranchHNChange = function () {
@@ -3121,7 +3140,13 @@ window.openModalForEdit = async function (customerId) {
     if (address) address.value = c.address || "";
 
     const branch = document.getElementById("modalBranch");
-    if (branch) branch.value = c.branch || "สาขาบางพลี";
+    if (branch) {
+        const cleanBranch = window.normalizeImportBranch
+            ? window.normalizeImportBranch(c.branch || "สาขาบางพลี")
+            : (c.branch || "สาขาบางพลี");
+
+        branch.value = `สาขา${cleanBranch}`;
+    }
 
     const status = document.getElementById("modalStatus");
     if (status) status.value = c.status || "ปกติ";
@@ -3459,14 +3484,14 @@ const c = db.find(item => String(item.id || "").trim() === String(customerId || 
 /* =======================================================
    📊 ฟังก์ชันวาดเนื้อหาในแท็บโปรไฟล์ (ID BASED)
    ======================================================= */
-window.renderProfileTab = function(tab, customerId) {
+window.renderProfileTab = async function(tab, customerId) {
     const box = document.getElementById("profileTabContent");
     const alternateBox = document.getElementById("profileTabBody");
     const contentArea = box || alternateBox;
 
     if (!contentArea) return;
 
-    const customerDB = JSON.parse(localStorage.getItem("customerDB")) || [];
+    const customerDB = await window.getCustomersFromSupabase();
     const c = customerDB.find(item => String(item.id || "").trim() === String(customerId || "").trim());
 
     if (!c) {
@@ -3619,7 +3644,7 @@ window.renderProfileTab = function(tab, customerId) {
 /* =======================================================
    🔁 ฟังก์ชันสลับแท็บโปรไฟล์
    ======================================================= */
-window.switchProfileTab = function(tabName, customerId) {
+window.switchProfileTab = async function(tabName, customerId) {
     document.querySelectorAll('.profileTab, .profile-tab').forEach(btn => {
         btn.classList.remove('bg-pink-50', 'text-[#D48197]', 'active');
         btn.classList.add('bg-white', 'text-slate-600');
@@ -3631,7 +3656,7 @@ window.switchProfileTab = function(tabName, customerId) {
         targetBtn.classList.add('bg-pink-50', 'text-[#D48197]', 'active');
     }
 
-    window.renderProfileTab(tabName, customerId);
+    await window.renderProfileTab(tabName, customerId);
 };
 
 /* =======================================================
@@ -4012,16 +4037,17 @@ window.normalizeImportBranch = function(branch = '') {
     if (raw.includes('อุดมสุข')) return 'อุดมสุข';
 
     console.warn('❗ branch ไม่รู้จัก:', branch);
-    return 'บางพลี'; // fallback กัน OT
+    return 'บางพลี';
 };
 
 window.getImportBranchCode = function(branch = '') {
     const clean = window.normalizeImportBranch(branch);
 
-    if (clean === 'บางพลี') return 'BP';
-    if (clean === 'ชลบุรี') return 'CB';
-    if (clean === 'อุดมสุข') return 'UD';
+    if (String(clean).includes('บางพลี')) return 'BP';
+    if (String(clean).includes('ชลบุรี')) return 'CB';
+    if (String(clean).includes('อุดมสุข')) return 'UD';
 
+    console.warn('❗ getImportBranchCode ไม่รู้จัก:', branch, '=>', clean);
     return 'OT';
 };
 
@@ -4108,11 +4134,12 @@ window.getNextCustomerHNRunning = async function(branch) {
     const branchCode = window.getImportBranchCode(cleanBranch);
     const yy = window.getImportThaiYear2Digits();
     const prefix = `HN-${branchCode}-${yy}`;
+    const possibleBranches = [cleanBranch, `สาขา${cleanBranch}`];
 
     const { data, error } = await window.supabaseClient
         .from('customers')
-        .select('hn')
-        .eq('branch', cleanBranch);
+        .select('hn, branch')
+        .in('branch', possibleBranches);
 
     if (error) {
         console.error('getNextCustomerHNRunning error:', error);
@@ -4219,11 +4246,12 @@ window.buildImportAddress = function(row) {
 
 window.importLegacyCustomersToSupabase = async function(rows, selectedBranch) {
     const branch = window.normalizeImportBranch(selectedBranch);
+    const possibleBranches = [branch, `สาขา${branch}`];
 
     const { data: existingRows, error: existingError } = await window.supabaseClient
         .from('customers')
         .select('id, hn, old_hn, branch')
-        .eq('branch', branch);
+        .in('branch', possibleBranches);
 
     if (existingError) {
         Swal.close();
@@ -4232,10 +4260,19 @@ window.importLegacyCustomersToSupabase = async function(rows, selectedBranch) {
     }
 
     const oldHNMap = {};
+    const existingHNSet = new Set();
+
     (existingRows || []).forEach(item => {
-        const key = `${String(item.old_hn || '').trim().toUpperCase()}|${window.normalizeImportBranch(item.branch)}`;
+        const normalizedBranch = window.normalizeImportBranch(item.branch);
+        const oldHNKey = `${String(item.old_hn || '').trim().toUpperCase()}|${normalizedBranch}`;
+        const hnKey = `${String(item.hn || '').trim().toUpperCase()}|${normalizedBranch}`;
+
         if (String(item.old_hn || '').trim()) {
-            oldHNMap[key] = item;
+            oldHNMap[oldHNKey] = item;
+        }
+
+        if (String(item.hn || '').trim()) {
+            existingHNSet.add(hnKey);
         }
     });
 
@@ -4243,6 +4280,7 @@ window.importLegacyCustomersToSupabase = async function(rows, selectedBranch) {
 
     const payload = [];
     const skipped = [];
+    const usedHNSet = new Set();
 
     rows.forEach((row, index) => {
         const oldHNRaw = window.pickImportField(row, [
@@ -4277,6 +4315,10 @@ window.importLegacyCustomersToSupabase = async function(rows, selectedBranch) {
 
         const lineId = window.cleanImportText(window.pickImportField(row, [
             'line_id', 'line', 'ไลน์', 'lineid'
+        ]));
+
+        const seller = window.cleanImportText(window.pickImportField(row, [
+            'seller', 'seller_name', 'sales', 'เซลล์', 'ชื่อเซลล์', 'ผู้ดูแล', 'ชื่อเซลล์ดูแล'
         ]));
 
         const citizenId = window.cleanImportCitizenId(window.pickImportField(row, [
@@ -4318,25 +4360,31 @@ window.importLegacyCustomersToSupabase = async function(rows, selectedBranch) {
         }
 
         const mapKey = `${oldHN}|${branch}`;
-const existingCustomer = oldHNMap[mapKey];
+        const existingCustomer = oldHNMap[mapKey];
 
-// ถ้าเคยมีอยู่แล้วและ HN เดิมเป็นของสาขาถูกต้อง ค่อยใช้ต่อ
-// แต่ถ้าเป็น HN-OT-... ให้สร้างใหม่ตามสาขา
-let newHN = '';
+        let newHN = '';
 
-if (existingCustomer?.hn) {
-    const existingHN = String(existingCustomer.hn).trim().toUpperCase();
-    const correctPrefix = `HN-${window.getImportBranchCode(branch)}-${window.getImportThaiYear2Digits()}`;
+        if (existingCustomer?.hn) {
+            const existingHN = String(existingCustomer.hn).trim().toUpperCase();
+            const correctPrefix = `HN-${window.getImportBranchCode(branch)}-`;
 
-    if (existingHN.startsWith(correctPrefix)) {
-        newHN = existingHN;
-    }
-}
+            if (existingHN.startsWith(correctPrefix)) {
+                newHN = existingHN;
+            }
+        }
 
-if (!newHN) {
-    newHN = window.buildNewCustomerHN(branch, nextRunningNo);
-    nextRunningNo += 1;
-}
+        // ถ้ายังไม่มี HN ให้สร้างใหม่ และกันชนซ้ำทั้ง DB + payload รอบนี้
+        while (!newHN) {
+            const candidateHN = window.buildNewCustomerHN(branch, nextRunningNo);
+            const candidateKey = `${String(candidateHN).trim().toUpperCase()}|${branch}`;
+
+            if (!existingHNSet.has(candidateKey) && !usedHNSet.has(candidateKey)) {
+                newHN = candidateHN;
+                usedHNSet.add(candidateKey);
+            }
+
+            nextRunningNo += 1;
+        }
 
         payload.push({
             first_name: first_name || null,
@@ -4345,6 +4393,7 @@ if (!newHN) {
             phone: phone || null,
             email: email || null,
             line_id: lineId || null,
+            seller: seller || null,
             citizen_id: citizenId || null,
             birth_date: birthDate || null,
             address: address || null,
@@ -4364,8 +4413,8 @@ if (!newHN) {
         return Swal.fire('ไม่พบข้อมูลที่นำเข้าได้', skipped.slice(0, 10).join('\n') || 'ไม่มีข้อมูล', 'warning');
     }
 
-    for (let i = 0; i < payload.length; i += 200) {
-        const chunk = payload.slice(i, i + 200);
+    for (let i = 0; i < payload.length; i += 50) {
+        const chunk = payload.slice(i, i + 50);
 
         const { error } = await window.supabaseClient
             .from('customers')

@@ -350,9 +350,9 @@ tbody tr:hover{background:#FAFAFF!important;}
                             <div class="space-y-1">
                                 <label class="text-[11px] text-[#D48197] uppercase ml-1">เลือกสาขาประจำ</label>
                                 <select id="modalBranch" class="w-full border-2 border-pink-200 p-3 rounded-xl text-sm bg-white outline-none focus:border-[#D48197] text-slate-800">
-                                    <option value="สาขาบางพลี">📍 สาขาบางพลี</option>
-                                    <option value="สาขาชลบุรี">📍 สาขาชลบุรี</option>
-                                    <option value="สาขาอุดมสุข">📍 สาขาอุดมสุข</option>
+                                    <option value="สาขาบางพลี">สาขาบางพลี</option>
+                                    <option value="สาขาชลบุรี">สาขาชลบุรี</option>
+                                    <option value="สาขาอุดมสุข">สาขาอุดมสุข</option>
                                 </select>
                             </div>
                         </div>
@@ -375,7 +375,7 @@ tbody tr:hover{background:#FAFAFF!important;}
 
    <div class="space-y-1">
     <label class="text-[11px] font-bold text-[#D48197] uppercase">
-        👤 เซลล์ผู้ดูแล
+        เซลล์ผู้ดูแล
     </label>
     <input type="text" id="modalSeller"
         placeholder="ระบุชื่อเซลล์ที่ดูแล..."
@@ -415,7 +415,7 @@ tbody tr:hover{background:#FAFAFF!important;}
                             <input id="modalLine" type="text" class="w-full border-2 border-pink-200 p-3 rounded-xl text-base font-bold text-slate-900">
                         </div>
                         <div class="col-span-2 space-y-1">
-                            <label class="text-[11px] font-bold text-red-500 uppercase">🚨 ประวัติการแพ้ยา (ระบุชื่อยา)</label>
+                            <label class="text-[11px] font-bold text-red-500 uppercase">ประวัติการแพ้ยา (ระบุชื่อยา)</label>
                             <input id="modalAllergy" type="text" class="w-full border-2 border-red-300 p-3 rounded-xl text-base font-bold text-red-600 bg-red-50" placeholder="หากไม่มีใส่ 'ไม่มี'">
                         </div>
 
@@ -728,39 +728,36 @@ window.filterByBranch = function(list = [], getBranchFn) {
 /* -------------------- SUPABASE: CUSTOMER DATA LAYER -------------------- */
 
 // 📥 ดึงลูกค้าจาก Supabase (ใช้ ID เป็นตัวกรองหลักแทน Index)
-window.getCustomersFromSupabase = async function() {
-    try {
-        if (!window.supabaseClient) {
-            console.error('ยังไม่พบ supabaseClient');
-            return [];
-        }
+window.getCustomersFromSupabase = async function () {
+    if (!window.supabaseClient) return [];
 
-        const viewingBranch = typeof window.getCurrentViewingBranch === 'function'
-            ? window.getCurrentViewingBranch()
-            : 'ทุกสาขา';
+    const pageSize = 1000;
+    let from = 0;
+    let allRows = [];
+    let hasMore = true;
 
-        let query = window.supabaseClient
+    while (hasMore) {
+        const { data, error } = await window.supabaseClient
             .from('customers')
             .select('*')
-            .order('created_at', { ascending: true });
-
-        if (!(typeof window.canViewAllBranches === 'function' && window.canViewAllBranches()) && viewingBranch !== 'ทุกสาขา') {
-            const safeBranch = window.normalizeBranch(viewingBranch);
-	query = query.eq('branch', safeBranch);
-        }
-
-        const { data, error } = await query;
+            .range(from, from + pageSize - 1);
 
         if (error) {
-            console.error('getCustomersFromSupabase error:', error);
-            return [];
+            console.error('load customers error:', error);
+            return allRows;
         }
 
-        return Array.isArray(data) ? data : [];
-    } catch (e) {
-        console.error('getCustomersFromSupabase exception:', e);
-        return [];
+        const rows = data || [];
+        allRows = allRows.concat(rows);
+
+        if (rows.length < pageSize) {
+            hasMore = false;
+        } else {
+            from += pageSize;
+        }
     }
+
+    return allRows;
 };
 
 window.getStaffFromSupabase = async function() {
@@ -1851,7 +1848,7 @@ window.renderDashboard = async function(target, period = 'day') {
     </div>
 
     <div class="glass-card shadow-lg mb-8 border-t-4 border-blue-400">
-        <h3 class="text-lg font-black ace-pink mb-6 uppercase italic">📅 รายการคิวนัดหมายวันนี้ (${appsToday.length} นัด)</h3>
+        <h3 class="text-lg font-black ace-pink mb-6 uppercase italic">รายการคิวนัดหมายวันนี้ (${appsToday.length} นัด)</h3>
         <div class="overflow-x-auto">
             <table class="w-full text-left text-[11px] font-black italic uppercase">
                 <thead class="bg-slate-50 text-gray-500 border-b">
@@ -1891,22 +1888,22 @@ window.renderDashboard = async function(target, period = 'day') {
     </div>
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8 font-bold uppercase">
             <div class="glass-card shadow-lg border-t-4 border-[#C5A059] bg-white p-8">
-                <h3 class="text-lg font-bold ace-pink mb-6 border-b-2 border-dashed pb-2 text-center">💰 รายรับวันนี้ (REAL-TIME)</h3>
+                <h3 class="text-lg font-bold ace-pink mb-6 border-b-2 border-dashed pb-2 text-center">รายรับวันนี้ (REAL-TIME)</h3>
                 <div class="space-y-3 text-sm font-bold text-slate-600">
                     ${['เงินสด', 'โอน (QR)', 'โอนบริษัท', 'รูดบัตรเครดิต', 'Shopee', 'Gowabi'].map(method => {
                         // ✅ คำนวณยอดแยกตามประเภทการชำระเงินจาก incomesToday ที่กรองมาแล้ว
                         const amt = incomesToday.filter(i => i.payment === method)
                                     .reduce((s, item) => s + (parseFloat(String(item.total).replace(/[^0-9.-]+/g,"")) || 0), 0);
-                        return `<div class="flex justify-between border-b border-slate-50 pb-1"><span>💵 ${method}</span><span class="text-slate-800">${amt.toLocaleString()}.-</span></div>`;
+                        return `<div class="flex justify-between border-b border-slate-50 pb-1"><span> ${method}</span><span class="text-slate-800">${amt.toLocaleString()}.-</span></div>`;
                     }).join('')}
                     <div class="flex justify-between pt-3 text-xl ace-pink border-t-4 border-double font-bold mt-2">
-                        <span>📊 รวมรายรับวันนี้</span><span>${incomesToday.reduce((s, i) => s + (parseFloat(String(i.total).replace(/[^0-9.-]+/g,"")) || 0), 0).toLocaleString()}.-</span>
+                        <span>รวมรายรับวันนี้</span><span>${incomesToday.reduce((s, i) => s + (parseFloat(String(i.total).replace(/[^0-9.-]+/g,"")) || 0), 0).toLocaleString()}.-</span>
                     </div>
                 </div>
             </div>
 
             <div class="glass-card shadow-lg border-t-4 border-red-400 bg-slate-50/30 p-8">
-                <h3 class="text-lg font-bold text-red-500 mb-6 border-b-2 border-dashed pb-2 text-center">💸 รายการหักรายจ่าย (วันนี้)</h3>
+                <h3 class="text-lg font-bold text-red-500 mb-6 border-b-2 border-dashed pb-2 text-center">รายการหักรายจ่าย (วันนี้)</h3>
                 <div class="space-y-4 mb-10 min-h-[120px]">
                     ${expensesToday.length > 0 ? expensesToday.map(ex => `
                         <div class="p-4 bg-white rounded-2xl border-2 border-dashed border-red-100 flex justify-between items-center shadow-sm">
@@ -3890,6 +3887,16 @@ window.applyCustomerFilter = async function () {
         return k && b;
     });
 
+    // ✅ เรียง HN จากน้อยไปมาก
+    filtered.sort((a, b) => {
+        const getHNNumber = (hn) => {
+            const match = String(hn || '').trim().toUpperCase().match(/(\d+)$/);
+            return match ? parseInt(match[1], 10) : 0;
+        };
+
+        return getHNNumber(a.hn) - getHNNumber(b.hn);
+    });
+
     window.currentCustomerFilteredData = filtered;
 
     const totalPages = Math.ceil(filtered.length / pageSize) || 1;
@@ -3994,13 +4001,18 @@ window.changeCustomerPage = async function (page) {
 })();
 
 window.normalizeImportBranch = function(branch = '') {
-    const raw = String(branch || '').trim().replace('สาขา', '').trim();
+    const raw = String(branch || '')
+        .trim()
+        .replace('สาขา', '')
+        .replace(/\s/g, '')
+        .toLowerCase();
 
-    if (raw.includes('บางพลี')) return 'สาขาบางพลี';
-    if (raw.includes('ชลบุรี')) return 'สาขาชลบุรี';
-    if (raw.includes('อุดมสุข')) return 'สาขาอุดมสุข';
+    if (raw.includes('บางพลี')) return 'บางพลี';
+    if (raw.includes('ชลบุรี')) return 'ชลบุรี';
+    if (raw.includes('อุดมสุข')) return 'อุดมสุข';
 
-    return raw;
+    console.warn('❗ branch ไม่รู้จัก:', branch);
+    return 'บางพลี'; // fallback กัน OT
 };
 
 window.getImportBranchCode = function(branch = '') {
@@ -4113,10 +4125,7 @@ window.getNextCustomerHNRunning = async function(branch) {
         const hn = String(item.hn || '').trim().toUpperCase();
         if (!hn.startsWith(prefix)) return;
 
-        // ✅ ตัด prefix ออกก่อน เช่น HN-BP-69 เหลือ 0001
         const runningPart = hn.slice(prefix.length);
-
-        // ✅ ต้องเป็นตัวเลขล้วนเท่านั้น
         if (!/^\d+$/.test(runningPart)) return;
 
         const running = parseInt(runningPart, 10);
@@ -4309,12 +4318,25 @@ window.importLegacyCustomersToSupabase = async function(rows, selectedBranch) {
         }
 
         const mapKey = `${oldHN}|${branch}`;
-        let newHN = oldHNMap[mapKey]?.hn || '';
+const existingCustomer = oldHNMap[mapKey];
 
-        if (!newHN) {
-            newHN = window.buildNewCustomerHN(branch, nextRunningNo);
-            nextRunningNo += 1;
-        }
+// ถ้าเคยมีอยู่แล้วและ HN เดิมเป็นของสาขาถูกต้อง ค่อยใช้ต่อ
+// แต่ถ้าเป็น HN-OT-... ให้สร้างใหม่ตามสาขา
+let newHN = '';
+
+if (existingCustomer?.hn) {
+    const existingHN = String(existingCustomer.hn).trim().toUpperCase();
+    const correctPrefix = `HN-${window.getImportBranchCode(branch)}-${window.getImportThaiYear2Digits()}`;
+
+    if (existingHN.startsWith(correctPrefix)) {
+        newHN = existingHN;
+    }
+}
+
+if (!newHN) {
+    newHN = window.buildNewCustomerHN(branch, nextRunningNo);
+    nextRunningNo += 1;
+}
 
         payload.push({
             first_name: first_name || null,
@@ -8042,7 +8064,7 @@ window.renderExpensePage = function() {
 // 2. ฟังก์ชันเปิด Modal (หักบัญชี 3 อย่างตามสั่ง)
 window.openNewExpenseModal = function() {
     Swal.fire({
-        title: '<span class="text-slate-800 font-black italic">💸 บันทึกรายจ่ายใหม่</span>',
+        title: '<span class="text-slate-800 font-black italic">บันทึกรายจ่ายใหม่</span>',
         html: `
             <div class="p-4 text-left font-sans space-y-4">
                 <div>
@@ -8079,7 +8101,7 @@ window.openNewExpenseModal = function() {
             </div>
         `,
         showCancelButton: true,
-        confirmButtonText: '💾 บันทึกรายจ่าย',
+        confirmButtonText: 'บันทึกรายจ่าย',
         confirmButtonColor: '#ef4444',
         cancelButtonText: 'ยกเลิก',
         customClass: { popup: 'rounded-[2rem]' },
@@ -9979,8 +10001,7 @@ window.generateStaffCode = async function() {
 
         const { data, error } = await window.supabaseClient
             .from('staff_profiles')
-            .select('staff_code')
-            .order('created_at', { ascending: false });
+            .select('staff_code');
 
         if (error) {
             console.error('generateStaffCode error:', error);
@@ -9988,7 +10009,7 @@ window.generateStaffCode = async function() {
         }
 
         const codes = (data || [])
-            .map(row => String(row.staff_code || '').trim())
+            .map(row => String(row.staff_code || '').trim().toUpperCase())
             .filter(code => /^ST\d+$/.test(code));
 
         if (codes.length === 0) {
@@ -9996,9 +10017,12 @@ window.generateStaffCode = async function() {
         }
 
         let maxNum = 0;
+
         codes.forEach(code => {
             const num = parseInt(code.replace('ST', ''), 10);
-            if (!isNaN(num) && num > maxNum) maxNum = num;
+            if (!isNaN(num) && num > maxNum) {
+                maxNum = num;
+            }
         });
 
         return 'ST' + String(maxNum + 1).padStart(6, '0');

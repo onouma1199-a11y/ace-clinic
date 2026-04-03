@@ -1044,7 +1044,7 @@ window.initAccountSuggestion = function() {
                     ${acc.name ? acc.name.substring(0,1) : '👤'}
                 </div>
                 <div class="flex-1">
-                    <p class="text-[11px] font-bold text-slate-700 m-0">${acc.name || '-'}</p>
+                    <p class="text-[11px] font-bold text-slate-500 m-0">${acc.name || '-'}</p>
                     <p class="text-[9px] text-slate-400 uppercase m-0">${acc.role || '-'} | ${acc.branch || ''}</p>
                 </div>
                 <button onclick="event.stopPropagation(); window.removeSavedAccount('${String(acc.user || '').replace(/'/g, "\\'")}')" class="text-slate-300 hover:text-red-500 p-1 text-xs">✕</button>
@@ -1058,6 +1058,35 @@ window.initAccountSuggestion = function() {
         if (!uInput.contains(e.target) && !suggestionBox.contains(e.target)) {
             suggestionBox.style.display = 'none';
         }
+    });
+};
+
+
+// 1. ฟังก์ชันลบบัญชีที่บันทึกไว้ (สำหรับปุ่ม X)
+window.removeSavedAccount = function(userEmail) {
+    // ดึงข้อมูลจาก LocalStorage
+    let savedList = JSON.parse(localStorage.getItem('ace_saved_accounts')) || [];
+    
+    // กรองเอาตัวที่ไม่ใช่อีเมลที่กดลบออก
+    savedList = savedList.filter(acc => String(acc.user || '').trim().toLowerCase() !== String(userEmail).trim().toLowerCase());
+    
+    // บันทึกกลับลงเครื่อง
+    localStorage.setItem('ace_saved_accounts', JSON.stringify(savedList));
+    
+    // ปิดกล่องข้อความแนะนำทันทีเพื่อให้เห็นการเปลี่ยนแปลง
+    const suggestionBox = document.getElementById('accountSuggestionBox');
+    if (suggestionBox) {
+        suggestionBox.style.display = 'none';
+    }
+
+    // แจ้งเตือนเล็กน้อย
+    Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: 'ลบชื่อผู้ใช้ที่จำไว้แล้วค่ะ',
+        showConfirmButton: false,
+        timer: 1000
     });
 };
 
@@ -1711,23 +1740,22 @@ window.canViewAllBranches = function() {
 
 window.renderDashboard = async function(target, period = 'day') {
     if (!target) return;
+
     const user = JSON.parse(localStorage.getItem('currentUser')) || {};
     const viewingBranch = user.branch || 'ทุกสาขา';
-    const isShowAll = (viewingBranch === 'ทุกสาขา'); 
-    
-    // ✅ เรียกผ่าน ID Based security
+    const isShowAll = (viewingBranch === 'ทุกสาขา');
+
     const customerDB = await window.getCustomersFromSupabase();
     const accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
     const appointmentDB = JSON.parse(localStorage.getItem('appointmentDB')) || [];
-    
+
     const now = new Date();
     const today = now.toISOString().split('T')[0];
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
     const currentMonth = today.substring(0, 7);
     const currentYear = today.substring(0, 4);
-    const todayThai = now.toLocaleDateString("th-TH");
 
-    const cleanViewingBranch = viewingBranch.replace('สาขา', '').trim();
+    const cleanViewingBranch = String(viewingBranch || '').replace('สาขา', '').trim();
 
     let statsIncomes = accountDB.filter(item => {
         const itemBranch = String(item.branch || '').replace('สาขา', '').trim();
@@ -1744,16 +1772,18 @@ window.renderDashboard = async function(target, period = 'day') {
         return (isShowAll || aBranch === cleanViewingBranch);
     });
 
-    let statsCustomers = customerDB.filter(c => {
+    const statsCustomersAll = customerDB.filter(c => {
         const cBranch = String(c.branch || '').replace('สาขา', '').trim();
         return (isShowAll || cBranch === cleanViewingBranch);
     });
+
+    let statsCustomers = [...statsCustomersAll];
 
     if (period === 'day') {
         statsIncomes = statsIncomes.filter(i => i.date === today);
         statsExpenses = statsExpenses.filter(e => e.date === today);
         statsApps = statsApps.filter(a => a.date === today);
-        statsCustomers = statsCustomers.filter(c => c.date === today || c.created_at?.startsWith(today)); 
+        statsCustomers = statsCustomers.filter(c => c.created_at?.startsWith(today));
     } else if (period === 'month') {
         statsIncomes = statsIncomes.filter(i => i.date && i.date.startsWith(currentMonth));
         statsExpenses = statsExpenses.filter(e => e.date && e.date.startsWith(currentMonth));
@@ -1781,17 +1811,20 @@ window.renderDashboard = async function(target, period = 'day') {
         return a.date === today && (isShowAll || aBranch === cleanViewingBranch);
     });
 
-    const totalSales = statsIncomes.reduce((sum, item) => sum + (parseFloat(String(item.total).replace(/[^0-9.-]+/g,"")) || 0), 0);
+    const totalSales = statsIncomes.reduce((sum, item) => sum + (parseFloat(String(item.total).replace(/[^0-9.-]+/g, "")) || 0), 0);
     const totalExp = statsExpenses.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
     const netProfit = totalSales - totalExp;
-    
-    const salesYesterday = accountDB.filter(item => {
-        const itemBranch = String(item.branch || '').replace('สาขา', '').trim();
-        return item.type === "รายรับ" && item.status === "เสร็จสิ้น" && item.date === yesterday && (isShowAll || itemBranch === cleanViewingBranch);
-    }).reduce((sum, item) => sum + (parseFloat(String(item.total).replace(/[^0-9.-]+/g,"")) || 0), 0);
 
+    const salesYesterday = accountDB
+        .filter(item => {
+            const itemBranch = String(item.branch || '').replace('สาขา', '').trim();
+            return item.type === "รายรับ" && item.status === "เสร็จสิ้น" && item.date === yesterday && (isShowAll || itemBranch === cleanViewingBranch);
+        })
+        .reduce((sum, item) => sum + (parseFloat(String(item.total).replace(/[^0-9.-]+/g, "")) || 0), 0);
+
+    const totalCustomersAllTime = statsCustomersAll.length;
     const titleLabel = period === 'day' ? "วันนี้" : (period === 'month' ? "เดือนนี้" : "ปีนี้");
-    
+
     target.innerHTML = `
        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 font-black italic uppercase animate-in slide-in-from-bottom duration-500">
             <div class="glass-card border-l-8 border-[#C5A059] shadow-sm">
@@ -1802,7 +1835,7 @@ window.renderDashboard = async function(target, period = 'day') {
             <div class="glass-card border-l-8 border-[#D48197] shadow-sm">
                 <p class="text-[10px] text-gray-400 font-bold uppercase">ลูกค้าใหม่${titleLabel}</p>
                 <p class="text-3xl text-gray-800 mt-2 font-black italic">${statsCustomers.length.toLocaleString()} คน</p>
-                <p class="text-[9px] text-slate-400 font-bold mt-1">(สะสมทั้งหมด: ${customerDB.length.toLocaleString()} คน)</p>
+                <p class="text-[9px] text-slate-400 font-bold mt-1">(สะสมทั้งหมด: ${totalCustomersAllTime.toLocaleString()} คน)</p>
             </div>
             <div class="glass-card border-l-8 border-blue-400 shadow-sm">
                 <p class="text-[10px] text-gray-400 font-bold uppercase">คิวนัด${titleLabel}</p>
@@ -1832,9 +1865,7 @@ window.renderDashboard = async function(target, period = 'day') {
                 </thead>
                 <tbody class="divide-y bg-white">
                     ${appsToday.length > 0 ? appsToday.map((ap, idx) => {
-                        // ✅ ค้นหาข้อมูลคนไข้ผ่าน customer_id (ID กลาง) เพื่อความแม่นยำสูงสุด
                         const customerInfo = customerDB.find(c => String(c.id) === String(ap.customer_id));
-                        
                         return `
                             <tr>
                                 <td class="p-3">${idx + 1}</td>
@@ -1853,42 +1884,51 @@ window.renderDashboard = async function(target, period = 'day') {
             </table>
         </div>
     </div>
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8 font-bold uppercase">
-            <div class="glass-card shadow-lg border-t-4 border-[#C5A059] bg-white p-8">
-                <h3 class="text-lg font-bold ace-pink mb-6 border-b-2 border-dashed pb-2 text-center">รายรับวันนี้ (REAL-TIME)</h3>
-                <div class="space-y-3 text-sm font-bold text-slate-600">
-                    ${['เงินสด', 'โอน (QR)', 'โอนบริษัท', 'รูดบัตรเครดิต', 'Shopee', 'Gowabi'].map(method => {
-                        // ✅ คำนวณยอดแยกตามประเภทการชำระเงินจาก incomesToday ที่กรองมาแล้ว
-                        const amt = incomesToday.filter(i => i.payment === method)
-                                    .reduce((s, item) => s + (parseFloat(String(item.total).replace(/[^0-9.-]+/g,"")) || 0), 0);
-                        return `<div class="flex justify-between border-b border-slate-50 pb-1"><span> ${method}</span><span class="text-slate-800">${amt.toLocaleString()}.-</span></div>`;
-                    }).join('')}
-                    <div class="flex justify-between pt-3 text-xl ace-pink border-t-4 border-double font-bold mt-2">
-                        <span>รวมรายรับวันนี้</span><span>${incomesToday.reduce((s, i) => s + (parseFloat(String(i.total).replace(/[^0-9.-]+/g,"")) || 0), 0).toLocaleString()}.-</span>
-                    </div>
-                </div>
-            </div>
 
-            <div class="glass-card shadow-lg border-t-4 border-red-400 bg-slate-50/30 p-8">
-                <h3 class="text-lg font-bold text-red-500 mb-6 border-b-2 border-dashed pb-2 text-center">รายการหักรายจ่าย (วันนี้)</h3>
-                <div class="space-y-4 mb-10 min-h-[120px]">
-                    ${expensesToday.length > 0 ? expensesToday.map(ex => `
-                        <div class="p-4 bg-white rounded-2xl border-2 border-dashed border-red-100 flex justify-between items-center shadow-sm">
-                            <div><p class="text-xs font-bold text-slate-600">📉 ${ex.detail}</p><p class="text-[9px] text-gray-400 font-bold">หักจาก: ${ex.account}</p></div>
-                            <span class="text-red-500 font-bold">- ${parseFloat(ex.amount).toLocaleString()}.-</span>
-                        </div>
-                    `).join('') : '<p class="text-center text-gray-300">ไม่มีข้อมูลรายจ่ายวันนี้</p>'}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8 font-bold uppercase">
+        <div class="glass-card shadow-lg border-t-4 border-[#C5A059] bg-white p-8">
+            <h3 class="text-lg font-bold ace-pink mb-6 border-b-2 border-dashed pb-2 text-center">รายรับวันนี้ (REAL-TIME)</h3>
+            <div class="space-y-3 text-sm font-bold text-slate-600">
+                ${['เงินสด', 'โอน (QR)', 'โอนบริษัท', 'รูดบัตรเครดิต', 'Shopee', 'Gowabi'].map(method => {
+                    const amt = incomesToday
+                        .filter(i => i.payment === method)
+                        .reduce((s, item) => s + (parseFloat(String(item.total).replace(/[^0-9.-]+/g,"")) || 0), 0);
+
+                    return `<div class="flex justify-between border-b border-slate-50 pb-1"><span>${method}</span><span class="text-slate-800">${amt.toLocaleString()}.-</span></div>`;
+                }).join('')}
+                <div class="flex justify-between pt-3 text-xl ace-pink border-t-4 border-double font-bold mt-2">
+                    <span>รวมรายรับวันนี้</span>
+                    <span>${incomesToday.reduce((s, i) => s + (parseFloat(String(i.total).replace(/[^0-9.-]+/g,"")) || 0), 0).toLocaleString()}.-</span>
                 </div>
-                <div class="gold-bg p-5 rounded-[2rem] text-white shadow-xl mt-6 border border-[#E4C580]/50">
-                    <div class="flex justify-between items-center px-2">
+            </div>
+        </div>
+
+        <div class="glass-card shadow-lg border-t-4 border-red-400 bg-slate-50/30 p-8">
+            <h3 class="text-lg font-bold text-red-500 mb-6 border-b-2 border-dashed pb-2 text-center">รายการหักรายจ่าย (วันนี้)</h3>
+            <div class="space-y-4 mb-10 min-h-[120px]">
+                ${expensesToday.length > 0 ? expensesToday.map(ex => `
+                    <div class="p-4 bg-white rounded-2xl border-2 border-dashed border-red-100 flex justify-between items-center shadow-sm">
                         <div>
-                            <p class="text-[10px] uppercase opacity-90 font-bold tracking-wider">สุทธิวันนี้ (NET)</p>
-                            <h2 class="text-3xl font-bold tracking-tighter">฿${(incomesToday.reduce((s, i) => s + (parseFloat(String(i.total).replace(/[^0-9.-]+/g,"")) || 0), 0) - expensesToday.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)).toLocaleString()}.-</h2>
+                            <p class="text-xs font-bold text-slate-600">📉 ${ex.detail}</p>
+                            <p class="text-[9px] text-gray-400 font-bold">หักจาก: ${ex.account}</p>
                         </div>
+                        <span class="text-red-500 font-bold">- ${parseFloat(ex.amount || 0).toLocaleString()}.-</span>
+                    </div>
+                `).join('') : '<p class="text-center text-gray-300">ไม่มีข้อมูลรายจ่ายวันนี้</p>'}
+            </div>
+            <div class="gold-bg p-5 rounded-[2rem] text-white shadow-xl mt-6 border border-[#E4C580]/50">
+                <div class="flex justify-between items-center px-2">
+                    <div>
+                        <p class="text-[10px] uppercase opacity-90 font-bold tracking-wider">สุทธิวันนี้ (NET)</p>
+                        <h2 class="text-3xl font-bold tracking-tighter">฿${(
+                            incomesToday.reduce((s, i) => s + (parseFloat(String(i.total).replace(/[^0-9.-]+/g,"")) || 0), 0)
+                            - expensesToday.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
+                        ).toLocaleString()}.-</h2>
                     </div>
                 </div>
             </div>
-        </div>`;
+        </div>
+    </div>`;
 };
 
 // --- ฟังก์ชันสลับช่วงเวลา Dashboard ---
@@ -2158,83 +2198,126 @@ document.addEventListener('click', function(event) {
 /* =======================================================
     👥 ZONE 3: CUSTOMER MANAGEMENT (ระบบประวัติลูกค้า & OPD)
    ======================================================= */
-window.getCustomersFromSupabase = async function () {
-    if (!window.supabaseClient) return [];
-
-    const pageSize = 1000;
-    let from = 0;
-    let allRows = [];
-    let hasMore = true;
-
-    while (hasMore) {
-        const { data, error } = await window.supabaseClient
-            .from('customers')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .range(from, from + pageSize - 1);
-
-        if (error) {
-            console.error('load customers error:', error);
-            return allRows;
-        }
-
-        const rows = data || [];
-        allRows = allRows.concat(rows);
-
-        if (rows.length < pageSize) {
-            hasMore = false;
-        } else {
-            from += pageSize;
-        }
-    }
-
-    return allRows;
+window.__customerCache = {
+    data: null,
+    loadedAt: 0,
+    loadingPromise: null
 };
 
-window.getCustomersPageFromSupabase = async function (options = {}) {
-    if (!window.supabaseClient) {
-        return { rows: [], count: 0 };
+window.getCustomersFromSupabase = async function (forceReload = false) {
+    if (!window.supabaseClient) return [];
+
+    const now = Date.now();
+    const cacheAgeMs = 15000;
+
+    if (
+        !forceReload &&
+        Array.isArray(window.__customerCache.data) &&
+        (now - window.__customerCache.loadedAt) < cacheAgeMs
+    ) {
+        return window.__customerCache.data;
     }
 
-    const pageSize = Number(options.pageSize || 10);
-    const page = Number(options.page || 1);
-    const keyword = String(options.keyword || '').trim().toLowerCase();
-    const branch = String(options.branch || 'ทั้งหมด').trim();
+    if (!forceReload && window.__customerCache.loadingPromise) {
+        return await window.__customerCache.loadingPromise;
+    }
+
+    window.__customerCache.loadingPromise = (async () => {
+        const pageSize = 1000;
+        let from = 0;
+        let allRows = [];
+        let hasMore = true;
+
+        while (hasMore) {
+            const { data, error } = await window.supabaseClient
+                .from('customers')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .range(from, from + pageSize - 1);
+
+            if (error) {
+                console.error('load customers error:', error);
+                return allRows;
+            }
+
+            const rows = data || [];
+            allRows = allRows.concat(rows);
+
+            if (rows.length < pageSize) {
+                hasMore = false;
+            } else {
+                from += pageSize;
+            }
+        }
+
+        window.__customerCache.data = allRows;
+        window.__customerCache.loadedAt = Date.now();
+        return allRows;
+    })();
+
+    try {
+        return await window.__customerCache.loadingPromise;
+    } finally {
+        window.__customerCache.loadingPromise = null;
+    }
+};
+
+window.clearCustomerCache = function () {
+    window.__customerCache = {
+        data: null,
+        loadedAt: 0,
+        loadingPromise: null
+    };
+};
+
+window.getCustomersPageFromSupabase = async function ({
+    page = 1,
+    pageSize = 10,
+    keyword = '',
+    branch = 'ทั้งหมด'
+} = {}) {
+    if (!window.supabaseClient) {
+        return { rows: [], total: 0 };
+    }
 
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
+
+    const cleanKeyword = String(keyword || '').trim();
+    const cleanBranch = String(branch || 'ทั้งหมด').trim();
 
     let query = window.supabaseClient
         .from('customers')
         .select('*', { count: 'exact' });
 
-    if (branch !== 'ทั้งหมด' && branch !== 'ทุกสาขา') {
-        query = query.in('branch', [branch, `สาขา${branch}`]);
+    if (cleanBranch !== 'ทั้งหมด' && cleanBranch !== 'ทุกสาขา') {
+        query = query.in('branch', [cleanBranch, `สาขา${cleanBranch}`]);
     }
 
-    if (keyword) {
+    if (cleanKeyword) {
+        const kw = cleanKeyword.replace(/,/g, ' ');
         query = query.or([
-            `fullname.ilike.%${keyword}%`,
-            `first_name.ilike.%${keyword}%`,
-            `last_name.ilike.%${keyword}%`,
-            `nickname.ilike.%${keyword}%`,
-            `phone.ilike.%${keyword}%`,
-            `hn.ilike.%${keyword}%`
+            `fullname.ilike.%${kw}%`,
+            `first_name.ilike.%${kw}%`,
+            `last_name.ilike.%${kw}%`,
+            `nickname.ilike.%${kw}%`,
+            `phone.ilike.%${kw}%`,
+            `hn.ilike.%${kw}%`
         ].join(','));
     }
 
     const { data, error, count } = await query
-        .order('created_at', { ascending: false })
+        .order('hn', { ascending: true })
         .range(from, to);
 
     if (error) {
         console.error('getCustomersPageFromSupabase error:', error);
-        return { rows: [], count: 0 };
+        return { rows: [], total: 0 };
     }
 
     return {
-        rows: data || [],
-        count: count || 0
+        rows: Array.isArray(data) ? data : [],
+        total: Number(count || 0)
     };
 };
 
@@ -2391,15 +2474,25 @@ window.saveCustomer = async function () {
     const lastName = document.getElementById("modalLastName")?.value?.trim() || "";
     const phone = document.getElementById("modalPhone")?.value?.trim() || "";
     const branchRaw = document.getElementById("modalBranch")?.value || "สาขาบางพลี";
-	const branch = window.normalizeImportBranch
-    ? window.normalizeImportBranch(branchRaw)
-    : branchRaw;
+    const branch = window.normalizeImportBranch
+        ? window.normalizeImportBranch(branchRaw)
+        : String(branchRaw || "").replace("สาขา", "").trim();
 
     if (!firstName || !phone) {
         await Swal.fire({
             icon: 'warning',
             title: 'ข้อมูลไม่ครบ',
             text: 'กรุณากรอกชื่อจริงและเบอร์โทรศัพท์ค่ะ',
+            confirmButtonColor: '#D48197'
+        });
+        return false;
+    }
+
+    if (!window.supabaseClient) {
+        await Swal.fire({
+            icon: 'error',
+            title: 'ระบบยังไม่พร้อม',
+            text: 'ยังไม่พบการเชื่อมต่อ Supabase',
             confirmButtonColor: '#D48197'
         });
         return false;
@@ -2420,40 +2513,31 @@ window.saveCustomer = async function () {
     const oldAvatar = isEdit ? (window.activeCustomer?.avatar_url || window.activeCustomer?.photo || "") : "";
 
     const payload = {
-    id: window.editingCustomerId || crypto.randomUUID(),
-    hn: hn,
-    first_name: firstName,
-    last_name: lastName,
-    fullname: `${firstName} ${lastName}`.trim(),
-    nickname: document.getElementById("modalNickname")?.value?.trim() || "",
-    phone: phone,
-    email: document.getElementById("modalEmail")?.value?.trim() || "",
-    line_id: document.getElementById("modalLine")?.value?.trim() || "",
-    seller: document.getElementById("modalSeller")?.value?.trim() || "",
-    birth_date: typeof convertThaiDateToISO === "function"
-        ? convertThaiDateToISO(document.getElementById("modalBirthDate")?.value)
-        : null,
-    citizen_id: document.getElementById("modalCitizenId")?.value?.trim() || "",
-    address: document.getElementById("modalAddress")?.value?.trim() || "",
-    allergy: document.getElementById("modalAllergy")?.value?.trim() || "ไม่มี",
-    branch: branch,
-    status: document.getElementById("modalStatus")?.value || "ปกติ",
-    photo: window.currentPhotoData || oldPhoto,
-    avatar_url: window.currentPhotoData || oldAvatar,
-    created_at: isEdit
-        ? (window.activeCustomer?.created_at || new Date().toISOString())
-        : new Date().toISOString()
-};
-
-    if (!window.supabaseClient) {
-        await Swal.fire({
-            icon: 'error',
-            title: 'ระบบยังไม่พร้อม',
-            text: 'ยังไม่พบการเชื่อมต่อ Supabase',
-            confirmButtonColor: '#D48197'
-        });
-        return false;
-    }
+        id: window.editingCustomerId || crypto.randomUUID(),
+        hn: hn,
+        first_name: firstName,
+        last_name: lastName,
+        fullname: `${firstName} ${lastName}`.trim(),
+        nickname: document.getElementById("modalNickname")?.value?.trim() || "",
+        phone: phone,
+        email: document.getElementById("modalEmail")?.value?.trim() || "",
+        line_id: document.getElementById("modalLine")?.value?.trim() || "",
+        seller: document.getElementById("modalSeller")?.value?.trim() || "",
+        birth_date: typeof convertThaiDateToISO === "function"
+            ? convertThaiDateToISO(document.getElementById("modalBirthDate")?.value)
+            : null,
+        citizen_id: document.getElementById("modalCitizenId")?.value?.trim() || "",
+        address: document.getElementById("modalAddress")?.value?.trim() || "",
+        allergy: document.getElementById("modalAllergy")?.value?.trim() || "ไม่มี",
+        chronic: document.getElementById("modalChronic")?.value?.trim() || "",
+        branch: branch,
+        status: document.getElementById("modalStatus")?.value || "ปกติ",
+        photo: window.currentPhotoData || oldPhoto,
+        avatar_url: window.currentPhotoData || oldAvatar,
+        created_at: isEdit
+            ? (window.activeCustomer?.created_at || new Date().toISOString())
+            : new Date().toISOString()
+    };
 
     let data = null;
     let error = null;
@@ -2462,25 +2546,26 @@ window.saveCustomer = async function () {
         ({ data, error } = await window.supabaseClient
             .from("customers")
             .update({
-    hn: payload.hn,
-    first_name: payload.first_name,
-    last_name: payload.last_name,
-    fullname: payload.fullname,
-    nickname: payload.nickname,
-    phone: payload.phone,
-    email: payload.email,
-    line_id: payload.line_id,
-    seller: payload.seller,
-    birth_date: payload.birth_date,
-    citizen_id: payload.citizen_id,
-    address: payload.address,
-    allergy: payload.allergy,
-    branch: payload.branch,
-    status: payload.status,
-    photo: payload.photo,
-    avatar_url: payload.avatar_url,
-    updated_at: new Date().toISOString()
-})
+                hn: payload.hn,
+                first_name: payload.first_name,
+                last_name: payload.last_name,
+                fullname: payload.fullname,
+                nickname: payload.nickname,
+                phone: payload.phone,
+                email: payload.email,
+                line_id: payload.line_id,
+                seller: payload.seller,
+                birth_date: payload.birth_date,
+                citizen_id: payload.citizen_id,
+                address: payload.address,
+                allergy: payload.allergy,
+                chronic: payload.chronic,
+                branch: payload.branch,
+                status: payload.status,
+                photo: payload.photo,
+                avatar_url: payload.avatar_url,
+                updated_at: new Date().toISOString()
+            })
             .eq("id", payload.id)
             .select()
             .single());
@@ -2506,6 +2591,7 @@ window.saveCustomer = async function () {
         return false;
     }
 
+    window.clearCustomerCache();
     window.activeCustomer = data;
     window.editingCustomerId = null;
 
@@ -2526,36 +2612,6 @@ window.saveCustomer = async function () {
     }
 
     return true;
-};
-
-// --- ฟังก์ชันแสดงประวัติลูกค้าโดยละเอียด (ใช้ ID อ้างอิง) ---
-window.showCustomerDetailById = async function(id) {
-    const customerDB = await window.getCustomersFromSupabase();
-    const c = customerDB.find(item => String(item.id) === String(id));
-    if (!c) return;
-
-    const content = document.getElementById('dynamicContent');
-    content.innerHTML = `
-        <div class="glass-card mb-6 border-t-8 border-[#C5A059] animate-in slide-in-from-top duration-500 font-black italic uppercase">
-            <div class="flex flex-col md:flex-row justify-between items-center gap-8 font-black uppercase italic">
-                <div class="flex items-center gap-8">
-                    <div class="w-32 h-32 rounded-[3rem] gold-bg flex items-center justify-center text-white text-5xl font-black shadow-2xl italic">ACE</div>
-                    <div>
-                        <h2 class="text-4xl text-gray-800 tracking-tighter font-black italic uppercase">${c.fullname}</h2>
-                        <p class="text-sm text-gray-400 mt-1 font-black italic uppercase">CODE: ${c.hn || '-'} | สาขา: ${c.branch}</p>
-                    </div>
-                </div>
-                <div class="flex gap-3 font-black uppercase italic">
-                    <button onclick="window.openBillingTab('${c.fullname}', true, '${c.id}')" class="gold-bg text-white px-8 py-4 rounded-[1.5rem] font-black text-xs shadow-xl italic">+ เพิ่มใบเสร็จ</button>
-                    <button onclick="loadPage(2, 'จัดการลูกค้า/ประวัติ')" class="bg-white border-2 border-gray-100 px-8 py-4 rounded-[1.5rem] text-xs font-black shadow-sm italic uppercase">🔙 กลับ</button>
-                </div>
-            </div>
-        </div>
-        <div class="glass-card font-black italic uppercase">
-            <h4 class="ace-pink uppercase mb-6 underline decoration-pink-100 text-lg font-black tracking-tighter">👤 ข้อมูลพื้นฐานส่วนบุคคล</h4>
-            <p class="text-gray-800 uppercase italic font-black">เบอร์โทร: ${c.phone}</p>
-            <p class="text-red-500 mt-2 italic font-black">🚨 ประวัติแพ้ยา: ${c.allergy || 'ไม่มีข้อมูล'}</p>
-        </div>`;
 };
 
 function showCustomerProfile(hn) {
@@ -3274,6 +3330,8 @@ window.deleteCustomer = async function (customerId) {
             return;
         }
 
+        window.clearCustomerCache();
+
         await Swal.fire({
             icon: 'success',
             title: 'ลบข้อมูลสำเร็จ',
@@ -3357,11 +3415,27 @@ document.getElementById("profileOPDBtn").onclick = () => {
         return;
     }
 
-    const hn = wrap.dataset.hn;
-    if (hn) window.printOPD(hn);
+    const customerId = wrap.dataset.customerId;
+    if (customerId) window.printOPD(customerId);
 };
 
-document.getElementById("profileReceiptBtn").onclick = () => {
+wrap.addEventListener("click", (e) => {
+    const btn = e.target.closest(".profileTab");
+    if (!btn) return;
+
+    wrap.querySelectorAll(".profileTab").forEach((x) => {
+        x.classList.remove("bg-pink-50", "text-[#D48197]");
+        x.classList.add("bg-white", "text-slate-600");
+    });
+
+    btn.classList.add("bg-pink-50", "text-[#D48197]");
+    btn.classList.remove("bg-white", "text-slate-600");
+
+    const customerId = wrap.dataset.customerId;
+    if (customerId) window.renderProfileTab(btn.dataset.tab, customerId);
+});
+
+document.getElementById("profileReceiptBtn").onclick = async () => {
     if (!window.hasActionPermission('customer_edit')) {
         Swal.fire({
             icon: 'warning',
@@ -3373,49 +3447,18 @@ document.getElementById("profileReceiptBtn").onclick = () => {
     }
 
     const customerId = wrap.dataset.customerId;
-    if (customerId) {
-        const customerDB = window.getCustomers() || [];
-        const cust = customerDB.find(c => String(c.id) === String(customerId));
-        if (cust) {
-            wrap.classList.add("hidden");
-            wrap.classList.remove("flex");
-            window.openBillingTab(cust.fullname, true, cust.id);
-        }
+    if (!customerId) return;
+
+    const customerDB = await window.getCustomersFromSupabase();
+    const cust = customerDB.find(c => String(c.id) === String(customerId));
+
+    if (cust) {
+        wrap.classList.add("hidden");
+        wrap.classList.remove("flex");
+        window.openBillingTab(cust.fullname || '', true, cust.id);
     }
 };
-
-wrap.addEventListener("click", (e) => {
-    const btn = e.target.closest(".profileTab");
-    if (!btn) return;
-    wrap.querySelectorAll(".profileTab").forEach((x) => {
-        x.classList.remove("bg-pink-50", "text-[#D48197]");
-        x.classList.add("bg-white", "text-slate-600");
-    });
-    btn.classList.add("bg-pink-50", "text-[#D48197]");
-    btn.classList.remove("bg-white", "text-slate-600");
-
-    const hn = wrap.dataset.hn; // เปลี่ยนจาก index เป็น hn
-    if (hn) renderProfileTab(btn.dataset.tab, hn);
-});
-
-
-    // 📌 กรณีหน้าอื่นๆ (คงเดิมหรือปรับปรุงตามความเหมาะสม)
-    if (tab === "appointments") {
-        const appointmentDB = JSON.parse(localStorage.getItem("appointmentDB")) || [];
-        const items = appointmentDB.filter(a => String(a.customer_id) === String(c.id));
-        box.innerHTML = items.length ? `<div class="space-y-2">${items.map(x => `<div class="border border-pink-50 rounded-2xl p-4 bg-white flex justify-between items-center shadow-sm"><div><div class="font-bold text-slate-700 text-sm">${x.date} | ${x.time}</div><div class="text-[10px] text-slate-400 uppercase font-bold mt-1">รายการ: ${x.course || '-'}</div></div><span class="px-3 py-1 rounded-full text-[9px] font-bold bg-blue-50 text-blue-500 border border-blue-100">${x.status}</span></div>`).join("")}</div>` : `<div class="text-center py-10 text-slate-300 italic text-sm">ไม่มีประวัตินัดหมายค่ะ</div>`;
-    }
-
-    if (tab === "receipts") {
-    const accountDB = JSON.parse(localStorage.getItem("accountDB")) || [];
-    const items = accountDB.filter(x => String(x.customer_id) === String(c.id));
-    box.innerHTML = items.length ? `<div class="space-y-2">${items.map((x, i) => `<div class="border border-pink-50 rounded-2xl p-4 bg-white flex items-center justify-between shadow-sm"><div><div class="font-bold text-slate-700 text-sm">วันที่ ${x.date} | ฿${parseFloat(String(x.total).replace(/[^0-9.-]+/g,"")).toLocaleString()}</div><div class="text-[10px] text-slate-400 font-bold uppercase mt-1">วิธีชำระ: ${x.payment}</div></div><button onclick="window.printReceipt('${x.id}', '${c.id}', 'A5')" class="px-4 py-2 rounded-xl bg-[#D48197] text-white text-[10px] font-bold shadow-sm hover:bg-black transition-all">พิมพ์ใบเสร็จ</button></div>`).join("")}</div>` : `<div class="text-center py-10 text-slate-300 italic text-sm">ไม่มีประวัติใบเสร็จค่ะ</div>`;
-}
-
-    if (tab === "files") {
-        const items = c.files || [];
-        box.innerHTML = items.length ? `<div class="grid grid-cols-2 gap-4">${items.map(x => `<div class="border border-pink-50 rounded-2xl p-4 bg-white text-xs font-bold text-slate-500 shadow-sm">${x.name || x}</div>`).join("")}</div>` : `<div class="text-center py-10 text-slate-300 italic text-sm">ยังไม่มีเอกสารแนบค่ะ</div>`;
-    }
+   
 }
 
 /* =======================================================
@@ -3578,7 +3621,7 @@ window.renderProfileTab = async function(tab, customerId) {
                 ${items.map(x => `
                     <div class="border border-pink-50 rounded-2xl p-4 bg-white flex justify-between items-center shadow-sm">
                         <div>
-                            <div class="font-bold text-slate-700 text-sm">${x.date || '-'} | ${x.time || '-'}</div>
+                            <div class="font-bold text-slate-500 text-sm">${x.date || '-'} | ${x.time || '-'}</div>
                             <div class="text-[10px] text-slate-400 uppercase font-bold mt-1">รายการ: ${x.course || '-'}</div>
                         </div>
                         <span class="px-3 py-1 rounded-full text-[9px] font-bold bg-blue-50 text-blue-500 border border-blue-100">${x.status || '-'}</span>
@@ -3602,7 +3645,7 @@ window.renderProfileTab = async function(tab, customerId) {
                 ${items.map(x => `
                     <div class="border border-pink-50 rounded-2xl p-4 bg-white flex items-center justify-between shadow-sm">
                         <div>
-                            <div class="font-bold text-slate-700 text-sm">
+                            <div class="font-bold text-slate-500 text-sm">
                                 วันที่ ${x.date || '-'} | ฿${parseFloat(String(x.total || 0).replace(/[^0-9.-]+/g, "") || 0).toLocaleString()}
                             </div>
                             <div class="text-[10px] text-slate-400 font-bold uppercase mt-1">
@@ -3833,13 +3876,17 @@ window.renderCustomerTable = function (data) {
             <img src="${c.photo || c.avatar_url || "https://placehold.co/150"}" class="shadow-sm mx-auto" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid #D48197;">
           </td>
           <td class="p-3 text-slate-400 font-bold">${createdDisplay}</td>
-          <td class="p-3 font-bold text-slate-700">${c.hn || "-"}</td>
-          <td class="p-3 font-bold">${c.fullname || "-"}</td>
+          
+          <td class="p-3 font-normal text-slate-500">${c.hn || "-"}</td>
+          
+          <td class="p-3 font-normal text-slate-600">${c.fullname || "-"}</td>
+          
           <td class="p-3 italic text-slate-500">${c.nickname || "-"}</td>
-          <td class="p-3 font-mono">${c.phone || "-"}</td>
+          <td class="p-3 font-mono text-slate-500">${c.phone || "-"}</td>
           <td class="p-3">
             <span class="bg-pink-50 text-[#D48197] px-2 py-1 rounded-lg text-[9px] font-black">${branchDisplay}</span>
           </td>
+         
           <td class="p-3 text-center min-w-[160px] relative">
             <div class="inline-flex items-center bg-[#D48197] text-white rounded-full p-1 shadow-md relative">
 
@@ -3880,7 +3927,7 @@ window.renderCustomerTable = function (data) {
 };
 
 window.applyCustomerFilter = async function () {
-    const keyword = (document.getElementById("customerSearchInput")?.value || "").toLowerCase().trim();
+    const keyword = (document.getElementById("customerSearchInput")?.value || "").trim();
     const tableBranchSelect = document.getElementById("branchFilterSelect")?.value || "ทั้งหมด";
     const pageSize = Number(document.getElementById("pageSizeSelect")?.value || "10");
 
@@ -3888,73 +3935,36 @@ window.applyCustomerFilter = async function () {
         window.currentCustomerPage = 1;
     }
 
-    // ✅ ดึงจาก Supabase โดยตรง
-    const db = await window.getCustomersFromSupabase();
-
-    const filtered = db.filter((c) => {
-        const fullName = String(
-            c.fullname || `${c.first_name || ''} ${c.last_name || ''}`.trim()
-        ).toLowerCase();
-
-        const nickname = String(c.nickname || '').toLowerCase();
-        const hn = String(c.hn || '').toLowerCase();
-        const phone = String(c.phone || '').toLowerCase();
-        const branch = String(c.branch || '').trim();
-
-        // ✅ HN แบบย่อ
-        // เช่น พิมพ์ 0001 / 690001 / BP-690001 / HN-BP-690001 ก็หาเจอ
-        const shortHN = hn
-            .replace(/^hn-/i, '')
-            .replace(/^hn/i, '')
-            .trim();
-
-        const k =
-            !keyword ||
-            fullName.includes(keyword) ||
-            nickname.includes(keyword) ||
-            phone.includes(keyword) ||
-            hn.includes(keyword) ||
-            shortHN.includes(keyword) ||
-            hn.replace(/-/g, '').includes(keyword.replace(/-/g, ''));
-
-        const b =
-            tableBranchSelect === "ทั้งหมด" ||
-            tableBranchSelect === "ทุกสาขา" ||
-            branch === tableBranchSelect ||
-            branch === `สาขา${tableBranchSelect}`;
-
-        return k && b;
+    const result = await window.getCustomersPageFromSupabase({
+        page: window.currentCustomerPage,
+        pageSize,
+        keyword,
+        branch: tableBranchSelect
     });
 
-    // ✅ เรียง HN จากน้อยไปมาก
-    filtered.sort((a, b) => {
-        const getHNNumber = (hn) => {
-            const match = String(hn || '').trim().toUpperCase().match(/(\d+)$/);
-            return match ? parseInt(match[1], 10) : 0;
-        };
+    const pageData = result.rows || [];
+    const totalItems = Number(result.total || 0);
+    const totalPages = Math.ceil(totalItems / pageSize) || 1;
 
-        return getHNNumber(a.hn) - getHNNumber(b.hn);
-    });
-
-    window.currentCustomerFilteredData = filtered;
-
-    const totalPages = Math.ceil(filtered.length / pageSize) || 1;
+    window.currentCustomerFilteredData = pageData;
+    window.currentCustomerTotalItems = totalItems;
 
     if (window.currentCustomerPage > totalPages) {
         window.currentCustomerPage = totalPages;
+        return await window.applyCustomerFilter();
     }
 
-    const start = (window.currentCustomerPage - 1) * pageSize;
-    const pageData = filtered.slice(start, start + pageSize);
-
-    // ✅ แสดงจำนวนลูกค้าทั้งหมด
     const totalCountEl = document.getElementById("customerTotalCount");
     if (totalCountEl) {
-        totalCountEl.innerText = `ลูกค้าทั้งหมด ${filtered.length.toLocaleString()} รายการ`;
+        if (tableBranchSelect === "ทั้งหมด" || tableBranchSelect === "ทุกสาขา") {
+            totalCountEl.innerText = `ลูกค้าทั้งหมด ${totalItems.toLocaleString()} รายการ`;
+        } else {
+            totalCountEl.innerText = `ลูกค้าสาขา${tableBranchSelect} ${totalItems.toLocaleString()} รายการ`;
+        }
     }
 
     window.renderCustomerTable(pageData);
-    renderCustomerPagination(filtered.length, pageSize);
+    renderCustomerPagination(totalItems, pageSize);
 };
 
 function renderCustomerPagination(totalItems, pageSize) {
@@ -3994,7 +4004,7 @@ function renderCustomerPagination(totalItems, pageSize) {
 
 window.changeCustomerPage = async function (page) {
     const pageSize = Number(document.getElementById("pageSizeSelect")?.value || "10");
-    const totalItems = Array.isArray(window.currentCustomerFilteredData) ? window.currentCustomerFilteredData.length : 0;
+    const totalItems = Number(window.currentCustomerTotalItems || 0);
     const totalPages = Math.ceil(totalItems / pageSize) || 1;
 
     if (page < 1) page = 1;
@@ -4489,9 +4499,11 @@ window.importLegacyCustomersToSupabase = async function(rows, selectedBranch) {
         });
     }
 
-    if (typeof window.applyCustomerFilter === 'function') {
-        await window.applyCustomerFilter();
-    }
+    window.clearCustomerCache();
+
+if (typeof window.applyCustomerFilter === 'function') {
+    await window.applyCustomerFilter();
+}
 };
 /* =======================================================
    📅 ZONE 4: APPOINTMENT & QUEUE (ระบบนัดหมาย & จัดการคิว)
@@ -4935,7 +4947,7 @@ window.searchCustomerForApp = function(val) {
             )"
                  class="p-4 hover:bg-pink-50 cursor-pointer border-b border-pink-100 flex justify-between font-normal bg-white transition-colors">
                 <div class="text-left">
-                    <span class="text-sm font-bold text-slate-700">${c.fullname || '-'}</span>
+                    <span class="text-sm font-bold text-slate-500">${c.fullname || '-'}</span>
                     <p class="text-[9px] text-[#D48197] font-bold uppercase italic">📍 สาขาต้นสังกัด: ${c.branch || 'ไม่ระบุ'}</p>
                 </div>
                 <span class="text-[10px] bg-slate-100 px-3 py-1 rounded-full uppercase font-bold h-max">${c.hn || c.id || '-'}</span>
@@ -6328,7 +6340,7 @@ window.notifyNextQueue = async function() {
             title: '<span class="ace-pink font-bold italic text-2xl">🔔 เรียกคิวคนไข้</span>',
             html: `
                 <div class="p-6 text-center font-light">
-                    <p class="text-2xl font-bold text-slate-700 mb-1">${nextInLine.customer_name}</p>
+                    <p class="text-2xl font-bold text-slate-500 mb-1">${nextInLine.customer_name}</p>
                     <p class="text-[#D48197] italic text-base mb-4">${nextInLine.course}</p>
                     <div class="bg-slate-50 rounded-[2rem] p-5 border border-slate-100 space-y-3">
                         <div class="flex justify-between items-center px-2">
@@ -6539,7 +6551,7 @@ window.getRemainingCustomerCoursesOptions = function(customerId, selectedCourse 
                 data-doctordf="${c.doctorDF || 0}"
                 ${window.normalizeCourseName(c.name) === window.normalizeCourseName(selectedCourse) ? 'checked' : ''}>
             <div class="flex-1">
-                <div class="text-sm font-bold text-slate-700">${c.name}</div>
+                <div class="text-sm font-bold text-slate-500">${c.name}</div>
                 <div class="text-[10px] text-[#D48197] font-bold uppercase">${c.displayLabel}</div>
             </div>
         </label>
@@ -7507,17 +7519,17 @@ window.openBillingTab = function(customerName = '', isStandalone = false, custom
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div class="border border-cyan-200 bg-white rounded-2xl p-4 text-[11px] text-cyan-600 space-y-2 shadow-sm">
-                            <p class="flex justify-between border-b border-cyan-50 pb-1"><span>รหัสคนไข้:</span> <span id="billHN" class="font-bold text-slate-700">-</span></p>
-                            <p class="flex justify-between border-b border-cyan-50 pb-1"><span>ชื่อ-สกุล:</span> <span id="billFullName" class="font-bold text-slate-700">-</span></p>
-                            <p class="flex justify-between"><span>ชื่อเล่น:</span> <span id="billNickName" class="font-bold text-slate-700">-</span></p>
+                            <p class="flex justify-between border-b border-cyan-50 pb-1"><span>รหัสคนไข้:</span> <span id="billHN" class="font-bold text-slate-500">-</span></p>
+                            <p class="flex justify-between border-b border-cyan-50 pb-1"><span>ชื่อ-สกุล:</span> <span id="billFullName" class="font-bold text-slate-500">-</span></p>
+                            <p class="flex justify-between"><span>ชื่อเล่น:</span> <span id="billNickName" class="font-bold text-slate-500">-</span></p>
                         </div>
                         <div class="border border-cyan-200 bg-white rounded-2xl p-4 text-[11px] text-cyan-600 space-y-2 shadow-sm">
-                            <p class="flex justify-between border-b border-cyan-50 pb-1"><span>สัญชาติ:</span> <span id="billNationality" class="font-bold text-slate-700">-</span></p>
-                            <p class="flex justify-between border-b border-cyan-50 pb-1"><span>เบอร์โทร:</span> <span id="billPhone" class="font-bold text-slate-700">-</span></p>
-                            <p class="flex justify-between"><span>สิทธิรักษา:</span> <span id="billRight" class="font-bold text-slate-700">ทั่วไป</span></p>
+                            <p class="flex justify-between border-b border-cyan-50 pb-1"><span>สัญชาติ:</span> <span id="billNationality" class="font-bold text-slate-500">-</span></p>
+                            <p class="flex justify-between border-b border-cyan-50 pb-1"><span>เบอร์โทร:</span> <span id="billPhone" class="font-bold text-slate-500">-</span></p>
+                            <p class="flex justify-between"><span>สิทธิรักษา:</span> <span id="billRight" class="font-bold text-slate-500">ทั่วไป</span></p>
                         </div>
                         <div class="border border-cyan-200 bg-white rounded-2xl p-4 text-[11px] text-cyan-600 space-y-2 shadow-sm">
-                            <p class="flex justify-between border-b border-cyan-50 pb-1"><span>วงเงิน:</span> <span id="billCredit" class="font-bold text-slate-700">0</span></p>
+                            <p class="flex justify-between border-b border-cyan-50 pb-1"><span>วงเงิน:</span> <span id="billCredit" class="font-bold text-slate-500">0</span></p>
                             <div class="mt-1">
                                 <span class="text-[9px] text-red-500 font-bold flex items-center gap-1 w-max mb-1">🚨 ประวัติการแพ้</span>
                                 <p id="billAllergy" class="font-bold text-red-600 text-[10px]">-</p>
@@ -8986,7 +8998,7 @@ window.updateStockTable = function() {
             <td class="p-2 text-center text-[10px] text-slate-400 font-normal">${idx + 1}</td>
             <td class="p-2 text-center text-slate-500 italic font-light">${s.receiveDate || s.date || '-'}</td>
             <td class="p-4 text-left">
-                <div class="font-bold text-slate-700 text-[14px] leading-tight">${s.name || '-'}</div>
+                <div class="font-bold text-slate-500 text-[14px] leading-tight">${s.name || '-'}</div>
                 <div class="text-[9px] text-pink-400 italic mt-1 font-light uppercase">
                     📦 หน่วยเรียก: ${s.unit || 'ชิ้น'} ${s.branch ? `| สาขา: ${s.branch}` : ''}
                 </div>
@@ -9419,7 +9431,7 @@ window.openDrugMasterSettings = function() {
     const drugDB = JSON.parse(localStorage.getItem('drugMasterDB')) || [];
     const drugListHtml = drugDB.length > 0 ? drugDB.map((d, idx) => `
         <tr class="border-b border-pink-50 text-[10px]">
-            <td class="p-2 font-bold text-slate-700">${d.name}</td>
+            <td class="p-2 font-bold text-slate-500">${d.name}</td>
             <td class="p-2 text-center"><button onclick="deleteDrugMaster(${idx})" class="text-red-400 hover:text-red-600 transition-all uppercase font-bold">[ลบ]</button></td>
         </tr>
     `).join('') : `<tr><td colspan="2" class="p-4 text-center text-slate-300 italic text-[10px]">ยังไม่มีข้อมูลที่บันทึกไว้</td></tr>`;
@@ -10214,12 +10226,12 @@ window.viewStaffDetailDirect = async function(staff) {
                     <div class="bg-white p-10 rounded-[4rem] shadow-xl border border-pink-50">
                         <h3 class="text-lg font-black text-slate-700 mb-8 border-b border-dashed border-pink-200 pb-4 italic">📋 ข้อมูลประวัติโดยละเอียด</h3>
                         <div class="grid grid-cols-2 gap-y-6 gap-x-10">
-                            <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">ชื่อเล่น</label><p class="font-bold text-slate-700 border-b border-slate-50 pb-1">${staff.nickname || '-'}</p></div>
+                            <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">ชื่อเล่น</label><p class="font-bold text-slate-500 border-b border-slate-50 pb-1">${staff.nickname || '-'}</p></div>
                             <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">เบอร์โทรศัพท์</label><p class="font-bold text-blue-500 border-b border-slate-50 pb-1">${staff.phone || '-'}</p></div>
-                            <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">วันเริ่มงาน</label><p class="font-bold text-slate-700 border-b border-slate-50 pb-1">${staff.startDate || staff.start_date || '-'}</p></div>
+                            <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">วันเริ่มงาน</label><p class="font-bold text-slate-500 border-b border-slate-50 pb-1">${staff.startDate || staff.start_date || '-'}</p></div>
                             <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">สถานะ</label><p class="font-bold text-green-500 border-b border-slate-50 pb-1">${staff.status || staff.employment_status || '-'}</p></div>
-                            <div><label class="text-[10px] text-[#D48197] font-bold uppercase italic block">🏦 ธนาคาร</label><p class="font-bold text-slate-700 border-b border-slate-50 pb-1">${staff.bankName || staff.bank_name || '-'}</p></div>
-                            <div><label class="text-[10px] text-[#D48197] font-bold uppercase italic block">💳 เลขที่บัญชี</label><p class="font-bold text-slate-700 border-b border-slate-50 pb-1">${staff.bankAcc || staff.bank_acc || '-'}</p></div>
+                            <div><label class="text-[10px] text-[#D48197] font-bold uppercase italic block">🏦 ธนาคาร</label><p class="font-bold text-slate-500 border-b border-slate-50 pb-1">${staff.bankName || staff.bank_name || '-'}</p></div>
+                            <div><label class="text-[10px] text-[#D48197] font-bold uppercase italic block">💳 เลขที่บัญชี</label><p class="font-bold text-slate-500 border-b border-slate-50 pb-1">${staff.bankAcc || staff.bank_acc || '-'}</p></div>
                             
                             ${isAdmin ? `
                                 <div class="col-span-2">
@@ -14913,7 +14925,7 @@ window.showAppointmentNotifications = function() {
         ? list.map(a => `
             <div class="flex justify-between items-center p-3 border-b border-pink-50 hover:bg-pink-50/30 transition-all text-left">
                 <div>
-                    <p class="text-xs font-bold text-slate-700">${a.customerName || 'ไม่ระบุชื่อ'}</p>
+                    <p class="text-xs font-bold text-slate-500">${a.customerName || 'ไม่ระบุชื่อ'}</p>
                     <p class="text-[10px] text-[#D48197] font-bold uppercase italic">${a.course || 'ไม่ระบุรายการ'}</p>
                 </div>
                 <div class="text-right">

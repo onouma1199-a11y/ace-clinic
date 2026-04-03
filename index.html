@@ -727,39 +727,6 @@ window.filterByBranch = function(list = [], getBranchFn) {
 
 /* -------------------- SUPABASE: CUSTOMER DATA LAYER -------------------- */
 
-// 📥 ดึงลูกค้าจาก Supabase (ใช้ ID เป็นตัวกรองหลักแทน Index)
-window.getCustomersFromSupabase = async function () {
-    if (!window.supabaseClient) return [];
-
-    const pageSize = 1000;
-    let from = 0;
-    let allRows = [];
-    let hasMore = true;
-
-    while (hasMore) {
-        const { data, error } = await window.supabaseClient
-            .from('customers')
-            .select('*')
-            .range(from, from + pageSize - 1);
-
-        if (error) {
-            console.error('load customers error:', error);
-            return allRows;
-        }
-
-        const rows = data || [];
-        allRows = allRows.concat(rows);
-
-        if (rows.length < pageSize) {
-            hasMore = false;
-        } else {
-            from += pageSize;
-        }
-    }
-
-    return allRows;
-};
-
 window.getStaffFromSupabase = async function() {
     try {
         if (!window.supabaseClient) return [];
@@ -2222,6 +2189,53 @@ window.getCustomersFromSupabase = async function () {
     }
 
     return allRows;
+};
+
+window.getCustomersPageFromSupabase = async function (options = {}) {
+    if (!window.supabaseClient) {
+        return { rows: [], count: 0 };
+    }
+
+    const pageSize = Number(options.pageSize || 10);
+    const page = Number(options.page || 1);
+    const keyword = String(options.keyword || '').trim().toLowerCase();
+    const branch = String(options.branch || 'ทั้งหมด').trim();
+
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = window.supabaseClient
+        .from('customers')
+        .select('*', { count: 'exact' });
+
+    if (branch !== 'ทั้งหมด' && branch !== 'ทุกสาขา') {
+        query = query.in('branch', [branch, `สาขา${branch}`]);
+    }
+
+    if (keyword) {
+        query = query.or([
+            `fullname.ilike.%${keyword}%`,
+            `first_name.ilike.%${keyword}%`,
+            `last_name.ilike.%${keyword}%`,
+            `nickname.ilike.%${keyword}%`,
+            `phone.ilike.%${keyword}%`,
+            `hn.ilike.%${keyword}%`
+        ].join(','));
+    }
+
+    const { data, error, count } = await query
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+    if (error) {
+        console.error('getCustomersPageFromSupabase error:', error);
+        return { rows: [], count: 0 };
+    }
+
+    return {
+        rows: data || [],
+        count: count || 0
+    };
 };
 
 // --- ฟังก์ชันเมื่อกดปุ่ม + เพิ่มใบเสร็จ จากหน้าหลัก ---
@@ -4070,26 +4084,45 @@ window.cleanImportCitizenId = function(val) {
 };
 
 window.parseImportBirthDate = function(val) {
-    if (!val) return null;
+    if (!val || val === '0' || val === 'ไม่ระบุ') return null;
 
-    if (val instanceof Date && !isNaN(val.getTime())) {
-        return val.toISOString().split('T')[0];
+    let raw = String(val).trim();
+
+    const thaiMonths = [
+        "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+        "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"
+    ];
+    const thaiShortMonths = [
+        "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+        "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."
+    ];
+
+    for (let i = 0; i < 12; i++) {
+        if (raw.includes(thaiMonths[i]) || raw.includes(thaiShortMonths[i])) {
+            const parts = raw.split(/\s+/);
+            if (parts.length >= 3) {
+                let d = String(parts[0]).padStart(2, '0');
+                let m = String(i + 1).padStart(2, '0');
+                let y = parseInt(parts[2], 10);
+                if (y > 2400) y -= 543;
+                return `${y}-${m}-${d}`;
+            }
+        }
     }
 
-    const raw = String(val).trim();
-    if (!raw) return null;
+    if (!isNaN(val) && Number(val) > 10000) {
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+        const date = new Date(excelEpoch.getTime() + Number(val) * 86400000);
+        return date.toISOString().split('T')[0];
+    }
 
-    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-
-    const slash = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (slash) {
-        let day = parseInt(slash[1], 10);
-        let month = parseInt(slash[2], 10);
-        let year = parseInt(slash[3], 10);
-
-        if (year > 2400) year -= 543;
-
-        return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const numParts = raw.split(/[\/-]/);
+    if (numParts.length === 3) {
+        let d = String(numParts[0]).padStart(2, '0');
+        let m = String(numParts[1]).padStart(2, '0');
+        let y = parseInt(numParts[2], 10);
+        if (y > 2400) y -= 543;
+        return `${y}-${m}-${d}`;
     }
 
     return null;
@@ -4248,204 +4281,218 @@ window.importLegacyCustomersToSupabase = async function(rows, selectedBranch) {
     const branch = window.normalizeImportBranch(selectedBranch);
     const possibleBranches = [branch, `สาขา${branch}`];
 
-    const { data: existingRows, error: existingError } = await window.supabaseClient
-        .from('customers')
-        .select('id, hn, old_hn, branch')
-        .in('branch', possibleBranches);
-
-    if (existingError) {
-        Swal.close();
-        console.error('load existing customers error:', existingError);
-        return Swal.fire('Error', existingError.message || 'โหลดข้อมูลลูกค้าเดิมไม่สำเร็จ', 'error');
-    }
+    Swal.fire({
+        title: 'กำลังตรวจสอบข้อมูลเดิม',
+        text: 'กรุณารอสักครู่นะคะ...',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+    });
 
     const oldHNMap = {};
     const existingHNSet = new Set();
+    let from = 0;
+    const step = 1000;
+    let hasMore = true;
 
-    (existingRows || []).forEach(item => {
-        const normalizedBranch = window.normalizeImportBranch(item.branch);
-        const oldHNKey = `${String(item.old_hn || '').trim().toUpperCase()}|${normalizedBranch}`;
-        const hnKey = `${String(item.hn || '').trim().toUpperCase()}|${normalizedBranch}`;
+    while (hasMore) {
+        const { data: existingRows, error: existingError } = await window.supabaseClient
+            .from('customers')
+            .select('id, hn, old_hn, branch')
+            .in('branch', possibleBranches)
+            .range(from, from + step - 1);
 
-        if (String(item.old_hn || '').trim()) {
-            oldHNMap[oldHNKey] = item;
+        if (existingError) {
+            Swal.close();
+            console.error('load existing customers error:', existingError);
+            return Swal.fire('Error', 'โหลดข้อมูลลูกค้าเดิมไม่สำเร็จ', 'error');
         }
 
-        if (String(item.hn || '').trim()) {
-            existingHNSet.add(hnKey);
-        }
-    });
+        const rowsInPage = Array.isArray(existingRows) ? existingRows : [];
+        if (rowsInPage.length < step) hasMore = false;
+
+        rowsInPage.forEach(item => {
+            const normalizedBranch = window.normalizeImportBranch(item.branch);
+            const oldHNKey = `${String(item.old_hn || '').trim().toUpperCase()}|${normalizedBranch}`;
+            const hnOnly = String(item.hn || '').trim().toUpperCase();
+
+            if (String(item.old_hn || '').trim()) {
+                oldHNMap[oldHNKey] = item;
+            }
+
+            if (hnOnly) {
+                existingHNSet.add(hnOnly);
+            }
+        });
+
+        from += step;
+    }
 
     let nextRunningNo = await window.getNextCustomerHNRunning(branch);
 
     const payload = [];
     const skipped = [];
     const usedHNSet = new Set();
+    const uniqueOldHNInFile = new Set();
 
     rows.forEach((row, index) => {
-        const oldHNRaw = window.pickImportField(row, [
-            'hn', 'HN', 'Hn', 'old_hn', 'Old HN', 'รหัสลูกค้า', 'รหัสผู้ป่วย', 'เลขที่ HN'
-        ]);
+        const oldHNRaw = String(
+            window.pickImportField(row, ['รหัสลูกค้า', 'hn', 'old_hn']) || ''
+        ).trim().toUpperCase();
 
-        const oldHN = String(oldHNRaw || '').trim().toUpperCase();
-
-        const fullnameRaw = window.pickImportField(row, [
-            'fullname', 'full_name', 'ชื่อ-นามสกุล', 'ชื่อ นามสกุล', 'ชื่อสกุล'
-        ]);
-
-        const firstNameRaw = window.pickImportField(row, [
-            'first_name', 'ชื่อจริง', 'ชื่อ'
-        ]);
-
-        const lastNameRaw = window.pickImportField(row, [
-            'last_name', 'นามสกุล'
-        ]);
-
-        const nickname = window.cleanImportText(window.pickImportField(row, [
-            'nickname', 'nick_name', 'ชื่อเล่น'
-        ]));
-
-        const phone = window.cleanImportPhone(window.pickImportField(row, [
-            'phone', 'เบอร์โทร', 'โทรศัพท์', 'โทร', 'mobile', 'mobile_phone'
-        ]));
-
-        const email = window.cleanImportText(window.pickImportField(row, [
-            'email', 'อีเมล'
-        ]));
-
-        const lineId = window.cleanImportText(window.pickImportField(row, [
-            'line_id', 'line', 'ไลน์', 'lineid'
-        ]));
-
-        const seller = window.cleanImportText(window.pickImportField(row, [
-            'seller', 'seller_name', 'sales', 'เซลล์', 'ชื่อเซลล์', 'ผู้ดูแล', 'ชื่อเซลล์ดูแล'
-        ]));
-
-        const citizenId = window.cleanImportCitizenId(window.pickImportField(row, [
-            'citizen_id', 'เลขบัตรประชาชน', 'เลขประชาชน', 'id_card'
-        ]));
-
-        const birthDate = window.parseImportBirthDate(window.pickImportField(row, [
-            'birth_date', 'วันเกิด', 'dob'
-        ]));
-
-        const address = window.buildImportAddress(row);
-
-        const allergy = window.cleanImportText(window.pickImportField(row, [
-            'allergy', 'drug_allergy', 'แพ้ยา'
-        ]));
-
-        const chronic = window.cleanImportText(window.pickImportField(row, [
-            'chronic', 'โรคประจำตัว', 'โรคประจําตัว'
-        ]));
-
-        const status = window.cleanImportText(window.pickImportField(row, [
-            'status', 'สถานะ'
-        ])) || 'active';
-
-        const nameParts = window.extractImportNameParts(fullnameRaw);
-
-        const first_name = window.cleanImportText(firstNameRaw) || nameParts.first_name;
-        const last_name = window.cleanImportText(lastNameRaw) || nameParts.last_name;
-        const fullname = window.cleanImportText(fullnameRaw) || [first_name, last_name].filter(Boolean).join(' ').trim();
-
-        if (!oldHN && !fullname && !phone) {
-            skipped.push(`แถว ${index + 2}: ไม่พบ HN/ชื่อ/เบอร์`);
+        if (!oldHNRaw) {
+            skipped.push(`แถว ${index + 2}: ไม่มีรหัสลูกค้าเก่า`);
             return;
         }
 
-        if (!oldHN) {
-            skipped.push(`แถว ${index + 2}: ไม่มี old_hn`);
+        const fileKey = `${oldHNRaw}|${branch}`;
+        if (uniqueOldHNInFile.has(fileKey)) {
+            skipped.push(`แถว ${index + 2}: old_hn ซ้ำในไฟล์`);
             return;
         }
+        uniqueOldHNInFile.add(fileKey);
 
-        const mapKey = `${oldHN}|${branch}`;
-        const existingCustomer = oldHNMap[mapKey];
+        let fName = window.cleanImportText(window.pickImportField(row, ['ชื่อ', 'ชื่อจริง']));
+        let lName = window.cleanImportText(window.pickImportField(row, ['นามสกุล']));
 
-        let newHN = '';
-
-        if (existingCustomer?.hn) {
-            const existingHN = String(existingCustomer.hn).trim().toUpperCase();
-            const correctPrefix = `HN-${window.getImportBranchCode(branch)}-`;
-
-            if (existingHN.startsWith(correctPrefix)) {
-                newHN = existingHN;
-            }
+        if (fName && !lName && fName.includes(' ')) {
+            const parts = fName.split(/\s+/).filter(Boolean);
+            fName = parts[0] || '';
+            lName = parts.slice(1).join(' ') || '';
         }
 
-        // ถ้ายังไม่มี HN ให้สร้างใหม่ และกันชนซ้ำทั้ง DB + payload รอบนี้
-        while (!newHN) {
-            const candidateHN = window.buildNewCustomerHN(branch, nextRunningNo);
-            const candidateKey = `${String(candidateHN).trim().toUpperCase()}|${branch}`;
+        const finalFullname = [fName, lName].filter(Boolean).join(' ').trim();
 
-            if (!existingHNSet.has(candidateKey) && !usedHNSet.has(candidateKey)) {
-                newHN = candidateHN;
-                usedHNSet.add(candidateKey);
+        const phone = window.cleanImportPhone(window.pickImportField(row, ['โทร', 'เบอร์โทร']));
+        const citizenId = window.cleanImportCitizenId(window.pickImportField(row, ['เลขบัตรประชาชน', 'เลขประชาชน']));
+        const nickname = window.cleanImportText(window.pickImportField(row, ['ชื่อเล่น']));
+
+        const birthDate = window.parseImportBirthDate(
+            window.pickImportField(row, ['วันเกิด', 'birth_date', 'dob'])
+        );
+
+        const addressBase = window.cleanImportText(window.pickImportField(row, ['ที่อยู่']));
+        const subDistrict = window.cleanImportText(window.pickImportField(row, ['ตำบล/แขวง']));
+        const district = window.cleanImportText(window.pickImportField(row, ['อำเภอ/เขต']));
+        const province = window.cleanImportText(window.pickImportField(row, ['จังหวัด']));
+        const zipCode = window.cleanImportText(window.pickImportField(row, ['รหัสไปรษณีย์']));
+
+        const fullAddress = [addressBase, subDistrict, district, province, zipCode]
+            .filter(v => v && String(v).trim() !== '' && v !== 'ไม่ระบุ')
+            .join(' ')
+            .trim();
+
+        const existingCustomer = oldHNMap[fileKey];
+        let targetHN = existingCustomer?.hn ? String(existingCustomer.hn).trim().toUpperCase() : '';
+
+        if (!targetHN) {
+            while (true) {
+                const candidateHN = window.buildNewCustomerHN(branch, nextRunningNo).toUpperCase();
+
+                if (!existingHNSet.has(candidateHN) && !usedHNSet.has(candidateHN)) {
+                    targetHN = candidateHN;
+                    existingHNSet.add(candidateHN);
+                    usedHNSet.add(candidateHN);
+                    nextRunningNo += 1;
+                    break;
+                }
+
+                nextRunningNo += 1;
             }
-
-            nextRunningNo += 1;
         }
 
         payload.push({
-            first_name: first_name || null,
-            last_name: last_name || null,
+            hn: targetHN,
+            old_hn: oldHNRaw,
+            first_name: fName || null,
+            last_name: lName || null,
+            fullname: finalFullname || null,
             nickname: nickname || null,
             phone: phone || null,
-            email: email || null,
-            line_id: lineId || null,
-            seller: seller || null,
             citizen_id: citizenId || null,
             birth_date: birthDate || null,
-            address: address || null,
-            allergy: allergy || null,
-            chronic: chronic || null,
+            address: fullAddress || null,
             branch: branch,
-            status: status || null,
-            fullname: fullname || null,
-            hn: newHN,
-            old_hn: oldHN,
+            status: 'ปกติ',
+            allergy: window.cleanImportText(window.pickImportField(row, ['แพ้ยา'])) || 'ไม่มี',
+            chronic: window.cleanImportText(window.pickImportField(row, ['โรคประจำตัว'])) || null,
+            seller: window.cleanImportText(window.pickImportField(row, ['เซลล์'])) || null,
             updated_at: new Date().toISOString()
         });
     });
 
     if (!payload.length) {
         Swal.close();
-        return Swal.fire('ไม่พบข้อมูลที่นำเข้าได้', skipped.slice(0, 10).join('\n') || 'ไม่มีข้อมูล', 'warning');
+        return Swal.fire(
+            'ไม่พบข้อมูลที่นำเข้าได้',
+            skipped.slice(0, 10).join('\n') || 'ไม่มีข้อมูล',
+            'warning'
+        );
     }
 
-    for (let i = 0; i < payload.length; i += 50) {
-        const chunk = payload.slice(i, i + 50);
-
-        const { error } = await window.supabaseClient
-            .from('customers')
-            .upsert(chunk, { onConflict: 'old_hn,branch' });
-
-        if (error) {
-            Swal.close();
-            console.error('upsert customers error:', error);
-            return Swal.fire('Import Error', error.message || 'นำเข้าลูกค้าไม่สำเร็จ', 'error');
-        }
-    }
-
-    Swal.close();
-
-    const msg = [
-        `นำเข้าสำเร็จ ${payload.length} รายการ`,
-        skipped.length ? `ข้าม ${skipped.length} รายการ` : ''
-    ].filter(Boolean).join('\n');
+    let successCount = 0;
+    const chunkSize = 50;
 
     Swal.fire({
-        icon: 'success',
-        title: 'นำเข้าลูกค้าสำเร็จ',
-        text: msg,
-        confirmButtonColor: '#D48197'
+        title: 'กำลังนำเข้าข้อมูลลูกค้า',
+        html: `กำลังบันทึก: <b id="import-proc" class="text-pink-500">0</b> จาก ${payload.length} รายการ`,
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
     });
+
+    try {
+        for (let i = 0; i < payload.length; i += chunkSize) {
+            const chunk = payload.slice(i, i + chunkSize);
+
+            const { error } = await window.supabaseClient
+                .from('customers')
+                .upsert(chunk, {
+                    onConflict: 'old_hn,branch',
+                    ignoreDuplicates: false
+                });
+
+            if (error) {
+                if (String(error.message || '').includes('customers_hn_branch_unique')) {
+                    throw new Error(`เลข HN ใหม่ที่ระบบเจนให้ซ้ำในฐานข้อมูล (ช่วงแถวประมาณ ${i + 1})`);
+                }
+                throw error;
+            }
+
+            successCount += chunk.length;
+
+            const procEl = document.getElementById('import-proc');
+            if (procEl) procEl.innerText = successCount;
+
+            await new Promise(r => setTimeout(r, 150));
+        }
+
+        Swal.close();
+
+        const msg = [
+            `นำเข้า/อัปเดตสำเร็จ ${successCount} รายการ`,
+            skipped.length ? `ข้าม ${skipped.length} รายการ` : ''
+        ].filter(Boolean).join('\n');
+
+        await Swal.fire({
+            icon: 'success',
+            title: 'นำเข้าเรียบร้อยค่ะ',
+            text: msg,
+            confirmButtonColor: '#D48197'
+        });
+
+    } catch (err) {
+        console.error('Import Error:', err);
+        Swal.fire({
+            icon: 'error',
+            title: 'การนำเข้าหยุดชะงัก',
+            text: err.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล',
+            confirmButtonColor: '#ef4444'
+        });
+    }
 
     if (typeof window.applyCustomerFilter === 'function') {
         await window.applyCustomerFilter();
     }
 };
-
 /* =======================================================
    📅 ZONE 4: APPOINTMENT & QUEUE (ระบบนัดหมาย & จัดการคิว)
    ======================================================= */

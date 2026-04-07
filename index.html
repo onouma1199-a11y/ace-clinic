@@ -1782,12 +1782,8 @@ window.setSelectedDashboardBranch = function (branch) {
 };
 
 window.getDashboardActiveBranch = function() {
-    if (window.canViewAllBranches()) {
-        return window.getSelectedDashboardBranch();
-    }
-    return window.getUserHomeBranch() || 'บางพลี';
+    return window.getCurrentViewingBranch() || window.getUserHomeBranch() || 'สาขาบางพลี';
 };
-
 window.__prepareDashboardState = function({
     period = 'day',
     selectedBranch = 'ทุกสาขา',
@@ -9716,16 +9712,38 @@ window.previewAndPrintLabel = function() {
 
 window.closeLabelModal = function() { const m = document.getElementById('labelModal'); if (m) m.remove(); };
 
-window.openDrugMasterSettings = function() {
+window.openDrugMasterSettings = async function() {
     const modalWrap = document.createElement('div');
     modalWrap.id = "drugMasterModal";
     modalWrap.className = "fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[10002] animate-in fade-in duration-300 font-normal";
-    
-    const drugDB = JSON.parse(localStorage.getItem('drugMasterDB')) || [];
-    const drugListHtml = drugDB.length > 0 ? drugDB.map((d, idx) => `
+
+    let drugDB = [];
+
+    try {
+        if (window.supabaseClient) {
+            const { data, error } = await window.supabaseClient
+                .from('drug_master') // ✅ เปลี่ยนชื่อตารางให้ตรงของคุณ
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('openDrugMasterSettings error:', error);
+            } else {
+                drugDB = data || [];
+            }
+        }
+    } catch (e) {
+        console.error('openDrugMasterSettings exception:', e);
+    }
+
+    const drugListHtml = drugDB.length > 0 ? drugDB.map((d) => `
         <tr class="border-b border-pink-50 text-[10px]">
-            <td class="p-2 font-bold text-slate-500">${d.name}</td>
-            <td class="p-2 text-center"><button onclick="deleteDrugMaster(${idx})" class="text-red-400 hover:text-red-600 transition-all uppercase font-bold">[ลบ]</button></td>
+            <td class="p-2 font-bold text-slate-500">${d.name || '-'}</td>
+            <td class="p-2 text-center">
+                <button onclick="window.deleteDrugMaster('${d.id}')" class="text-red-400 hover:text-red-600 transition-all uppercase font-bold">
+                    [ลบ]
+                </button>
+            </td>
         </tr>
     `).join('') : `<tr><td colspan="2" class="p-4 text-center text-slate-300 italic text-[10px]">ยังไม่มีข้อมูลที่บันทึกไว้</td></tr>`;
 
@@ -9735,31 +9753,44 @@ window.openDrugMasterSettings = function() {
                 <h3 class="text-xl font-black ace-pink italic uppercase">⚙️ ตั้งค่าข้อมูลยามาตรฐาน</h3>
                 <button onclick="this.closest('#drugMasterModal').remove()" class="text-slate-300 hover:text-red-500 transition-all text-2xl font-normal">✕</button>
             </div>
+
             <div class="space-y-4 text-left font-normal border-b border-pink-100 pb-6 mb-6">
                 <div>
                     <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">ชื่อยา / อุปกรณ์ (ที่ใช้ดึงข้อมูล)</label>
                     <input type="text" id="mDrugName" placeholder="เช่น Nabota 100u" class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm font-normal">
                 </div>
+
                 <div>
                     <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">วิธีใช้ยา (วันใช้ยา)</label>
                     <textarea id="mDrugUsage" placeholder="ระบุวิธีใช้..." class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm h-16 font-normal"></textarea>
                 </div>
+
                 <div>
                     <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">สรรพคุณ / ข้อบ่งชี้</label>
                     <textarea id="mDrugDetail" placeholder="ระบุสรรพคุณ..." class="w-full border border-pink-100 p-3 rounded-2xl outline-none text-sm h-16 font-normal"></textarea>
                 </div>
-                <button onclick="saveDrugMaster()" class="w-full py-3 rounded-2xl text-[11px] font-bold bg-black text-white shadow-xl hover:bg-[#D48197] transition-all uppercase">💾 บันทึกเป็นข้อมูลมาตรฐาน</button>
+
+                <button onclick="window.saveDrugMaster()" class="w-full py-3 rounded-2xl text-[11px] font-bold bg-black text-white shadow-xl hover:bg-[#D48197] transition-all uppercase">
+                    💾 บันทึกเป็นข้อมูลมาตรฐาน
+                </button>
             </div>
+
             <div class="text-left font-normal">
                 <p class="text-[10px] text-slate-400 font-bold uppercase ml-2 mb-2 italic">รายการที่บันทึกไว้แล้ว (ลบเพื่อแก้ไข)</p>
                 <div class="bg-slate-50 rounded-2xl overflow-hidden border border-slate-100">
                     <table class="w-full">
-                        <thead class="bg-slate-100 text-[9px] uppercase text-slate-500"><tr><th class="p-2 text-left">ชื่อยา</th><th class="p-2 w-16">จัดการ</th></tr></thead>
+                        <thead class="bg-slate-100 text-[9px] uppercase text-slate-500">
+                            <tr>
+                                <th class="p-2 text-left">ชื่อยา</th>
+                                <th class="p-2 w-16">จัดการ</th>
+                            </tr>
+                        </thead>
                         <tbody>${drugListHtml}</tbody>
                     </table>
                 </div>
             </div>
         </div>`;
+
     document.body.appendChild(modalWrap);
 };
 
@@ -9768,10 +9799,7 @@ window.deleteDrugMaster = async function(drugId) {
     if (!ok) return;
 
     try {
-        if (!window.supabaseClient) {
-            console.error('supabaseClient not found');
-            return;
-        }
+        if (!window.supabaseClient) return;
 
         const { error } = await window.supabaseClient
             .from('drug_master') // ✅ เปลี่ยนชื่อตารางให้ตรงของคุณ
@@ -9785,10 +9813,7 @@ window.deleteDrugMaster = async function(drugId) {
         }
 
         document.getElementById('drugMasterModal')?.remove();
-
-        if (typeof openDrugMasterSettings === 'function') {
-            openDrugMasterSettings();
-        }
+        window.openDrugMasterSettings();
 
     } catch (e) {
         console.error('deleteDrugMaster exception:', e);
@@ -9805,21 +9830,54 @@ window.autoFillDrugInfo = function(drugName) {
     }
 };
 
-window.saveDrugMaster = function() {
-    const name = document.getElementById('mDrugName').value.trim();
-    const usage = document.getElementById('mDrugUsage').value;
-    const detail = document.getElementById('mDrugDetail').value;
+window.saveDrugMaster = async function() {
+    const name = document.getElementById('mDrugName')?.value.trim();
+    const usage = document.getElementById('mDrugUsage')?.value || '';
+    const detail = document.getElementById('mDrugDetail')?.value || '';
 
-    if (!name) { alert("⚠️ ระบุชื่อยาด้วยค่ะ"); return; }
-    let drugDB = JSON.parse(localStorage.getItem('drugMasterDB')) || [];
-    drugDB.unshift({ name, usage, detail });
-    localStorage.setItem('drugMasterDB', JSON.stringify(drugDB));
+    if (!name) {
+        alert("⚠️ ระบุชื่อยาด้วยค่ะ");
+        return;
+    }
 
-    alert("✅ บันทึกสูตรยามาตรฐานเรียบร้อย!");
-    document.getElementById('drugMasterModal').remove();
-    openDrugMasterSettings(); 
+    try {
+        if (!window.supabaseClient) {
+            alert("⚠️ ไม่พบการเชื่อมต่อฐานข้อมูล");
+            return;
+        }
+
+        const { data, error } = await window.supabaseClient
+            .from('drug_master') // ✅ เปลี่ยนชื่อตารางให้ตรงของคุณ
+            .insert([
+                {
+                    name: name,
+                    usage: usage,
+                    detail: detail
+                }
+            ])
+            .select();
+
+        if (error) {
+            console.error('saveDrugMaster error:', error);
+            alert("❌ บันทึกสูตรยาไม่สำเร็จ");
+            return;
+        }
+
+        alert("✅ บันทึกสูตรยามาตรฐานเรียบร้อย!");
+
+        document.getElementById('drugMasterModal')?.remove();
+
+        if (typeof openDrugMasterSettings === 'function') {
+            openDrugMasterSettings();
+        }
+
+    } catch (e) {
+        console.error('saveDrugMaster exception:', e);
+        alert("❌ เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+    }
 };
 
+// TODO: ย้ายไป Supabase หลังสร้าง table course_master
 window.editMasterCourseById = function(courseId) {
     let masterDB = JSON.parse(localStorage.getItem('courseMasterDB')) || [];
 
@@ -9933,18 +9991,19 @@ window.renderStaffProfileList = async function() {
         return;
     }
 
-    const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
-    const viewingBranch = window.normalizeBranchView(currentUser.branch || 'ทุกสาขา');
-    const homeBranch = String(currentUser.homeBranch || currentUser.branch || '').replace('สาขา', '').trim();
-    const isAdmin = ['แอดมินหลัก', 'CEO', 'ผู้จัดการ'].includes(currentUser.role);
+    const currentUser = window.getCurrentUserSafe();
+    const viewingBranch = window.getCurrentViewingBranch();
+    const homeBranch = window.getUserHomeBranch();
+    const isAdmin = window.canViewAllBranches();
 
     let query = window.supabaseClient
         .from('staff_profiles')
         .select('*')
         .order('created_at', { ascending: false });
 
-    if (!(typeof window.canViewAllBranches === 'function' && window.canViewAllBranches()) && viewingBranch !== 'ทุกสาขา') {
-        query = query.eq('branch', window.normalizeBranch ? window.normalizeBranch(viewingBranch) : viewingBranch);
+    // ✅ ถ้าไม่ได้ดูทุกสาขา ให้ดึงเฉพาะสาขาที่กำลังดู
+    if (!(isAdmin && viewingBranch === 'ทุกสาขา')) {
+        query = query.eq('branch', viewingBranch);
     }
 
     const { data, error } = await query;
@@ -9957,12 +10016,7 @@ window.renderStaffProfileList = async function() {
 
     const filteredStaff = (data || []).filter(s => {
         const isNotResigned = (s.employment_status || 'ทำงาน') !== 'ออก';
-        const staffBranch = String(s.branch || '').replace('สาขา', '').trim();
-
-        if (!isAdmin && viewingBranch !== homeBranch) return false;
-
-        const matchBranch = (currentUser.branch === 'ทุกสาขา') || (staffBranch === viewingBranch);
-        return isNotResigned && matchBranch;
+        return isNotResigned;
     });
 
     target.innerHTML = `
@@ -11070,23 +11124,18 @@ window.renderPayrollSystem = async function() {
         return;
     }
 
-    const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
-    const viewingBranchRaw = currentUser.branch || 'ทุกสาขา';
-    const viewingBranch = window.normalizeBranchView
-        ? window.normalizeBranchView(viewingBranchRaw)
-        : String(viewingBranchRaw || 'ทุกสาขา').trim();
+    const currentUser = window.getCurrentUserSafe();
+    const viewingBranch = window.getCurrentViewingBranch();
+    const isAdmin = window.canViewAllBranches();
 
     let query = window.supabaseClient
         .from('staff_profiles')
         .select('*')
         .order('created_at', { ascending: false });
 
-    // ✅ ถ้าไม่ใช่ทุกสาขา ให้ normalize เป็น format ใน DB ก่อน
-    if (viewingBranch !== 'ทุกสาขา') {
-        query = query.eq(
-            'branch',
-            window.normalizeBranch ? window.normalizeBranch(viewingBranch) : viewingBranch
-        );
+    // ✅ ถ้าไม่ได้ดูทุกสาขา ให้ดึงเฉพาะสาขาที่กำลังดู
+    if (!(isAdmin && viewingBranch === 'ทุกสาขา')) {
+        query = query.eq('branch', viewingBranch);
     }
 
     const { data: allStaff, error } = await query;
@@ -11097,7 +11146,6 @@ window.renderPayrollSystem = async function() {
         return;
     }
 
-    // ✅ ดึง payroll_history จาก Supabase ไม่ใช้ localStorage แล้ว
     const { data: payrollHistory, error: payrollError } = await window.supabaseClient
         .from('payroll_history')
         .select('*');
@@ -11161,27 +11209,27 @@ window.renderPayrollSystem = async function() {
                         <p class="text-[8px] text-[#D48197] font-black uppercase tracking-widest mb-4 italic text-center">${s.role || 'Staff'}</p>
                         
                        <div class="space-y-2 border-t border-slate-50 pt-4 mb-6 font-bold italic text-[10px]">
-    <div class="flex justify-between">
-        <span>เงินเดือน</span>
-        <span class="text-slate-700 font-black">฿${parseFloat(s.salary || 0).toLocaleString()}</span>
-    </div>
-    <div class="flex justify-between">
-        <span>ยอดรับสุทธิ</span>
-        <span class="text-emerald-600 font-black">
-            ${record
-                ? `฿${Math.round(parseFloat(String(record.net_pay || 0).replace(/[^\d.-]/g, '')) || 0).toLocaleString()}`
-                : '-'}
-        </span>
-    </div>
-    <div class="flex justify-between">
-        <span>สาขา</span>
-        <span class="text-pink-400 font-black">${s.branch || '-'}</span>
-    </div>
-    <div class="flex justify-between">
-        <span>สถานะ</span>
-        <span class="${record ? 'text-green-500' : 'text-orange-400'} font-black">${record ? 'สำเร็จ' : 'รอดำเนินการ'}</span>
-    </div>
-</div>
+                            <div class="flex justify-between">
+                                <span>เงินเดือน</span>
+                                <span class="text-slate-700 font-black">฿${parseFloat(s.salary || 0).toLocaleString()}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>ยอดรับสุทธิ</span>
+                                <span class="text-emerald-600 font-black">
+                                    ${record
+                                        ? `฿${Math.round(parseFloat(String(record.net_pay || 0).replace(/[^\d.-]/g, '')) || 0).toLocaleString()}`
+                                        : '-'}
+                                </span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>สาขา</span>
+                                <span class="text-pink-400 font-black">${s.branch || '-'}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>สถานะ</span>
+                                <span class="${record ? 'text-green-500' : 'text-orange-400'} font-black">${record ? 'สำเร็จ' : 'รอดำเนินการ'}</span>
+                            </div>
+                        </div>
 
                         <button onclick="window.openLuxuryPayroll('${staffCode}', '${selectedPeriod}')" class="w-full py-3 rounded-xl font-black text-[9px] uppercase tracking-[0.2em] shadow-md transition-all ${record ? 'bg-slate-100 text-slate-400' : 'bg-[#D48197] text-white hover:bg-black'}">
                             ${record ? 'ดูข้อมูล / แก้ไข' : 'เริ่มคำนวณ'}
@@ -11708,54 +11756,43 @@ window.saveAndPrintPayrollById = async function(staffId, period, action = 'save'
     }
 };
 
-window.getBranchHeaderInfo = function(branchName = '') {
+window.getBranchHeaderInfo = async function(branchName = '') {
+    if (!window.supabaseClient) return null;
+
     const cleanBranch = String(branchName || '').replace('สาขา', '').trim();
 
-    const tryKeys = [
-        'branchProfileDB',
-        'clinicBranchesDB',
-        'branchSettingsDB',
-        'clinicProfileDB',
-        'ace_branch_settings',
-        'ace_clinic_settings'
-    ];
+    try {
+        const { data, error } = await window.supabaseClient
+            .from('clinic_branches')
+            .select('*')
+            .eq('branch', `สาขา${cleanBranch}`)
+            .maybeSingle();
 
-    for (const key of tryKeys) {
-        try {
-            const raw = JSON.parse(localStorage.getItem(key)) || [];
-            const arr = Array.isArray(raw) ? raw : Object.values(raw || {});
-
-            const found = arr.find(item =>
-                String(
-                    item.branch ||
-                    item.branch_name ||
-                    item.name ||
-                    item.branchName ||
-                    ''
-                ).replace('สาขา', '').trim() === cleanBranch
-            );
-
-            if (found) {
-                return found;
-            }
-        } catch (e) {
-            console.warn('read branch header fail:', key, e);
+        if (error) {
+            console.error('getBranchHeaderInfo error:', error);
+            return null;
         }
+
+        if (data) return data;
+
+    } catch (e) {
+        console.error('getBranchHeaderInfo exception:', e);
     }
 
+    // fallback (กรณีไม่มีข้อมูลใน DB)
     return {
         branch: cleanBranch || '-',
-        clinicName: 'ACE CLINIC',
+        clinic_name: 'ACE CLINIC',
         address: '',
         phone: '',
         email: '',
-        lineId: '',
-        licenseNo: '',
-        logoUrl: '',
-        qrUrl: '',
-        signUrl: '',
-        signName: '',
-        signPosition: ''
+        line_id: '',
+        license_no: '',
+        logo_url: '',
+        qr_url: '',
+        sign_url: '',
+        sign_name: '',
+        sign_position: ''
     };
 };
 
@@ -12402,11 +12439,10 @@ window.renderAttendanceRecord = async function() {
 
     const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
 
-    const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
-    const viewingBranch = window.normalizeBranchView
-        ? window.normalizeBranchView(currentUser.branch || 'ทุกสาขา')
-        : String(currentUser.branch || 'ทุกสาขา').replace('สาขา', '').trim();
-
+    // ✅ ใช้ helper กลางของระบบ
+    const currentUser = window.getCurrentUserSafe();
+    const viewingBranch = window.getCurrentViewingBranch();
+    const isAdmin = window.canViewAllBranches();
 
     if (!window.attViewMode) window.attViewMode = 'monthly';
     const selMonth = window.selectedAttMonth || String(new Date().getMonth() + 1).padStart(2, '0');
@@ -12426,11 +12462,9 @@ window.renderAttendanceRecord = async function() {
         .from('staff_profiles')
         .select('*');
 
-    if (viewingBranch !== 'ทุกสาขา') {
-        staffQuery = staffQuery.eq(
-            'branch',
-            window.normalizeBranch ? window.normalizeBranch(viewingBranch) : viewingBranch
-        );
+    // ✅ ถ้าไม่ใช่โหมดทุกสาขาแบบ admin/CEO ให้ดึงเฉพาะสาขาที่กำลังดู
+    if (!(isAdmin && viewingBranch === 'ทุกสาขา')) {
+        staffQuery = staffQuery.eq('branch', viewingBranch);
     }
 
     const { data: staffProfiles, error: staffError } = await staffQuery;
@@ -12460,10 +12494,10 @@ window.renderAttendanceRecord = async function() {
                 const staffCode = String(record.staff_code || '');
                 const staffInfo = staffMap[staffCode];
 
-                if (viewingBranch === 'ทุกสาขา') return true;
+                if (viewingBranch === 'ทุกสาขา' && isAdmin) return true;
                 if (!staffInfo) return false;
 
-                const staffBranch = String(staffInfo.branch || '').replace('สาขา', '').trim();
+                const staffBranch = window.normalizeBranch(staffInfo.branch);
                 return staffBranch === viewingBranch;
             })
             .map(record => {
@@ -12494,9 +12528,10 @@ window.renderAttendanceRecord = async function() {
             const staffCode = String(record.staff_code || '');
             const staffInfo = staffMap[staffCode];
 
-            if (viewingBranch !== 'ทุกสาขา') {
+            if (!(viewingBranch === 'ทุกสาขา' && isAdmin)) {
                 if (!staffInfo) return;
-                const staffBranch = String(staffInfo.branch || '').replace('สาขา', '').trim();
+
+                const staffBranch = window.normalizeBranch(staffInfo.branch);
                 if (staffBranch !== viewingBranch) return;
             }
 
@@ -12527,7 +12562,6 @@ window.renderAttendanceRecord = async function() {
 
         displayData = Object.values(yearlyMap);
     }
-
     target.innerHTML = `
         <div class="animate-in fade-in duration-500 text-left pb-20 font-normal">
             <div class="bg-white p-8 rounded-[3rem] shadow-sm border border-pink-100 mb-8 flex flex-col md:flex-row justify-between items-center gap-6 no-print">
@@ -13077,20 +13111,45 @@ window.switchSettingsTab = async function(tab, btn) {
     ]};
     const savedPerms = JSON.parse(localStorage.getItem('ace_permissions')) || {};
 
-   // --- 1. ข้อมูลสาขา ---
+  // --- 1. ข้อมูลสาขา ---
 if (tab === 'clinic') {
+
+    let branches = [];
+
+    try {
+        // ✅ โหลดจาก Supabase ก่อน
+        if (typeof window.loadClinicConfigFromDB === 'function') {
+            const config = await window.loadClinicConfigFromDB();
+            branches = config?.branches || [];
+        }
+    } catch (e) {
+        console.error('loadClinicConfigFromDB error:', e);
+    }
+
+    // ✅ fallback เฉพาะตอน DB ว่าง
+    if (!branches || branches.length === 0) {
+        branches = [
+            { n: 'บางพลี' },
+            { n: 'อุดมสุข' },
+            { n: 'ชลบุรี' }
+        ];
+    }
+
     area.innerHTML = `
         <div class="bg-white p-10 rounded-[3.5rem] shadow-xl border border-pink-50 animate-in slide-in-from-right">
             <h3 class="text-2xl font-black text-slate-800 italic uppercase mb-8 text-left">🏢 จัดการข้อมูล 3 สาขา</h3>
+
             <div class="space-y-6">
-                ${savedConfig.branches.map((b, i) => `
+                ${branches.map((b, i) => `
                     <div class="p-8 bg-slate-50 rounded-[3rem] border border-white shadow-sm space-y-4 text-left">
+                        
                         <div class="flex items-center gap-3 border-b border-pink-100 pb-3">
                             <span class="bg-pink-500 text-white w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-black">0${i+1}</span>
-                            <span class="text-sm font-black text-slate-700 uppercase italic">สาขา ${b.n}</span>
+                            <span class="text-sm font-black text-slate-700 uppercase italic">สาขา ${b.n || b.branch || '-'}</span>
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            
                             <div class="md:col-span-2">
                                 <label class="text-[9px] font-bold text-slate-400 uppercase ml-2">ที่อยู่สาขา</label>
                                 <input type="text" id="brAddr_${i}" value="${b.addr || ''}" class="w-full p-3 rounded-2xl border-none shadow-inner text-xs font-bold">
@@ -13115,47 +13174,39 @@ if (tab === 'clinic') {
                                 <label class="text-[9px] font-bold text-slate-400 uppercase ml-2">Line ID</label>
                                 <input type="text" id="brLine_${i}" value="${b.line || ''}" class="w-full p-3 rounded-2xl border-none shadow-inner text-xs font-bold">
                             </div>
+
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+
                             <div class="bg-white p-4 rounded-2xl border border-pink-100">
                                 <label class="text-[9px] font-bold text-slate-400 uppercase block mb-2">โลโก้คลินิก</label>
-                                <input
-                                    type="file"
-                                    id="brLogoFile_${i}"
-                                    accept="image/*"
+                                <input type="file" id="brLogoFile_${i}" accept="image/*"
                                     onchange="window.uploadClinicAsset(${i}, 'logo')"
-                                    class="w-full text-xs font-bold"
-                                >
+                                    class="w-full text-xs font-bold">
                                 <input type="hidden" id="brLogo_${i}" value="${b.logo_url || ''}">
                                 <div class="mt-3">
-                                    <img
-                                        id="brLogoPreview_${i}"
+                                    <img id="brLogoPreview_${i}"
                                         src="${b.logo_url || ''}"
-                                        class="w-20 h-20 rounded-xl border border-pink-100 object-contain bg-slate-50 ${b.logo_url ? '' : 'hidden'}"
-                                    >
+                                        class="w-20 h-20 rounded-xl border border-pink-100 object-contain bg-slate-50 ${b.logo_url ? '' : 'hidden'}">
                                 </div>
                             </div>
 
                             <div class="bg-white p-4 rounded-2xl border border-pink-100">
                                 <label class="text-[9px] font-bold text-slate-400 uppercase block mb-2">QR คลินิก</label>
-                                <input
-                                    type="file"
-                                    id="brQrFile_${i}"
-                                    accept="image/*"
+                                <input type="file" id="brQrFile_${i}" accept="image/*"
                                     onchange="window.uploadClinicAsset(${i}, 'qr')"
-                                    class="w-full text-xs font-bold"
-                                >
+                                    class="w-full text-xs font-bold">
                                 <input type="hidden" id="brQr_${i}" value="${b.qr_url || ''}">
                                 <div class="mt-3">
-                                    <img
-                                        id="brQrPreview_${i}"
+                                    <img id="brQrPreview_${i}"
                                         src="${b.qr_url || ''}"
-                                        class="w-20 h-20 rounded-xl border border-pink-100 object-contain bg-slate-50 ${b.qr_url ? '' : 'hidden'}"
-                                    >
+                                        class="w-20 h-20 rounded-xl border border-pink-100 object-contain bg-slate-50 ${b.qr_url ? '' : 'hidden'}">
                                 </div>
                             </div>
+
                         </div>
+
                     </div>
                 `).join('')}
             </div>
@@ -13823,29 +13874,77 @@ window.loadClinicConfigFromDB = async function() {
     });
 };
 
-window.toggleUserStatus = function(idx) {
-    let db = JSON.parse(localStorage.getItem('staffDB')) || [];
-    db[idx].isLocked = !db[idx].isLocked;
-    localStorage.setItem('staffDB', JSON.stringify(db));
-    window.switchSettingsTab('users', document.querySelector('.settings-nav-btn.active'));
+window.toggleUserStatus = async function(staffCode) {
+    if (!window.supabaseClient) return;
 
+    try {
+        // 🔎 ดึงสถานะปัจจุบันก่อน
+        const { data: staff, error } = await window.supabaseClient
+            .from('staff_profiles')
+            .select('is_locked')
+            .eq('staff_code', staffCode)
+            .single();
+
+        if (error || !staff) {
+            console.error('toggleUserStatus fetch error:', error);
+            return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
+        }
+
+        // 🔄 toggle ค่า
+        const newStatus = !staff.is_locked;
+
+        const { error: updateErr } = await window.supabaseClient
+            .from('staff_profiles')
+            .update({ is_locked: newStatus })
+            .eq('staff_code', staffCode);
+
+        if (updateErr) {
+            console.error('toggleUserStatus update error:', updateErr);
+            return Swal.fire('Error', 'อัปเดตสถานะไม่สำเร็จ', 'error');
+        }
+
+        // 🔁 refresh UI
+        window.switchSettingsTab('users', document.querySelector('.settings-nav-btn.active'));
+
+    } catch (e) {
+        console.error('toggleUserStatus exception:', e);
+    }
 };
 
+window.deleteStaffUser = async function(staffCode, staffName = '') {
+    if (!window.supabaseClient) return;
 
-window.deleteStaffUser = function(idx) {
-    let db = JSON.parse(localStorage.getItem('staffDB')) || [];
     Swal.fire({
-        icon: 'warning', title: 'ยืนยันลบบัญชี', text: `ต้องการลบ ${db[idx].name} หรือไม่`,
-        showCancelButton: true, confirmButtonText: 'ลบเลย', confirmButtonColor: '#dc2626'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            db.splice(idx,1);
-            localStorage.setItem('staffDB', JSON.stringify(db));
+        icon: 'warning',
+        title: 'ยืนยันลบบัญชี',
+        text: `ต้องการลบ ${staffName || 'พนักงานนี้'} หรือไม่`,
+        showCancelButton: true,
+        confirmButtonText: 'ลบเลย',
+        confirmButtonColor: '#dc2626'
+    }).then(async (result) => {
+        if (!result.isConfirmed) return;
+
+        try {
+            const { error } = await window.supabaseClient
+                .from('staff_profiles')
+                .delete()
+                .eq('staff_code', staffCode);
+
+            if (error) {
+                console.error('deleteStaffUser error:', error);
+                return Swal.fire('Error', 'ลบไม่สำเร็จ', 'error');
+            }
+
+            Swal.fire('สำเร็จ', 'ลบบัญชีเรียบร้อยแล้ว', 'success');
+
+            // 🔁 refresh UI
             window.switchSettingsTab('users', document.querySelector('.settings-nav-btn.active'));
+
+        } catch (e) {
+            console.error('deleteStaffUser exception:', e);
         }
     });
 };
-
 
 window.getBranchHeaderInfo = async function(branchName = '') {
     if (!window.supabaseClient) return {};
@@ -13937,50 +14036,83 @@ window.saveRolePermissions = async function() {
 };
 
 window.getPermissionChecked = function(role, menuId) {
-    const permissions = JSON.parse(localStorage.getItem('ace_permissions')) || {};
-    return (permissions[role] || []).includes(String(menuId));
+    const menuStr = String(menuId);
+
+    if (!window.permissionMap || !window.permissionMap[role]) {
+        return false;
+    }
+
+    const perm = window.permissionMap[role][menuStr];
+
+    return !!(perm && perm.allowed);
 };
+
 window.permissionMap = {};
 
+// โหลดสิทธิ์จาก Supabase
 window.loadPermissionsFromSupabase = async function() {
-    if (!window.supabaseClient) return;
-
-    const { data, error } = await window.supabaseClient
-        .from('role_menu_permissions')
-        .select('role, menu_id, allowed, can_edit');
-
-    if (error) {
-        console.error('loadPermissionsFromSupabase error:', error);
+    if (!window.supabaseClient) {
+        window.permissionMap = {};
         return;
     }
 
-    const map = {};
+    try {
+        const { data, error } = await window.supabaseClient
+            .from('role_menu_permissions')
+            .select('role, menu_id, allowed, can_edit');
 
-    (data || []).forEach(row => {
-        const role = String(row.role || '').trim();
-        const menuId = String(row.menu_id || '').trim();
+        if (error) {
+            console.error('loadPermissionsFromSupabase error:', error);
+            window.permissionMap = {};
+            return;
+        }
 
-        if (!map[role]) map[role] = {};
+        const map = {};
 
-        map[role][menuId] = {
-            allowed: !!row.allowed,
-            can_edit: !!row.can_edit
-        };
-    });
+        (data || []).forEach(row => {
+            const role = String(row.role || '').trim();
+            const menuId = String(row.menu_id || '').trim();
 
-    window.permissionMap = map;
+            if (!role || !menuId) return;
+
+            if (!map[role]) map[role] = {};
+
+            map[role][menuId] = {
+                allowed: !!row.allowed,
+                can_edit: !!row.can_edit
+            };
+        });
+
+        window.permissionMap = map;
+
+    } catch (e) {
+        console.error('loadPermissionsFromSupabase exception:', e);
+        window.permissionMap = {};
+    }
 };
 
+// อ่านค่าสิทธิ์ 1 เมนู
 window.getPermissionValue = function(role, menuId) {
     const safeRole = String(role || '').trim();
     const safeMenuId = String(menuId || '').trim();
 
-    return window.permissionMap?.[safeRole]?.[safeMenuId] || {
+    if (!window.permissionMap) {
+        return { allowed: false, can_edit: false };
+    }
+
+    return window.permissionMap[safeRole]?.[safeMenuId] || {
         allowed: false,
         can_edit: false
     };
 };
 
+// เช็คสิทธิ์เข้าใช้
+window.hasPermission = function(role, menuId) {
+    const perm = window.getPermissionValue(role, menuId);
+    return !!perm.allowed;
+};
+
+// บันทึก checkbox สิทธิ์
 window.handlePermissionCheckbox = async function(cb) {
     if (!window.supabaseClient || !cb) return;
 
@@ -14018,7 +14150,6 @@ window.handlePermissionCheckbox = async function(cb) {
     }
 
     try {
-        // 1) เช็กก่อนว่ามี row นี้อยู่แล้วไหม
         const { data: existingRow, error: findError } = await window.supabaseClient
             .from('role_menu_permissions')
             .select('id')
@@ -14039,7 +14170,6 @@ window.handlePermissionCheckbox = async function(cb) {
 
         let saveError = null;
 
-        // 2) ถ้ามีแล้ว → update
         if (existingRow?.id) {
             const { error } = await window.supabaseClient
                 .from('role_menu_permissions')
@@ -14048,7 +14178,6 @@ window.handlePermissionCheckbox = async function(cb) {
 
             saveError = error;
         } else {
-            // 3) ถ้ายังไม่มี → insert
             const { error } = await window.supabaseClient
                 .from('role_menu_permissions')
                 .insert({
@@ -14073,9 +14202,12 @@ window.handlePermissionCheckbox = async function(cb) {
         }
 
         await window.loadPermissionsFromSupabase();
-        window.refreshPermissionMatrixUI();
 
-        const currentUser = window.getCurrentUserSafe
+        if (typeof window.refreshPermissionMatrixUI === 'function') {
+            window.refreshPermissionMatrixUI();
+        }
+
+        const currentUser = typeof window.getCurrentUserSafe === 'function'
             ? window.getCurrentUserSafe()
             : (window.currentUser || {});
 
@@ -14982,41 +15114,91 @@ target.innerHTML = `
 `;
 };
 
-// 1. ฟังก์ชันระงับการใช้งานพนักงาน (Toggle Lock)
-window.suspendStaff = function(idx) {
-    let staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
-    const staff = staffDB[idx];
-    if (!staff) return;
+// 1. ฟังก์ชันระงับการใช้งานพนักงาน (Toggle Active)
+window.suspendStaff = async function(staffCode) {
+    if (!window.supabaseClient) {
+        return Swal.fire({
+            icon: 'error',
+            title: 'ยังไม่พบการเชื่อมต่อ Supabase',
+            confirmButtonColor: '#D48197'
+        });
+    }
 
-    const isLocked = staff.isLocked || false;
-    const actionText = isLocked ? "เปิดสิทธิ์ใช้งาน" : "ระงับการใช้งาน";
+    try {
+        // 1) ดึงข้อมูลพนักงานปัจจุบัน
+        const { data: staff, error: fetchError } = await window.supabaseClient
+            .from('staff_profiles')
+            .select('id, staff_code, full_name, is_active')
+            .eq('staff_code', staffCode)
+            .single();
 
-    Swal.fire({
-        title: `ยืนยัน${actionText}?`,
-        text: `คุณต้องการ${actionText} คุณ ${staff.name} ใช่หรือไม่`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: isLocked ? '#2ecc71' : '#d33',
-        confirmButtonText: 'ใช่, ดำเนินการ',
-        cancelButtonText: 'ยกเลิก',
-        customClass: { popup: 'rounded-[2rem]' }
-    }).then((result) => {
-        if (result.isConfirmed) {
-            staffDB[idx].isLocked = !isLocked;
-            localStorage.setItem('staffDB', JSON.stringify(staffDB));
-            
-            Swal.fire({
-                icon: 'success',
-                title: 'สำเร็จ!',
-                text: `${actionText}เรียบร้อยแล้วค่ะ`,
-                timer: 1500,
-                showConfirmButton: false
+        if (fetchError || !staff) {
+            console.error('suspendStaff fetch error:', fetchError);
+            return Swal.fire({
+                icon: 'error',
+                title: 'ไม่พบข้อมูลพนักงาน',
+                text: 'กรุณาลองใหม่อีกครั้ง',
+                confirmButtonColor: '#D48197'
             });
-            
-            // รีเฟรชหน้าตาราง
-            if (typeof renderStaffProfileList === 'function') renderStaffProfileList();
         }
-    });
+
+        const isActive = staff.is_active !== false;
+        const actionText = isActive ? 'ระงับการใช้งาน' : 'เปิดสิทธิ์ใช้งาน';
+        const nextIsActive = !isActive;
+
+        const result = await Swal.fire({
+            title: `ยืนยัน${actionText}?`,
+            text: `คุณต้องการ${actionText} คุณ ${staff.full_name || '-'} ใช่หรือไม่`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: isActive ? '#d33' : '#2ecc71',
+            confirmButtonText: 'ใช่, ดำเนินการ',
+            cancelButtonText: 'ยกเลิก',
+            customClass: { popup: 'rounded-[2rem]' }
+        });
+
+        if (!result.isConfirmed) return;
+
+        // 2) อัปเดต Supabase
+        const { error: updateError } = await window.supabaseClient
+            .from('staff_profiles')
+            .update({
+                is_active: nextIsActive
+            })
+            .eq('staff_code', staffCode);
+
+        if (updateError) {
+            console.error('suspendStaff update error:', updateError);
+            return Swal.fire({
+                icon: 'error',
+                title: 'อัปเดตไม่สำเร็จ',
+                text: updateError.message || 'กรุณาลองใหม่อีกครั้ง',
+                confirmButtonColor: '#D48197'
+            });
+        }
+
+        await Swal.fire({
+            icon: 'success',
+            title: 'สำเร็จ!',
+            text: `${actionText}เรียบร้อยแล้วค่ะ`,
+            timer: 1500,
+            showConfirmButton: false
+        });
+
+        // 3) รีเฟรชหน้าตาราง
+        if (typeof window.renderStaffProfileList === 'function') {
+            window.renderStaffProfileList();
+        }
+
+    } catch (e) {
+        console.error('suspendStaff exception:', e);
+        Swal.fire({
+            icon: 'error',
+            title: 'เกิดข้อผิดพลาด',
+            text: e.message || 'กรุณาลองใหม่อีกครั้ง',
+            confirmButtonColor: '#D48197'
+        });
+    }
 };
 
 /* =========================
@@ -15049,28 +15231,81 @@ window.renderResignedStaffTable = function() {
     // โค้ดเดิมของคุณ...
 };
 
-// ฟังก์ชันลบพนักงานด้วย ID (เพิ่มเข้าไปใน ZONE 7)
-window.deleteStaffUserById = function(staffId) {
-    let db = JSON.parse(localStorage.getItem('staffDB')) || [];
-    const targetIdx = db.findIndex(s => String(s.staffId) === String(staffId));
-    
-    if (targetIdx === -1) return;
+// ฟังก์ชันลบพนักงานด้วย ID จริงจาก Supabase
+window.deleteStaffUserById = async function(staffId) {
+    if (!window.supabaseClient) {
+        return Swal.fire({
+            icon: 'error',
+            title: 'ยังไม่พบการเชื่อมต่อ Supabase',
+            confirmButtonColor: '#D48197'
+        });
+    }
 
-    Swal.fire({
-        title: 'ยืนยันการลบข้อมูล?',
-        text: `คุณกำลังจะลบประวัติของพนักงานรหัส ${staffId} ออกจากระบบถาวร`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#ef4444',
-        confirmButtonText: 'ใช่, ลบเลย'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            db.splice(targetIdx, 1);
-            localStorage.setItem('staffDB', JSON.stringify(db));
-            window.renderStaffProfileList(); // รีเฟรชหน้าจอ
-            Swal.fire('ลบเรียบร้อย', '', 'success');
+    try {
+        // ดึงข้อมูลพนักงานก่อน เพื่อใช้แสดงชื่อ/รหัสใน popup
+        const { data: staff, error: fetchError } = await window.supabaseClient
+            .from('staff_profiles')
+            .select('id, staff_code, full_name')
+            .eq('id', staffId)
+            .single();
+
+        if (fetchError || !staff) {
+            console.error('deleteStaffUserById fetch error:', fetchError);
+            return Swal.fire({
+                icon: 'error',
+                title: 'ไม่พบข้อมูลพนักงาน',
+                text: 'กรุณาลองใหม่อีกครั้ง',
+                confirmButtonColor: '#D48197'
+            });
         }
-    });
+
+        const result = await Swal.fire({
+            title: 'ยืนยันการลบข้อมูล?',
+            text: `คุณกำลังจะลบประวัติของพนักงาน ${staff.full_name || '-'} (${staff.staff_code || '-'}) ออกจากระบบถาวร`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            confirmButtonText: 'ใช่, ลบเลย',
+            cancelButtonText: 'ยกเลิก'
+        });
+
+        if (!result.isConfirmed) return;
+
+        const { error: deleteError } = await window.supabaseClient
+            .from('staff_profiles')
+            .delete()
+            .eq('id', staffId);
+
+        if (deleteError) {
+            console.error('deleteStaffUserById delete error:', deleteError);
+            return Swal.fire({
+                icon: 'error',
+                title: 'ลบไม่สำเร็จ',
+                text: deleteError.message || 'กรุณาลองใหม่อีกครั้ง',
+                confirmButtonColor: '#D48197'
+            });
+        }
+
+        if (typeof window.renderStaffProfileList === 'function') {
+            await window.renderStaffProfileList();
+        }
+
+        Swal.fire({
+            icon: 'success',
+            title: 'ลบเรียบร้อย',
+            timer: 1200,
+            showConfirmButton: false
+        });
+
+    } catch (e) {
+        console.error('deleteStaffUserById exception:', e);
+        Swal.fire({
+            icon: 'error',
+            title: 'เกิดข้อผิดพลาด',
+            text: e.message || 'กรุณาลองใหม่อีกครั้ง',
+            confirmButtonColor: '#D48197'
+        });
+    }
 };
 
 window.restoreStaffById = function(staffId) {
@@ -15137,28 +15372,87 @@ window.renderResignedStaffTable = function() {
     `;
 };
 
-// 3. ฟังก์ชันดึงพนักงานกลับมาทำงาน (Restore)
-window.restoreStaff = function(idx) {
-    let staffDB = JSON.parse(localStorage.getItem('staffDB')) || [];
-    if (!staffDB[idx]) return;
+// 3. ฟังก์ชันดึงพนักงานกลับมาทำงาน (Restore จาก Supabase)
+window.restoreStaff = async function(staffCode) {
+    if (!window.supabaseClient) {
+        return Swal.fire({
+            icon: 'error',
+            title: 'ยังไม่พบการเชื่อมต่อ Supabase',
+            confirmButtonColor: '#D48197'
+        });
+    }
 
-    Swal.fire({
-        title: 'ยืนยันดึงข้อมูลพนักงาน?',
-        text: `เปลี่ยนสถานะคุณ ${staffDB[idx].name} กลับมาเป็น "ทำงาน" อีกครั้งใช่หรือไม่`,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonColor: '#2ecc71',
-        confirmButtonText: 'ใช่, ดึงข้อมูลกลับ',
-        cancelButtonText: 'ยกเลิก',
-        customClass: { popup: 'rounded-[2rem]' }
-    }).then((result) => {
-        if (result.isConfirmed) {
-            staffDB[idx].status = 'ทำงาน';
-            localStorage.setItem('staffDB', JSON.stringify(staffDB));
-            Swal.fire({ icon: 'success', title: 'สำเร็จ!', text: 'ข้อมูลย้ายกลับไปที่หน้าพนักงานปัจจุบันแล้วค่ะ', timer: 1500, showConfirmButton: false });
+    try {
+        // 1) ดึงข้อมูลพนักงาน
+        const { data: staff, error: fetchError } = await window.supabaseClient
+            .from('staff_profiles')
+            .select('staff_code, full_name, employment_status')
+            .eq('staff_code', staffCode)
+            .single();
+
+        if (fetchError || !staff) {
+            console.error('restoreStaff fetch error:', fetchError);
+            return Swal.fire({
+                icon: 'error',
+                title: 'ไม่พบข้อมูลพนักงาน',
+                confirmButtonColor: '#D48197'
+            });
+        }
+
+        const result = await Swal.fire({
+            title: 'ยืนยันดึงข้อมูลพนักงาน?',
+            text: `เปลี่ยนสถานะคุณ ${staff.full_name || '-'} กลับมาเป็น "ทำงาน" อีกครั้งใช่หรือไม่`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#2ecc71',
+            confirmButtonText: 'ใช่, ดึงข้อมูลกลับ',
+            cancelButtonText: 'ยกเลิก',
+            customClass: { popup: 'rounded-[2rem]' }
+        });
+
+        if (!result.isConfirmed) return;
+
+        // 2) update Supabase
+        const { error: updateError } = await window.supabaseClient
+            .from('staff_profiles')
+            .update({
+                employment_status: 'ทำงาน',
+                is_active: true
+            })
+            .eq('staff_code', staffCode);
+
+        if (updateError) {
+            console.error('restoreStaff update error:', updateError);
+            return Swal.fire({
+                icon: 'error',
+                title: 'อัปเดตไม่สำเร็จ',
+                text: updateError.message || 'กรุณาลองใหม่อีกครั้ง',
+                confirmButtonColor: '#D48197'
+            });
+        }
+
+        Swal.fire({
+            icon: 'success',
+            title: 'สำเร็จ!',
+            text: 'พนักงานกลับมาทำงานแล้วค่ะ',
+            timer: 1500,
+            showConfirmButton: false
+        });
+
+        // 3) รีเฟรช UI
+        if (typeof window.renderStaffProfileList === 'function') {
             window.renderStaffProfileList();
         }
-    });
+
+    } catch (e) {
+        console.error('restoreStaff exception:', e);
+        Swal.fire({
+            icon: 'error',
+            title: 'เกิดข้อผิดพลาด',
+            text: e.message || 'กรุณาลองใหม่อีกครั้ง',
+            confirmButtonColor: '#D48197'
+        });
+    }
 };
 
 // 🌍 ฟังก์ชันโหลดข้อมูลรวมทุกสาขา (ฉบับสมบูรณ์)
@@ -15217,18 +15511,64 @@ window.calcShare = function(br) {
 };
 
 // 💾 ฟังก์ชันบันทึกประวัติ
-window.saveGlobalProfitShare = function() {
-    const data = {
-        period: document.getElementById('globalMonth').value + '/' + document.getElementById('globalYear').value,
-        timestamp: new Date().toLocaleString('th-TH'),
-        bangPhli: document.getElementById('calcIn_บางพลี').value,
-        chonBuri: document.getElementById('calcIn_ชลบุรี').value
-    };
-    let history = JSON.parse(localStorage.getItem('ceoProfitHistory')) || [];
-    history.unshift(data);
-    localStorage.setItem('ceoProfitHistory', JSON.stringify(history.slice(0, 10)));
-    Swal.fire({ icon: 'success', title: 'บันทึกสำเร็จ!', timer: 1500, showConfirmButton: false });
-    window.renderProfitHistory();
+window.saveGlobalProfitShare = async function() {
+    if (!window.supabaseClient) {
+        return Swal.fire({
+            icon: 'error',
+            title: 'ยังไม่พบการเชื่อมต่อ Supabase',
+            confirmButtonColor: '#D48197'
+        });
+    }
+
+    try {
+        const month = document.getElementById('globalMonth')?.value || '';
+        const year = document.getElementById('globalYear')?.value || '';
+        const bangPhli = parseFloat(document.getElementById('calcIn_บางพลี')?.value || 0) || 0;
+        const chonBuri = parseFloat(document.getElementById('calcIn_ชลบุรี')?.value || 0) || 0;
+
+        const period = `${month}/${year}`;
+
+        const { error } = await window.supabaseClient
+            .from('ceo_profit_history') // ✅ เปลี่ยนชื่อตารางถ้าของคุณใช้ชื่ออื่น
+            .insert([
+                {
+                    period: period,
+                    bang_phli: bangPhli,
+                    chon_buri: chonBuri,
+                    created_at: new Date().toISOString()
+                }
+            ]);
+
+        if (error) {
+            console.error('saveGlobalProfitShare error:', error);
+            return Swal.fire({
+                icon: 'error',
+                title: 'บันทึกไม่สำเร็จ',
+                text: error.message || 'กรุณาลองใหม่อีกครั้ง',
+                confirmButtonColor: '#D48197'
+            });
+        }
+
+        Swal.fire({
+            icon: 'success',
+            title: 'บันทึกสำเร็จ!',
+            timer: 1500,
+            showConfirmButton: false
+        });
+
+        if (typeof window.renderProfitHistory === 'function') {
+            await window.renderProfitHistory();
+        }
+
+    } catch (e) {
+        console.error('saveGlobalProfitShare exception:', e);
+        Swal.fire({
+            icon: 'error',
+            title: 'เกิดข้อผิดพลาด',
+            text: e.message || 'กรุณาลองใหม่อีกครั้ง',
+            confirmButtonColor: '#D48197'
+        });
+    }
 };
 
 window.renderProfitHistory = function() {
@@ -15259,8 +15599,8 @@ window.renderProfitHistory = function() {
         </div>`).join('');
 };
 
-// 🎯 ฟังก์ชันสำหรับลบประวัติที่บันทึกผิด (เพิ่มเข้าไปใหม่ใต้ renderProfitHistory)
-window.deleteProfitRecord = function(index) {
+// 🎯 ฟังก์ชันลบประวัติส่วนแบ่งกำไรด้วย id จริงจาก Supabase
+window.deleteProfitRecord = function(recordId) {
     Swal.fire({
         title: 'ลบประวัติบันทึก?',
         text: "คุณต้องการลบข้อมูลส่วนแบ่งกำไรงวดนี้ใช่หรือไม่? (ลบแล้วกู้คืนไม่ได้นะคะ)",
@@ -15271,12 +15611,35 @@ window.deleteProfitRecord = function(index) {
         confirmButtonText: 'ใช่, ลบทิ้งเลย',
         cancelButtonText: 'ยกเลิก',
         customClass: { popup: 'rounded-[2rem]' }
-    }).then((result) => {
-        if (result.isConfirmed) {
-            let history = JSON.parse(localStorage.getItem('ceoProfitHistory')) || [];
-            history.splice(index, 1); // ลบแถวที่เลือก
-            localStorage.setItem('ceoProfitHistory', JSON.stringify(history));
-            
+    }).then(async (result) => {
+        if (!result.isConfirmed) return;
+
+        if (!window.supabaseClient) {
+            return Swal.fire({
+                icon: 'error',
+                title: 'ยังไม่พบการเชื่อมต่อ Supabase',
+                confirmButtonColor: '#D48197',
+                customClass: { popup: 'rounded-[2rem]' }
+            });
+        }
+
+        try {
+            const { error } = await window.supabaseClient
+                .from('ceo_profit_history') // ✅ เปลี่ยนชื่อตารางถ้าของคุณใช้ชื่ออื่น
+                .delete()
+                .eq('id', recordId);
+
+            if (error) {
+                console.error('deleteProfitRecord error:', error);
+                return Swal.fire({
+                    icon: 'error',
+                    title: 'ลบข้อมูลไม่สำเร็จ',
+                    text: error.message || 'กรุณาลองใหม่อีกครั้ง',
+                    confirmButtonColor: '#D48197',
+                    customClass: { popup: 'rounded-[2rem]' }
+                });
+            }
+
             Swal.fire({
                 icon: 'success',
                 title: 'ลบข้อมูลแล้ว',
@@ -15284,8 +15647,20 @@ window.deleteProfitRecord = function(index) {
                 showConfirmButton: false,
                 customClass: { popup: 'rounded-[2rem]' }
             });
-            
-            window.renderProfitHistory(); // วาดตารางใหม่ทันที
+
+            if (typeof window.renderProfitHistory === 'function') {
+                await window.renderProfitHistory();
+            }
+
+        } catch (e) {
+            console.error('deleteProfitRecord exception:', e);
+            Swal.fire({
+                icon: 'error',
+                title: 'เกิดข้อผิดพลาด',
+                text: e.message || 'กรุณาลองใหม่อีกครั้ง',
+                confirmButtonColor: '#D48197',
+                customClass: { popup: 'rounded-[2rem]' }
+            });
         }
     });
 };

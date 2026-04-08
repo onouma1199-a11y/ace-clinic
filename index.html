@@ -924,6 +924,33 @@ window.startClinicBranchRealtime = function() {
         .subscribe();
 };
 
+window.startCourseRealtime = function() {
+    if (!window.supabaseClient) return;
+
+    if (window.courseRealtimeChannel) {
+        window.supabaseClient.removeChannel(window.courseRealtimeChannel);
+    }
+
+    window.courseRealtimeChannel = window.supabaseClient
+        .channel('course-master-live')
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'course_master'
+            },
+            async function() {
+                console.log('course_master changed → reload');
+
+                if (typeof window.updateCourseMasterTable === 'function') {
+                    await window.updateCourseMasterTable();
+                }
+            }
+        )
+        .subscribe();
+};
+
 /* -------------------- DATA HELPERS (ID BASED) -------------------- */
 // ✅ เปลี่ยน Logic จากการหาด้วย Index มาเป็นการหาด้วย ID โดยตรง
 window.getCustomerByID = async function(id) {

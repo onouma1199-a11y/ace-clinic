@@ -1604,11 +1604,12 @@ window.changeBranch = function(branchName) {
 
     // ✅ เปลี่ยนสาขาแล้วเข้า "จัดการลูกค้า/ประวัติ" ทันที
     if (typeof window.loadPage === 'function') {
-        return window.loadPage(2, 'จัดการลูกค้า/ประวัติ');
+        return window.loadPage(1, 'Dashboard ภาพรวม');
     }
 
     location.reload();
 };
+
 // --- 6. ฟังก์ชันเปลี่ยนรหัสผ่านส่วนตัว ---
 window.openChangePasswordModal = function() {
     const currentUser = JSON.parse(localStorage.getItem('currentUser'));
@@ -1768,167 +1769,87 @@ window.processPasswordChange = async function(oldPass, newPass) {
     }
 };
 
-window.__dashboardCache = window.__dashboardCache || {};
-window.__dashboardRenderToken = 0;
-
-// --- ฟังก์ชันสลับช่วงเวลา Dashboard ---
-window.changePeriod = function(period, btnElement) {
-    window.currentPeriod = period || 'day';
-    document.querySelectorAll('.btn-period').forEach(btn => btn.classList.remove('active'));
-    if (btnElement) btnElement.classList.add('active');
-
-    const target = document.getElementById('dynamicContent') || document.getElementById('pageContent');
-    if (typeof window.renderDashboard === 'function') {
-        window.renderDashboard(target, window.currentPeriod);
-    }
-};
-
-window.normalizeAuthLogin = function(input) {
-    const raw = String(input || '').trim().toLowerCase();
-    if (!raw) return '';
-
-    if (raw.includes('@')) return raw;
-
-    const digits = raw.replace(/\D/g, '');
-    if (digits) return `${digits}@ace.local`;
-
-    return `${raw}@ace.local`;
-};
+/* =======================================================
+   ZONE 2.1: Dashboard FAST MODE
+   ======================================================= */
 
 window.normalizeDashboardBranch = function(branch) {
-    return String(branch || '').replace(/^สาขา/, '').trim();
+    const original = String(branch || '').trim();
+    if (!original) return 'ทุกสาขา';
+
+    const lowerOriginal = original.toLowerCase();
+
+    if (
+        original === 'ทุกสาขา' ||
+        original === 'ทั้งหมด' ||
+        lowerOriginal === 'all' ||
+        lowerOriginal === 'all branches'
+    ) {
+        return 'ทุกสาขา';
+    }
+
+    return original
+        .replace('เอซคลินิก', '')
+        .replace('ACE Clinic', '')
+        .replace(':', '')
+        .replace('สาขา', '')
+        .trim();
 };
 
-window.getSelectedDashboardBranch = function () {
-    return localStorage.getItem('dashboardBranch') || 'ทุกสาขา';
+window.getSelectedDashboardBranch = function() {
+    return window.normalizeDashboardBranch(
+        localStorage.getItem('dashboardBranch') || 'ทุกสาขา'
+    );
 };
 
-window.setSelectedDashboardBranch = function (branch) {
-    localStorage.setItem('dashboardBranch', branch || 'ทุกสาขา');
+window.setSelectedDashboardBranch = function(branch) {
+    localStorage.setItem(
+        'dashboardBranch',
+        window.normalizeDashboardBranch(branch || 'ทุกสาขา')
+    );
 };
 
 window.getDashboardActiveBranch = function() {
-    return window.getCurrentViewingBranch() || window.getUserHomeBranch() || 'สาขาบางพลี';
+    return window.normalizeDashboardBranch(
+        (typeof window.getCurrentViewingBranch === 'function' ? window.getCurrentViewingBranch() : '')
+        || window.getSelectedDashboardBranch()
+        || (typeof window.getUserHomeBranch === 'function' ? window.getUserHomeBranch() : '')
+        || 'ทุกสาขา'
+    );
 };
-window.__prepareDashboardState = function({
-    period = 'day',
-    selectedBranch = 'ทุกสาขา',
-    accountDB = [],
-    appointmentDB = [],
-    customerDB = []
-} = {}) {
+
+window.__dashboardCache = window.__dashboardCache || {};
+window.__dashboardRenderToken = window.__dashboardRenderToken || 0;
+
+window.__getDashboardDateRange = function(period = 'day') {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-    const currentMonth = today.substring(0, 7);
-    const currentYear = today.substring(0, 4);
-
-    const isShowAll = selectedBranch === 'ทุกสาขา';
-    const cleanSelectedBranch = window.normalizeDashboardBranch(selectedBranch);
-
-    const branchMatch = (value) => {
-        const clean = window.normalizeDashboardBranch(value);
-        return isShowAll || clean === cleanSelectedBranch;
-    };
-
-    let statsIncomes = accountDB.filter(item =>
-        item.type === "รายรับ" &&
-        item.status === "เสร็จสิ้น" &&
-        branchMatch(item.branch)
-    );
-
-    let statsExpenses = accountDB.filter(item =>
-        item.type === "รายจ่าย" &&
-        branchMatch(item.branch)
-    );
-
-    let statsApps = appointmentDB.filter(a =>
-        branchMatch(a.branch)
-    );
-
-    const statsCustomersAll = customerDB.filter(c =>
-        branchMatch(c.branch)
-    );
-
-    let statsCustomers = [...statsCustomersAll];
-
-    if (period === 'day') {
-        statsIncomes = statsIncomes.filter(i => String(i.date || '') === today);
-        statsExpenses = statsExpenses.filter(e => String(e.date || '') === today);
-        statsApps = statsApps.filter(a => String(a.date || '') === today);
-        statsCustomers = statsCustomers.filter(c => String(c.created_at || '').startsWith(today));
-    } else if (period === 'month') {
-        statsIncomes = statsIncomes.filter(i => String(i.date || '').startsWith(currentMonth));
-        statsExpenses = statsExpenses.filter(e => String(e.date || '').startsWith(currentMonth));
-        statsApps = statsApps.filter(a => String(a.date || '').startsWith(currentMonth));
-        statsCustomers = statsCustomers.filter(c => String(c.created_at || '').startsWith(currentMonth));
-    } else if (period === 'year') {
-        statsIncomes = statsIncomes.filter(i => String(i.date || '').startsWith(currentYear));
-        statsExpenses = statsExpenses.filter(e => String(e.date || '').startsWith(currentYear));
-        statsApps = statsApps.filter(a => String(a.date || '').startsWith(currentYear));
-        statsCustomers = statsCustomers.filter(c => String(c.created_at || '').startsWith(currentYear));
-    }
-
-    const incomesToday = accountDB.filter(item =>
-        item.type === "รายรับ" &&
-        item.status === "เสร็จสิ้น" &&
-        String(item.date || '') === today &&
-        branchMatch(item.branch)
-    );
-
-    const expensesToday = accountDB.filter(item =>
-        item.type === "รายจ่าย" &&
-        String(item.date || '') === today &&
-        branchMatch(item.branch)
-    );
-
-    const appsToday = appointmentDB.filter(a =>
-        String(a.date || '') === today &&
-        branchMatch(a.branch)
-    );
-
-    const totalSales = statsIncomes.reduce((sum, item) => {
-        return sum + (parseFloat(String(item.total || '').replace(/[^0-9.-]+/g, "")) || 0);
-    }, 0);
-
-    const totalExp = statsExpenses.reduce((sum, item) => {
-        return sum + (parseFloat(item.amount) || 0);
-    }, 0);
-
-    const netProfit = totalSales - totalExp;
-
-    const salesYesterday = accountDB
-        .filter(item =>
-            item.type === "รายรับ" &&
-            item.status === "เสร็จสิ้น" &&
-            String(item.date || '') === yesterday &&
-            branchMatch(item.branch)
-        )
-        .reduce((sum, item) => {
-            return sum + (parseFloat(String(item.total || '').replace(/[^0-9.-]+/g, "")) || 0);
-        }, 0);
-
-    const customerMap = {};
-    customerDB.forEach(c => {
-        if (c?.id) customerMap[String(c.id)] = c;
-    });
+    const currentMonth = today.slice(0, 7);
+    const currentYear = today.slice(0, 4);
 
     return {
-        period,
-        selectedBranch,
         today,
-        statsApps,
-        statsCustomers,
-        statsCustomersAll,
-        incomesToday,
-        expensesToday,
-        appsToday,
-        totalSales,
-        netProfit,
-        salesYesterday,
-        totalCustomersAllTime: statsCustomersAll.length,
-        customerMap
+        currentMonth,
+        currentYear
     };
+};
+
+window.__branchEq = function(query, columnName, branch) {
+    const safeBranch = window.normalizeDashboardBranch(branch);
+    if (!safeBranch || safeBranch === 'ทุกสาขา') return query;
+    return query.eq(columnName, safeBranch);
+};
+
+window.__sumSalesRows = function(rows = []) {
+    return (rows || []).reduce((sum, row) => {
+        return sum + (Number(row.net_total ?? row.total ?? 0) || 0);
+    }, 0);
+};
+
+window.__sumExpenseRows = function(rows = []) {
+    return (rows || []).reduce((sum, row) => {
+        return sum + (Number(row.amount || 0) || 0);
+    }, 0);
 };
 
 window.__buildDashboardHtml = function(state = {}, loadingCustomers = false) {
@@ -1952,28 +1873,28 @@ window.__buildDashboardHtml = function(state = {}, loadingCustomers = false) {
        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 font-black italic uppercase animate-in slide-in-from-bottom duration-300">
             <div class="glass-card border-l-8 border-[#C5A059] shadow-sm">
                 <p class="text-[10px] text-gray-400 font-bold uppercase">ยอดขาย${titleLabel}</p>
-                <p class="text-3xl text-gray-800 mt-2 font-black italic">฿${totalSales.toLocaleString()}</p>
-                <p class="text-[9px] text-slate-400 font-bold mt-1">(เมื่อวานนี้: ฿${salesYesterday.toLocaleString()})</p>
+                <p class="text-3xl text-gray-800 mt-2 font-black italic">฿${Number(totalSales || 0).toLocaleString()}</p>
+                <p class="text-[9px] text-slate-400 font-bold mt-1">(เมื่อวานนี้: ฿${Number(salesYesterday || 0).toLocaleString()})</p>
             </div>
 
             <div class="glass-card border-l-8 border-[#D48197] shadow-sm">
                 <p class="text-[10px] text-gray-400 font-bold uppercase">ลูกค้าใหม่${titleLabel}</p>
                 <p class="text-3xl text-gray-800 mt-2 font-black italic">
-                    ${loadingCustomers ? '...' : `${statsCustomers.length.toLocaleString()} คน`}
+                    ${loadingCustomers ? '...' : `${Number(statsCustomers.length || 0).toLocaleString()} คน`}
                 </p>
                 <p class="text-[9px] text-slate-400 font-bold mt-1">
-                    ${loadingCustomers ? '(กำลังโหลดลูกค้า...)' : `(สะสมทั้งหมด: ${totalCustomersAllTime.toLocaleString()} คน)`}
+                    ${loadingCustomers ? '(กำลังโหลดลูกค้า...)' : `(สะสมทั้งหมด: ${Number(totalCustomersAllTime || 0).toLocaleString()} คน)`}
                 </p>
             </div>
 
             <div class="glass-card border-l-8 border-blue-400 shadow-sm">
                 <p class="text-[10px] text-gray-400 font-bold uppercase">คิวนัด${titleLabel}</p>
-                <p class="text-3xl text-gray-800 mt-2 font-black italic">${statsApps.length.toLocaleString()} นัด</p>
+                <p class="text-3xl text-gray-800 mt-2 font-black italic">${Number(statsApps.length || 0).toLocaleString()} นัด</p>
             </div>
 
             <div class="glass-card border-l-8 border-green-400 shadow-sm">
                 <p class="text-[10px] text-gray-400 font-bold uppercase">สุทธิ${titleLabel}</p>
-                <p class="text-3xl text-green-600 mt-2 font-black italic">฿${netProfit.toLocaleString()}</p>
+                <p class="text-3xl text-green-600 mt-2 font-black italic">฿${Number(netProfit || 0).toLocaleString()}</p>
             </div>
         </div>
 
@@ -2027,13 +1948,13 @@ window.__buildDashboardHtml = function(state = {}, loadingCustomers = false) {
                     ${['เงินสด', 'โอน (QR)', 'โอนบริษัท', 'รูดบัตรเครดิต', 'Shopee', 'Gowabi'].map(method => {
                         const amt = incomesToday
                             .filter(i => i.payment === method)
-                            .reduce((s, item) => s + (parseFloat(String(item.total || '').replace(/[^0-9.-]+/g,"")) || 0), 0);
+                            .reduce((s, item) => s + (Number(item.total || 0) || 0), 0);
 
                         return `<div class="flex justify-between border-b border-slate-50 pb-1"><span>${method}</span><span class="text-slate-800">${amt.toLocaleString()}.-</span></div>`;
                     }).join('')}
                     <div class="flex justify-between pt-3 text-xl ace-pink border-t-4 border-double font-bold mt-2">
                         <span>รวมรายรับวันนี้</span>
-                        <span>${incomesToday.reduce((s, i) => s + (parseFloat(String(i.total || '').replace(/[^0-9.-]+/g,"")) || 0), 0).toLocaleString()}.-</span>
+                        <span>${incomesToday.reduce((s, i) => s + (Number(i.total || 0) || 0), 0).toLocaleString()}.-</span>
                     </div>
                 </div>
             </div>
@@ -2047,7 +1968,7 @@ window.__buildDashboardHtml = function(state = {}, loadingCustomers = false) {
                                 <p class="text-xs font-bold text-slate-600">📉 ${ex.detail || '-'}</p>
                                 <p class="text-[9px] text-gray-400 font-bold">หักจาก: ${ex.account || '-'}</p>
                             </div>
-                            <span class="text-red-500 font-bold">- ${parseFloat(ex.amount || 0).toLocaleString()}.-</span>
+                            <span class="text-red-500 font-bold">- ${Number(ex.amount || 0).toLocaleString()}.-</span>
                         </div>
                     `).join('') : '<p class="text-center text-gray-300">ไม่มีข้อมูลรายจ่ายวันนี้</p>'}
                 </div>
@@ -2056,8 +1977,8 @@ window.__buildDashboardHtml = function(state = {}, loadingCustomers = false) {
                         <div>
                             <p class="text-[10px] uppercase opacity-90 font-bold tracking-wider">สุทธิวันนี้ (NET)</p>
                             <h2 class="text-3xl font-bold tracking-tighter">฿${(
-                                incomesToday.reduce((s, i) => s + (parseFloat(String(i.total || '').replace(/[^0-9.-]+/g,"")) || 0), 0)
-                                - expensesToday.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
+                                incomesToday.reduce((s, i) => s + (Number(i.total || 0) || 0), 0)
+                                - expensesToday.reduce((s, e) => s + (Number(e.amount || 0) || 0), 0)
                             ).toLocaleString()}.-</h2>
                         </div>
                     </div>
@@ -2067,8 +1988,183 @@ window.__buildDashboardHtml = function(state = {}, loadingCustomers = false) {
     `;
 };
 
+window.loadDashboardSummaryData = async function(period = 'day', selectedBranch = 'ทุกสาขา') {
+    if (!window.supabaseClient) {
+        return {
+            totalSales: 0,
+            salesYesterday: 0,
+            totalCustomersAllTime: 0,
+            newCustomersCount: 0,
+            appointmentsCount: 0,
+            incomesToday: [],
+            expensesToday: [],
+            appsToday: [],
+            customerMap: {}
+        };
+    }
+
+    const safeBranch = window.normalizeDashboardBranch(selectedBranch);
+    const isShowAll = safeBranch === 'ทุกสาขา';
+    const { today, currentMonth, currentYear } = window.__getDashboardDateRange(period);
+
+    const inPeriod = (dateStr) => {
+        const val = String(dateStr || '');
+        if (period === 'day') return val === today;
+        if (period === 'month') return val.startsWith(currentMonth);
+        if (period === 'year') return val.startsWith(currentYear);
+        return true;
+    };
+
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+    // รายรับ
+    let salesQuery = window.supabaseClient
+        .from('sales_header')
+        .select('id, net_total, total, payment, bill_date, customer_id, customer_name, hn, branch_name, status')
+        .eq('status', 'เสร็จสิ้น');
+
+    salesQuery = window.__branchEq(salesQuery, 'branch_name', safeBranch);
+
+    // รายจ่ายวันนี้/ช่วงเวลา
+    let expensesQuery = window.supabaseClient
+        .from('expenses')
+        .select('id, amount, detail, account, expense_date, branch_name, category');
+
+    expensesQuery = window.__branchEq(expensesQuery, 'branch_name', safeBranch);
+
+    // ลูกค้าสะสม
+    let customerCountQuery = window.supabaseClient
+        .from('customers')
+        .select('*', { count: 'exact', head: true });
+
+    customerCountQuery = window.__branchEq(customerCountQuery, 'branch', safeBranch);
+
+    // ลูกค้าใหม่
+    let newCustomerQuery = window.supabaseClient
+        .from('customers')
+        .select('id, created_at, branch');
+
+    newCustomerQuery = window.__branchEq(newCustomerQuery, 'branch', safeBranch);
+
+    // นัดวันนี้
+    let appointmentsQuery = window.supabaseClient
+        .from('appointments')
+        .select('id, customer_id, date, time, phone, customerName, nickname, courseName, course, courseList, status, branch, hn');
+
+    appointmentsQuery = window.__branchEq(appointmentsQuery, 'branch', safeBranch);
+
+    // customer map สำหรับโชว์ตารางนัดวันนี้
+    let customerMapQuery = window.supabaseClient
+        .from('customers')
+        .select('id, hn, phone, fullname, nickname, branch');
+
+    customerMapQuery = window.__branchEq(customerMapQuery, 'branch', safeBranch);
+
+    const [
+        { data: salesRows, error: salesError },
+        { data: expenseRows, error: expenseError },
+        { count: totalCustomersAllTime, error: customerCountError },
+        { data: newCustomerRows, error: newCustomerError },
+        { data: appointmentRows, error: appointmentError },
+        { data: customerMapRows, error: customerMapError }
+    ] = await Promise.all([
+        salesQuery,
+        expensesQuery,
+        customerCountQuery,
+        newCustomerQuery,
+        appointmentsQuery,
+        customerMapQuery
+    ]);
+
+    if (salesError) console.error('loadDashboardSummaryData salesError:', salesError);
+    if (expenseError) console.error('loadDashboardSummaryData expenseError:', expenseError);
+    if (customerCountError) console.error('loadDashboardSummaryData customerCountError:', customerCountError);
+    if (newCustomerError) console.error('loadDashboardSummaryData newCustomerError:', newCustomerError);
+    if (appointmentError) console.error('loadDashboardSummaryData appointmentError:', appointmentError);
+    if (customerMapError) console.error('loadDashboardSummaryData customerMapError:', customerMapError);
+
+    const incomes = (salesRows || []).map(row => ({
+        id: row.id,
+        type: 'รายรับ',
+        status: row.status || 'เสร็จสิ้น',
+        date: row.bill_date || '',
+        total: Number(row.net_total ?? row.total ?? 0) || 0,
+        payment: row.payment || '-',
+        branch: window.normalizeDashboardBranch(row.branch_name || ''),
+        customer_id: row.customer_id || '',
+        customerName: row.customer_name || '',
+        hn: row.hn || ''
+    }));
+
+    const expenses = (expenseRows || []).map(row => ({
+        id: row.id,
+        type: 'รายจ่าย',
+        date: row.expense_date || '',
+        amount: Number(row.amount || 0) || 0,
+        detail: row.detail || '',
+        account: row.account || '',
+        category: row.category || 'ทั่วไป',
+        branch: window.normalizeDashboardBranch(row.branch_name || '')
+    }));
+
+    const newCustomers = (newCustomerRows || []).filter(row => {
+        const created = String(row.created_at || '');
+        if (period === 'day') return created.startsWith(today);
+        if (period === 'month') return created.startsWith(currentMonth);
+        if (period === 'year') return created.startsWith(currentYear);
+        return true;
+    });
+
+    const statsApps = (appointmentRows || []).filter(row => {
+        const val = String(row.date || '');
+        if (period === 'day') return val === today;
+        if (period === 'month') return val.startsWith(currentMonth);
+        if (period === 'year') return val.startsWith(currentYear);
+        return true;
+    });
+
+    const appsToday = (appointmentRows || []).filter(row => String(row.date || '') === today);
+
+    const incomesToday = incomes.filter(i => i.date === today);
+    const expensesToday = expenses.filter(e => e.date === today);
+
+    const statsIncomes = incomes.filter(i => inPeriod(i.date));
+    const statsExpenses = expenses.filter(e => inPeriod(e.date));
+
+    const salesYesterday = incomes
+        .filter(i => i.date === yesterday)
+        .reduce((sum, item) => sum + (Number(item.total || 0) || 0), 0);
+
+    const totalSales = statsIncomes.reduce((sum, item) => sum + (Number(item.total || 0) || 0), 0);
+    const totalExp = statsExpenses.reduce((sum, item) => sum + (Number(item.amount || 0) || 0), 0);
+    const netProfit = totalSales - totalExp;
+
+    const customerMap = {};
+    (customerMapRows || []).forEach(c => {
+        if (c?.id) customerMap[String(c.id)] = c;
+    });
+
+    return {
+        totalSales,
+        salesYesterday,
+        totalCustomersAllTime: Number(totalCustomersAllTime || 0),
+        newCustomersCount: newCustomers.length,
+        appointmentsCount: statsApps.length,
+        incomesToday,
+        expensesToday,
+        appsToday,
+        statsApps,
+        netProfit,
+        customerMap
+    };
+};
+
 window.renderDashboard = async function(target, period = 'day') {
     if (!target) return;
+
+    if (typeof window.getCurrentViewingBranch === 'function') {
+        window.setSelectedDashboardBranch(window.getCurrentViewingBranch());
+    }
 
     const renderToken = ++window.__dashboardRenderToken;
     const safePeriod = period || 'day';
@@ -2078,49 +2174,47 @@ window.renderDashboard = async function(target, period = 'day') {
     const cacheKey = `${selectedBranch}__${safePeriod}`;
     const cacheAgeMs = 15000;
 
-    const accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
-    const appointmentDB = JSON.parse(localStorage.getItem('appointmentDB')) || [];
+    const quickState = {
+        period: safePeriod,
+        statsApps: [],
+        statsCustomers: [],
+        incomesToday: [],
+        expensesToday: [],
+        appsToday: [],
+        totalSales: 0,
+        netProfit: 0,
+        salesYesterday: 0,
+        totalCustomersAllTime: 0,
+        customerMap: {}
+    };
 
-    // 1) ถ้ามี cache แสดงก่อนทันที
     const cached = window.__dashboardCache[cacheKey];
     if (cached && (Date.now() - cached.time < cacheAgeMs)) {
         target.innerHTML = cached.html;
-    } else {
-        // 2) ถ้าไม่มี cache ใช้ข้อมูล local/customer cache ที่มีอยู่ก่อน
-        const localCustomerDB = Array.isArray(window.__customerCache?.data)
-            ? window.__customerCache.data
-            : [];
-
-        const quickState = window.__prepareDashboardState({
-            period: safePeriod,
-            selectedBranch,
-            accountDB,
-            appointmentDB,
-            customerDB: localCustomerDB
-        });
-
-        target.innerHTML = window.__buildDashboardHtml(
-            quickState,
-            localCustomerDB.length === 0
-        );
+        return;
     }
 
-    // 3) ค่อยโหลดลูกค้าจริงด้านหลัง
+    target.innerHTML = window.__buildDashboardHtml(quickState, true);
+
     setTimeout(async () => {
         try {
-            const customerDB = typeof window.getCustomersFromSupabase === 'function'
-                ? await window.getCustomersFromSupabase(false)
-                : [];
+            const summary = await window.loadDashboardSummaryData(safePeriod, selectedBranch);
 
             if (renderToken !== window.__dashboardRenderToken) return;
 
-            const finalState = window.__prepareDashboardState({
+            const finalState = {
                 period: safePeriod,
-                selectedBranch,
-                accountDB,
-                appointmentDB,
-                customerDB: Array.isArray(customerDB) ? customerDB : []
-            });
+                statsApps: summary.statsApps || [],
+                statsCustomers: Array(summary.newCustomersCount || 0).fill({}),
+                incomesToday: summary.incomesToday || [],
+                expensesToday: summary.expensesToday || [],
+                appsToday: summary.appsToday || [],
+                totalSales: summary.totalSales || 0,
+                netProfit: summary.netProfit || 0,
+                salesYesterday: summary.salesYesterday || 0,
+                totalCustomersAllTime: summary.totalCustomersAllTime || 0,
+                customerMap: summary.customerMap || {}
+            };
 
             const finalHtml = window.__buildDashboardHtml(finalState, false);
 
@@ -2137,39 +2231,6 @@ window.renderDashboard = async function(target, period = 'day') {
     }, 0);
 };
 
-// --- ฟังก์ชันควบคุมเมนูย่อย (Submenu) ---
-window.toggleBillingMenu = function() {
-    const submenu = document.getElementById('billingSubmenu');
-    const arrow = document.getElementById('billingArrow');
-    if (submenu && arrow) {
-        submenu.classList.toggle('open');
-        arrow.classList.toggle('rotate');
-        // ✅ ปรับใช้ฟังก์ชันจัดการ Submenu กลางเพื่อให้เสถียรขึ้น
-        if (typeof window.handleSubmenu === 'function') {
-            window.handleSubmenu('billingSubmenu', 'billingArrow', 'serviceSubmenu', 'serviceArrow');
-        }
-    }
-};
-
-window.toggleServiceSubmenu = function() {
-    const submenu = document.getElementById('serviceSubmenu');
-    const arrow = document.getElementById('serviceArrow');
-    
-    if (submenu && arrow) {
-        // ✅ ตรวจสอบสถานะและสลับการแสดงผลแบบเนียนตา (Smooth Transition)
-        if (submenu.style.maxHeight === "0px" || submenu.style.maxHeight === "") {
-            submenu.style.maxHeight = "300px"; 
-            submenu.style.opacity = "1";
-            submenu.style.marginTop = "5px";
-            arrow.style.transform = "rotate(180deg)";
-        } else {
-            submenu.style.maxHeight = "0px";
-            submenu.style.opacity = "0";
-            submenu.style.marginTop = "0px";
-            arrow.style.transform = "rotate(0deg)";
-        }
-    }
-};
 /* =======================================================
    🛡️ ZONE 2.5: CORE NAVIGATION (ฉบับใช้ Supabase Permission + Branch Rule)
    ======================================================= */
@@ -7148,47 +7209,193 @@ window.deleteQueueItem = function(qId) {
 /* =======================================================
     💰 ZONE 5: BILLING & EXPENSE (ระบบตีบิลใบเสร็จ & รายจ่าย)
    ======================================================= */
+window.loadSalesHistory = async function() {
+    if (!window.supabaseClient) {
+        console.error('No supabase');
+        return [];
+    }
 
-// --- 1. หน้าตีบิลใบเสร็จ (INCOMING) - แก้ไขปัญหา Dropdown ซ่อน ---
-window.renderSalesPage = function() {
+    const currentUser = (typeof window.getCurrentUserSafe === 'function')
+        ? window.getCurrentUserSafe()
+        : (JSON.parse(localStorage.getItem('currentUser')) || {});
+
+    const rawViewingBranch = (typeof window.getCurrentViewingBranch === 'function')
+        ? window.getCurrentViewingBranch()
+        : (currentUser.viewingBranch || currentUser.homeBranch || currentUser.branch || 'ทุกสาขา');
+
+    const rawBranchText = String(rawViewingBranch || '').trim();
+    const isAllBranches = rawBranchText === 'ทุกสาขา';
+
+    const safeViewingBranch = rawBranchText
+        .replace('เอซคลินิก', '')
+        .replace('ACE Clinic', '')
+        .replace('สาขา', '')
+        .replace(':', '')
+        .trim();
+
+    let query = window.supabaseClient
+        .from('sales_header')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    if (!isAllBranches && safeViewingBranch) {
+        query = query.eq('branch_name', safeViewingBranch);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+        console.error('loadSalesHistory error:', error);
+        return [];
+    }
+
+    return data || [];
+};
+
+window.getCustomers = async function() {
+    if (!window.supabaseClient) {
+        console.error('No supabase');
+        return [];
+    }
+
+    let allData = [];
+    let from = 0;
+    const pageSize = 1000;
+
+    while (true) {
+        const { data, error } = await window.supabaseClient
+            .from('customers')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .range(from, from + pageSize - 1);
+
+        if (error) {
+            console.error('getCustomers error:', error);
+            break;
+        }
+
+        if (!data || data.length === 0) break;
+
+        allData = allData.concat(data);
+
+        if (data.length < pageSize) break;
+        from += pageSize;
+    }
+
+    window.customerCache = allData;
+    return allData;
+};
+
+window.loadCustomersForBilling = async function() {
+    if (!window.supabaseClient) {
+        console.error('No supabase');
+        return [];
+    }
+
+    let allData = [];
+    let from = 0;
+    const pageSize = 1000;
+
+    while (true) {
+        const { data, error } = await window.supabaseClient
+            .from('customers')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .range(from, from + pageSize - 1);
+
+        if (error) {
+            console.error('loadCustomersForBilling error:', error);
+            break;
+        }
+
+        if (!data || data.length === 0) break;
+
+        allData = allData.concat(data);
+
+        if (data.length < pageSize) break;
+        from += pageSize;
+    }
+
+    window.customerCache = allData;
+    return allData;
+};
+
+// --- 1. หน้าตีบิลใบเสร็จ (INCOMING) ---
+window.renderSalesPage = async function() {
     const target = document.getElementById('dynamicContent');
     if (!target) return;
-    
-    const incomes = JSON.parse(localStorage.getItem('accountDB')) || [];
+
+    const rows = await window.loadSalesHistory();
     const today = new Date().toISOString().split('T')[0];
-    
+
     const dateFilter = document.getElementById('billDateFilter')?.value || today;
     const currentSearch = document.getElementById('billSearchInput')?.value || "";
     const statusFilter = document.getElementById('billStatusFilter')?.value || "ทั้งหมด";
     const billPageSize = parseInt(document.getElementById('billPageSize')?.value) || 10;
 
-    // ค้นหาบรรทัดนี้ในฟังก์ชัน renderSalesPage แล้วแทนที่ด้วย logic กรองสาขา
-let filteredData = incomes.filter(item => {
-    if (item.type !== "รายรับ") return false; 
-    
-    // --- เพิ่มส่วนกรองสาขาตรงนี้ ---
-    const currentUser = JSON.parse(localStorage.getItem('currentUser')) || {};
-    const viewingBranch = (currentUser.branch || '').replace('สาขา', '').trim();
-    const isAdmin = ['แอดมินหลัก', 'CEO'].includes(currentUser.role);
-    const itemBranch = String(item.branch || '').replace('สาขา', '').trim();
-    
-    // ถ้าไม่ใช่ Admin บิลต้องตรงสาขาเท่านั้น
-    const matchBranch = (viewingBranch === 'ทุกสาขา' && isAdmin) || (itemBranch === viewingBranch);
-    // ----------------------------
+    const rawViewingBranch = (typeof window.getCurrentViewingBranch === 'function')
+        ? window.getCurrentViewingBranch()
+        : 'ทุกสาขา';
 
-    const nameVal = String(item.customerName || item.customer || "").toLowerCase();
-    const hnVal = String(item.hn || "").toLowerCase();
-    const searchVal = currentSearch.toLowerCase().trim();
-    
-    return matchBranch && // กรองสาขา
-           (nameVal.includes(searchVal) || hnVal.includes(searchVal)) &&
-           (statusFilter === "ทั้งหมด" || item.status === statusFilter) &&
-           (!dateFilter || item.date === dateFilter);
-});
+    const rawBranchText = String(rawViewingBranch || '').trim();
+    const isAllBranches = rawBranchText === 'ทุกสาขา';
+
+    const safeViewingBranch = rawBranchText
+        .replace('เอซคลินิก', '')
+        .replace('ACE Clinic', '')
+        .replace('สาขา', '')
+        .replace(':', '')
+        .trim();
+
+    // ✅ map ข้อมูลจาก Supabase ให้หน้าตาเหมือนของเดิม
+    const incomes = (rows || []).map(row => ({
+        id: row.id,
+        billId: row.bill_no || row.id,
+        customer: row.customer_name || '-',
+        customerName: row.customer_name || '-',
+        customer_name: row.customer_name || '-',
+        customer_id: row.customer_id || '',
+        hn: row.hn || '-',
+        date: row.bill_date || '',
+        items: Array.isArray(row.items_snapshot) ? row.items_snapshot : [],
+        total: Number(row.net_total ?? row.total ?? 0) || 0,
+        subtotal: Number(row.total ?? 0) || 0,
+        discount: Number(row.discount_amount ?? 0) || 0,
+        payment: row.payment || '-',
+        status: row.status || 'เสร็จสิ้น',
+        type: row.type || 'รายรับ',
+        branch: row.branch_name || '',
+        seller: row.seller || '-',
+        timestamp: row.created_at ? new Date(row.created_at).getTime() : 0,
+        created_at: row.created_at || null
+    }));
+
+    let filteredData = incomes.filter(item => {
+        if (item.type !== "รายรับ") return false;
+
+        const itemBranch = String(item.branch || '')
+            .replace('เอซคลินิก', '')
+            .replace('ACE Clinic', '')
+            .replace('สาขา', '')
+            .replace(':', '')
+            .trim();
+
+        const matchBranch = isAllBranches || itemBranch === safeViewingBranch;
+
+        const nameVal = String(item.customerName || item.customer || "").toLowerCase();
+        const hnVal = String(item.hn || "").toLowerCase();
+        const searchVal = currentSearch.toLowerCase().trim();
+
+        return matchBranch &&
+            (nameVal.includes(searchVal) || hnVal.includes(searchVal)) &&
+            (statusFilter === "ทั้งหมด" || item.status === statusFilter) &&
+            (!dateFilter || item.date === dateFilter);
+    });
 
     filteredData.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
     if (typeof window.currentBillPage === 'undefined') window.currentBillPage = 1;
-    
+
     const totalPages = Math.max(1, Math.ceil(filteredData.length / billPageSize));
     if (window.currentBillPage > totalPages) window.currentBillPage = totalPages;
     if (window.currentBillPage < 1) window.currentBillPage = 1;
@@ -7196,7 +7403,6 @@ let filteredData = incomes.filter(item => {
     const startIndex = (window.currentBillPage - 1) * billPageSize;
     const paginatedData = filteredData.slice(startIndex, startIndex + billPageSize);
 
-    // 💡 แก้ไข HTML: ลบ overflow-hidden ออกจากส่วนตาราง เพื่อให้เมนูเด้งทับได้
     target.innerHTML = `
     <div class="animate-in fade-in duration-500 font-light pb-20 -mt-6 text-left">
         
@@ -7204,35 +7410,39 @@ let filteredData = incomes.filter(item => {
             <div class="flex flex-nowrap items-end gap-4 overflow-x-auto pb-2 scrollbar-hide">
                 <div class="flex flex-col gap-1 shrink-0">
                     <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">แสดงลำดับ</label>
-                    <select id="billPageSize" onchange="window.currentBillPage=1; renderSalesPage()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[13px] font-light bg-slate-50 outline-none shadow-sm min-w-[120px] text-slate-600 appearance-none cursor-pointer">
+                    <select id="billPageSize" onchange="window.currentBillPage=1; window.renderSalesPage()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[13px] font-light bg-slate-50 outline-none shadow-sm min-w-[120px] text-slate-600 appearance-none cursor-pointer">
                         <option value="10" ${billPageSize === 10 ? 'selected' : ''}>10 รายการ</option>
                         <option value="30" ${billPageSize === 30 ? 'selected' : ''}>30 รายการ</option>
                         <option value="50" ${billPageSize === 50 ? 'selected' : ''}>50 รายการ</option>
                     </select>
                 </div>
+
                 <div class="flex flex-col gap-1 shrink-0">
                     <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">สถานะ</label>
-                    <select id="billStatusFilter" onchange="window.currentBillPage=1; renderSalesPage()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[13px] font-light bg-slate-50 outline-none shadow-sm min-w-[140px] text-slate-600 appearance-none cursor-pointer">
+                    <select id="billStatusFilter" onchange="window.currentBillPage=1; window.renderSalesPage()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[13px] font-light bg-slate-50 outline-none shadow-sm min-w-[140px] text-slate-600 appearance-none cursor-pointer">
                         <option value="ทั้งหมด" ${statusFilter === 'ทั้งหมด' ? 'selected' : ''}>ทั้งหมด</option>
                         <option value="เสร็จสิ้น" ${statusFilter === 'เสร็จสิ้น' ? 'selected' : ''}>✅ เสร็จสิ้น</option>
                         <option value="ยกเลิก" ${statusFilter === 'ยกเลิก' ? 'selected' : ''}>❌ ยกเลิก</option>
                     </select>
                 </div>
+
                 <div class="flex flex-col gap-1 shrink-0">
                     <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">เลือกวันที่</label>
-                    <input type="date" id="billDateFilter" value="${dateFilter}" onchange="window.currentBillPage=1; renderSalesPage()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[13px] font-light bg-slate-50 outline-none text-slate-600 shadow-sm cursor-pointer">
+                    <input type="date" id="billDateFilter" value="${dateFilter}" onchange="window.currentBillPage=1; window.renderSalesPage()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[13px] font-light bg-slate-50 outline-none text-slate-600 shadow-sm cursor-pointer">
                 </div>
+
                 <div class="flex flex-col gap-1 flex-1 min-w-[250px]">
                     <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">ค้นหาประวัติ (ชื่อ/HN)</label>
                     <div class="flex gap-2">
                         <div class="relative flex-1">
-                            <input type="text" id="billSearchInput" value="${currentSearch}" placeholder="พิมพ์เพื่อค้นหา..." onkeyup="if(event.key === 'Enter') { window.currentBillPage=1; renderSalesPage(); }" class="w-full border border-pink-100 pl-10 pr-4 py-2.5 rounded-2xl text-[13px] font-light bg-slate-50 outline-none focus:ring-1 focus:ring-pink-200 transition-all text-slate-700">
+                            <input type="text" id="billSearchInput" value="${currentSearch}" placeholder="พิมพ์เพื่อค้นหา..." onkeyup="if(event.key === 'Enter') { window.currentBillPage=1; window.renderSalesPage(); }" class="w-full border border-pink-100 pl-10 pr-4 py-2.5 rounded-2xl text-[13px] font-light bg-slate-50 outline-none focus:ring-1 focus:ring-pink-200 transition-all text-slate-700">
                             <span class="absolute left-4 top-2.5 text-slate-300">🔍</span>
                         </div>
-                        <button onclick="window.currentBillPage=1; renderSalesPage()" class="bg-[#D48197] text-white px-6 py-2 rounded-2xl text-[11px] font-bold shadow-md hover:bg-black transition-all shrink-0">ค้นหา</button>
+                        <button onclick="window.currentBillPage=1; window.renderSalesPage()" class="bg-[#D48197] text-white px-6 py-2 rounded-2xl text-[11px] font-bold shadow-md hover:bg-black transition-all shrink-0">ค้นหา</button>
                     </div>
                 </div>
-                <button onclick="openNewBillProcess()" class="bg-black text-white px-6 py-2.5 rounded-2xl text-[11px] font-bold shadow-xl hover:bg-[#D48197] transition-all uppercase flex items-center gap-2 shrink-0 mb-0.5">
+
+                <button onclick="window.openNewBillProcess()" class="bg-black text-white px-6 py-2.5 rounded-2xl text-[11px] font-bold shadow-xl hover:bg-[#D48197] transition-all uppercase flex items-center gap-2 shrink-0 mb-0.5">
                     <span class="bg-white text-black w-5 h-5 rounded-full flex items-center justify-center text-sm font-bold">+</span> เพิ่มใบเสร็จ
                 </button>
             </div>
@@ -7254,24 +7464,23 @@ let filteredData = incomes.filter(item => {
                 </thead>
                 <tbody class="text-slate-600" id="salesTableBody">
                     ${paginatedData.length > 0 ? paginatedData.map((item, i) => `
-                       <tr class="border-b border-slate-50 hover:bg-pink-50/30 transition-all" style="height: 60px; position: relative !important;">
-                            
+                        <tr class="border-b border-slate-50 hover:bg-pink-50/30 transition-all" style="height: 60px; position: relative !important;">
                             <td class="py-4 px-4 align-middle text-center">
                                 <span class="text-[11px] font-bold text-slate-400">${startIndex + i + 1}</span>
                             </td>
 
                             <td class="py-4 px-4 align-middle">
-                                <span class="text-[11px] text-slate-500">${item.date}</span>
+                                <span class="text-[11px] text-slate-500">${item.date || '-'}</span>
                             </td>
                             
                             <td class="py-4 px-4 align-middle">
-                                <div class="font-bold text-slate-800 text-[13px]">${item.customer || item.customerName}</div>
+                                <div class="font-bold text-slate-800 text-[13px]">${item.customer || item.customerName || '-'}</div>
                                 <div class="text-[10px] text-[#D48197] font-mono mt-0.5">${item.hn || '-'}</div>
                             </td>
                             
                             <td class="py-4 px-4 align-middle">
                                 <ul class="list-disc list-inside text-[11px] text-slate-500 space-y-1">
-                                    ${(item.items || []).map(p => `<li>${p.name} <span class="text-slate-400">(x${p.qty || 1})</span></li>`).join('')}
+                                    ${(item.items || []).map(p => `<li>${p.name || p.item_name || '-'} <span class="text-slate-400">(x${p.qty || 1})</span></li>`).join('')}
                                 </ul>
                             </td>
                             
@@ -7287,29 +7496,21 @@ let filteredData = incomes.filter(item => {
                                 <span class="px-3 py-1 rounded-full text-[10px] font-bold ${item.status === 'เสร็จสิ้น' ? 'bg-green-50 text-green-600 border border-green-100' : item.status === 'ยกเลิก' ? 'bg-red-50 text-red-500 border border-red-100' : 'bg-yellow-50 text-yellow-600 border border-yellow-100'}">${item.status || 'ปกติ'}</span>
                             </td>
                             
-                           <td class="py-4 px-4 text-center align-middle" style="position: relative; overflow: visible !important;">
-    <div class="inline-flex items-center bg-[#D48197] text-white rounded-full p-1 shadow-md scale-90 relative cursor-pointer" 
-         onclick="this.closest('tr').style.zIndex = '9999'">
-        
-        <button onclick="window.viewBillOnly('${item.id}')" 
-                class="px-4 py-1.5 text-[11px] font-bold border-r border-white/30 hover:bg-white/10 rounded-l-full flex items-center gap-2 whitespace-nowrap outline-none">
-            ดูบิล
-        </button>
-        
-        <button onclick="window.safeToggleMenu(event, '${item.id}')" 
-                class="px-3 py-1.5 text-[10px] hover:bg-white/10 rounded-r-full transition-all outline-none">
-            ▼
-        </button>
-        
-        <div id="action-menu-${item.id}" 
-             class="hidden absolute right-0 top-full mt-2 w-56 bg-white border border-pink-100 rounded-[1.5rem] shadow-2xl overflow-hidden text-left font-normal animate-in fade-in slide-in-from-top-2 duration-200" 
-             style="z-index: 10000 !important;">
-             
-            <div class="p-3 space-y-1 bg-white relative">
-                <button onclick="window.printReceipt('${item.id}', '${item.hn}', '80mm')" 
-                        class="w-full p-3 text-[12px] font-bold text-slate-600 hover:bg-pink-50 rounded-xl flex items-center gap-3 transition-all">
-                    <span>🖨️</span> <span>พิมพ์สลิปยาว (80mm)</span>
-                </button>
+                            <td class="py-4 px-4 text-center align-middle" style="position: relative; overflow: visible !important;">
+                                <div class="inline-flex items-center bg-[#D48197] text-white rounded-full p-1 shadow-md scale-90 relative cursor-pointer" onclick="this.closest('tr').style.zIndex = '9999'">
+                                    <button onclick="window.viewBillOnly('${item.id}')" class="px-4 py-1.5 text-[11px] font-bold border-r border-white/30 hover:bg-white/10 rounded-l-full flex items-center gap-2 whitespace-nowrap outline-none">
+                                        ดูบิล
+                                    </button>
+                                    
+                                    <button onclick="window.safeToggleMenu(event, '${item.id}')" class="px-3 py-1.5 text-[10px] hover:bg-white/10 rounded-r-full transition-all outline-none">
+                                        ▼
+                                    </button>
+                                    
+                                    <div id="action-menu-${item.id}" class="hidden absolute right-0 top-full mt-2 w-56 bg-white border border-pink-100 rounded-[1.5rem] shadow-2xl overflow-hidden text-left font-normal animate-in fade-in slide-in-from-top-2 duration-200" style="z-index: 10000 !important;">
+                                        <div class="p-3 space-y-1 bg-white relative">
+                                            <button onclick="window.printReceipt('${item.id}', '${item.hn}', '80mm')" class="w-full p-3 text-[12px] font-bold text-slate-600 hover:bg-pink-50 rounded-xl flex items-center gap-3 transition-all">
+                                                <span>🖨️</span> <span>พิมพ์สลิปยาว (80mm)</span>
+                                            </button>
                                             
                                             <button onclick="window.printReceipt('${item.id}', '${item.hn}', 'A5')" class="w-full p-3 text-[12px] font-bold text-slate-600 hover:bg-pink-50 rounded-xl flex items-center gap-3 transition-all">
                                                 <span>📄</span> <span>พิมพ์ใบเสร็จ (ครึ่ง A4)</span>
@@ -7332,15 +7533,14 @@ let filteredData = incomes.filter(item => {
             
             ${totalPages > 1 ? `
                 <div class="flex justify-center items-center gap-4 mt-8 font-light text-[11px] text-slate-500 border-t border-slate-50 pt-6">
-                    <button onclick="window.currentBillPage = Math.max(1, window.currentBillPage - 1); renderSalesPage();" class="px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors ${window.currentBillPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}">❮ ก่อนหน้า</button>
+                    <button onclick="window.currentBillPage = Math.max(1, window.currentBillPage - 1); window.renderSalesPage();" class="px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors ${window.currentBillPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}">❮ ก่อนหน้า</button>
                     <span>หน้า <span class="font-bold text-slate-800">${window.currentBillPage}</span> จาก ${totalPages}</span>
-                    <button onclick="window.currentBillPage = Math.min(${totalPages}, window.currentBillPage + 1); renderSalesPage();" class="px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors ${window.currentBillPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}">ถัดไป ❯</button>
+                    <button onclick="window.currentBillPage = Math.min(${totalPages}, window.currentBillPage + 1); window.renderSalesPage();" class="px-4 py-2 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors ${window.currentBillPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}">ถัดไป ❯</button>
                 </div>
             ` : ''}
         </div>
     </div>`;
 };
-
 
 // --- ฟังก์ชันเปิด-ปิดเมนู ▼ (ฉบับแก้ไข: ID 100% และดันแถวขึ้นหน้าสุด) ---
 window.safeToggleMenu = function(event, billId) {
@@ -7426,11 +7626,23 @@ window.viewBillOnly = function(billId) {
     }
 };
 
-// --- ❌ ฟังก์ชันยกเลิกบิล (ฉบับแก้ไข Logic คืนคอร์สให้แม่นยำ 100%) ---
-window.cancelBillProcess = function(billId, customerId) {
-    Swal.fire({
+window.normalizeBranchName = window.normalizeBranchName || function(value) {
+    return String(value || '')
+        .replace('เอซคลินิก', '')
+        .replace('ACE Clinic', '')
+        .replace('สาขา', '')
+        .replace(':', '')
+        .trim();
+};
+
+window.cancelBillProcess = async function(billId, customerId = '') {
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+    }
+
+    const result = await Swal.fire({
         title: '🚨 ยืนยันการยกเลิกบิล?',
-        text: "ระบบจะเปลี่ยนสถานะเป็น 'ยกเลิก' และหักจำนวนคอร์สที่เคยเพิ่มให้ออก",
+        text: "ระบบจะเปลี่ยนสถานะบิลเป็น 'ยกเลิก'",
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#ef4444',
@@ -7438,91 +7650,92 @@ window.cancelBillProcess = function(billId, customerId) {
         confirmButtonText: 'ใช่, ยกเลิกบิลนี้!',
         cancelButtonText: 'ปิดหน้าต่าง',
         customClass: { popup: 'rounded-[2rem]' }
-    }).then((result) => {
-        if (!result.isConfirmed) return;
-
-        try {
-            let accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
-            const billIdx = accountDB.findIndex(b => String(b.id) === String(billId));
-
-            if (billIdx === -1) {
-                Swal.fire('ไม่พบข้อมูล', 'ไม่พบเลขที่บิลนี้ในระบบ', 'error');
-                return;
-            }
-
-            if (accountDB[billIdx].status === "ยกเลิก") {
-                Swal.fire('แจ้งเตือน', 'บิลนี้ถูกยกเลิกไปแล้ว', 'info');
-                return;
-            }
-
-            const targetBill = accountDB[billIdx];
-
-            let customers = window.getCustomers() || [];
-            const cIdx = customers.findIndex(c =>
-    String(c.id || '') === String(customerId || targetBill.customer_id || '') ||
-    String(c.hn || '') === String(targetBill.hn || '')
-);
-
-            if (cIdx !== -1 && Array.isArray(targetBill.items) && targetBill.items.length > 0) {
-                if (!Array.isArray(customers[cIdx].courses)) {
-                    customers[cIdx].courses = [];
-                }
-
-                targetBill.items.forEach(billItem => {
-                    const cCourseIdx = customers[cIdx].courses.findIndex(bc =>
-                        String(bc.name || '').trim() === String(billItem.name || '').trim() &&
-                        String(bc.receiptId || '') === String(targetBill.id)
-                    );
-
-                    if (cCourseIdx !== -1) {
-                        const qtyToSubtract = parseInt(billItem.qty || 1, 10) || 1;
-
-                        customers[cIdx].courses[cCourseIdx].amount =
-                            (parseInt(customers[cIdx].courses[cCourseIdx].amount || 0, 10) || 0) - qtyToSubtract;
-
-                        customers[cIdx].courses[cCourseIdx].remain =
-                            (parseInt(customers[cIdx].courses[cCourseIdx].remain || 0, 10) || 0) - qtyToSubtract;
-
-                        customers[cIdx].courses[cCourseIdx].totalAmount =
-                            (parseInt(customers[cIdx].courses[cCourseIdx].totalAmount || 0, 10) || 0) - qtyToSubtract;
-
-                        if (
-                            customers[cIdx].courses[cCourseIdx].amount <= 0 ||
-                            customers[cIdx].courses[cCourseIdx].totalAmount <= 0
-                        ) {
-                            customers[cIdx].courses.splice(cCourseIdx, 1);
-                        }
-                    }
-                });
-
-                if (typeof window.saveCustomers === 'function') {
-                    window.saveCustomers(customers);
-                } else {
-                    localStorage.setItem('customerDB', JSON.stringify(customers));
-                }
-            }
-
-            accountDB[billIdx].status = "ยกเลิก";
-            accountDB[billIdx].cancelledAt = new Date().toISOString();
-
-            localStorage.setItem('accountDB', JSON.stringify(accountDB));
-
-            Swal.fire({
-                icon: 'success',
-                title: 'ยกเลิกบิลสำเร็จ',
-                text: 'หักคืนจำนวนคอร์สเรียบร้อยแล้ว',
-                showConfirmButton: false,
-                timer: 1500
-            });
-
-            if (typeof renderSalesPage === 'function') renderSalesPage();
-
-        } catch (e) {
-            console.error(e);
-            Swal.fire('ข้อผิดพลาด', 'เกิดปัญหาทางเทคนิคในการยกเลิกบิล', 'error');
-        }
     });
+
+    if (!result.isConfirmed) return;
+
+    try {
+        // 1) โหลดบิลจาก Supabase
+        const { data: bill, error: findError } = await window.supabaseClient
+            .from('sales_header')
+            .select('*')
+            .eq('id', billId)
+            .single();
+
+        if (findError || !bill) {
+            console.error('cancelBillProcess findError:', findError);
+            return Swal.fire('ไม่พบข้อมูล', 'ไม่พบเลขที่บิลนี้ในระบบ', 'error');
+        }
+
+        // 2) ถ้าบิลถูกยกเลิกไปแล้ว
+        if (String(bill.status || '') === 'ยกเลิก') {
+            return Swal.fire('แจ้งเตือน', 'บิลนี้ถูกยกเลิกไปแล้ว', 'info');
+        }
+
+        // 3) ตรวจสิทธิ์ตามสาขา
+        const user = (typeof window.getCurrentUserSafe === 'function')
+            ? window.getCurrentUserSafe()
+            : (JSON.parse(localStorage.getItem('currentUser')) || {});
+
+        const role = String(user.role || '').trim();
+        const isAdminAll = ['แอดมินหลัก', 'CEO'].includes(role) ||
+            (typeof window.canViewAllBranches === 'function' && window.canViewAllBranches());
+
+        const homeBranch = (typeof window.getUserHomeBranch === 'function')
+            ? window.getUserHomeBranch()
+            : String(user.homeBranch || user.branch || '').trim();
+
+        const safeHomeBranch = window.normalizeBranchName(homeBranch);
+        const safeBillBranch = window.normalizeBranchName(bill.branch_name);
+
+        if (!isAdminAll && safeBillBranch !== safeHomeBranch) {
+            return Swal.fire({
+                icon: 'warning',
+                title: 'ไม่มีสิทธิ์',
+                text: 'คุณไม่สามารถยกเลิกบิลของสาขาอื่นได้',
+                confirmButtonColor: '#D48197'
+            });
+        }
+
+        // 4) update สถานะบิล
+        const cancelledAt = new Date().toISOString();
+
+        const { error: updateError } = await window.supabaseClient
+            .from('sales_header')
+            .update({
+                status: 'ยกเลิก',
+                cancelled_at: cancelledAt,
+                updated_at: cancelledAt
+            })
+            .eq('id', billId);
+
+        if (updateError) {
+            console.error('cancelBillProcess updateError:', updateError);
+            return Swal.fire('ยกเลิกไม่สำเร็จ', updateError.message || 'เกิดข้อผิดพลาด', 'error');
+        }
+
+        // 5) ตอนนี้ยังไม่คืนคอร์ส เพราะ schema customers ไม่มี field courses
+        // ถ้าจะคืนคอร์สแบบ Supabase 100% ต้องมี table แยก เช่น customer_course_wallet/customer_course_sessions
+
+        await Swal.fire({
+            icon: 'success',
+            title: 'ยกเลิกบิลสำเร็จ',
+            text: 'สถานะบิลถูกเปลี่ยนเป็น "ยกเลิก" เรียบร้อยแล้ว',
+            showConfirmButton: false,
+            timer: 1500
+        });
+
+        if (typeof window.renderSalesPage === 'function') {
+            await window.renderSalesPage();
+        }
+
+    } catch (e) {
+        console.error('cancelBillProcess exception:', e);
+        Swal.fire('ข้อผิดพลาด', e.message || 'เกิดปัญหาทางเทคนิคในการยกเลิกบิล', 'error');
+    }
 };
+
+
 
 window.askPrintFormat = function(billId, hn) {
     Swal.fire({
@@ -7539,36 +7752,70 @@ window.askPrintFormat = function(billId, hn) {
     });
 };
 
-/* =======================================================
-   🖨️ ฟังก์ชัน "พิมพ์ใบเสร็จ" Luxury Edition (80mm & A4/A5)
-   รองรับการแสดงผลคอร์สแบบเศษส่วน (เช่น 2/5 ครั้ง)
-   ======================================================= */
-window.printReceipt = function(billId, hn, format) {
+window.printReceipt = async function(billId, hn, format) {
     try {
-        const accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
-        const customerDB = window.getCustomers() || [];
-        
-        // 🎯 ดึงข้อมูลผ่าน ID แม่นยำ 100%
-        const bill = accountDB.find(b => String(b.id) === String(billId));
-        const customer = customerDB.find(c => String(c.hn) === String(hn)) || {};
-        
-        if (!bill) { 
-            Swal.fire('Error', 'ไม่พบข้อมูลบิลในระบบ Database', 'error');
-            return; 
+        if (!window.supabaseClient) {
+            return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
         }
 
-        const invNo = "INV" + String(bill.id).slice(-8);
-        const clinicName = "ACE CLINIC (เอซ คลินิกเวชกรรม)";
+        // 1) โหลดบิลจาก sales_header
+        const { data: bill, error: billError } = await window.supabaseClient
+            .from('sales_header')
+            .select('*')
+            .eq('id', billId)
+            .single();
+
+        if (billError || !bill) {
+            console.error('printReceipt billError:', billError);
+            return Swal.fire('Error', 'ไม่พบข้อมูลบิลในระบบ', 'error');
+        }
+
+        // 2) โหลดลูกค้าจาก customers (ใช้ HN ก่อน / fallback customer_id)
+        let customer = {};
+
+        if (bill.hn) {
+            const { data: customerByHn } = await window.supabaseClient
+                .from('customers')
+                .select('*')
+                .eq('hn', bill.hn)
+                .limit(1)
+                .maybeSingle();
+
+            if (customerByHn) customer = customerByHn;
+        }
+
+        if ((!customer || !customer.id) && bill.customer_id) {
+            const { data: customerById } = await window.supabaseClient
+                .from('customers')
+                .select('*')
+                .eq('id', bill.customer_id)
+                .maybeSingle();
+
+            if (customerById) customer = customerById;
+        }
+
+        const items = Array.isArray(bill.items_snapshot) ? bill.items_snapshot : [];
+        const invNo = bill.bill_no || ("INV" + String(bill.id).slice(-8));
         const clinicAddress = "456/7 หมู่ 10 ต.บางปลา อ.บางพลี จ.สมุทรปราการ 10540\nโทร: 097-0942875 | เลขประจำตัวผู้เสียภาษี: 011101005166";
-        const netTotalStr = parseFloat(String(bill.total).replace(/[^0-9.-]+/g,"")).toLocaleString(undefined, {minimumFractionDigits: 2});
-        
+        const billDate = bill.bill_date || '-';
+        const customerName = bill.customer_name || customer.fullname || 'ลูกค้าทั่วไป';
+        const targetHN = bill.hn || hn || '-';
+        const paymentMethod = bill.payment || '-';
+        const billBranch = bill.branch_name || 'บางพลี';
+        const netTotal = Number(bill.net_total ?? bill.total ?? 0) || 0;
+        const netTotalStr = netTotal.toLocaleString(undefined, { minimumFractionDigits: 2 });
+
         const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+            return Swal.fire('ไม่สามารถเปิดหน้าพิมพ์', 'กรุณาอนุญาต pop-up ของเบราว์เซอร์ก่อนค่ะ', 'warning');
+        }
+
         let htmlContent = '';
 
-        // ส่วนหัว HTML สไตล์ Luxury
         const htmlHeader = `
             <head>
                 <title>Receipt - ${invNo}</title>
+                <meta charset="utf-8">
                 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
                 <style>
                     body { font-family: 'Sarabun', sans-serif; color: #1a1a1a; margin: 0; padding: 0; }
@@ -7582,7 +7829,50 @@ window.printReceipt = function(billId, hn, format) {
                 </style>
             </head>`;
 
-        // 📝 1. กรณีพิมพ์สลิปยาว (80mm)
+        const renderItemRows80 = () => {
+            return items.map(item => {
+                const itemName = item.name || item.item_name || '-';
+                const qty = Number(item.qty || 1) || 1;
+                const lineTotal = Number(item.total || item.line_total || (Number(item.price || 0) * qty) || 0);
+                const totalAmount = Number(item.totalAmount || item.total_amount || qty) || qty;
+                const remainAmount = Number(item.remainAmount || item.remain_amount || totalAmount) || totalAmount;
+                const used = Math.max(0, totalAmount - remainAmount);
+
+                return `
+                    <tr>
+                        <td style="padding: 5px 0;">
+                            ${itemName}<br>
+                            <small style="color:#888;">ครั้งที่ทำ: ${used}/${totalAmount}</small>
+                        </td>
+                        <td class="right bold">฿${lineTotal.toLocaleString()}</td>
+                    </tr>
+                `;
+            }).join('');
+        };
+
+        const renderItemRowsA5 = () => {
+            return items.map((item, idx) => {
+                const itemName = item.name || item.item_name || '-';
+                const qty = Number(item.qty || 1) || 1;
+                const lineTotal = Number(item.total || item.line_total || (Number(item.price || 0) * qty) || 0);
+                const totalAmount = Number(item.totalAmount || item.total_amount || qty) || qty;
+                const remainAmount = Number(item.remainAmount || item.remain_amount || totalAmount) || totalAmount;
+                const used = Math.max(0, totalAmount - remainAmount);
+
+                return `
+                    <tr style="border-bottom: 1px solid #eee;">
+                        <td style="padding:12px 10px;">${idx + 1}</td>
+                        <td>
+                            <b>${itemName}</b><br>
+                            <small style="color:#999;">ประวัติการทำ: ${used}/${totalAmount} ครั้ง</small>
+                        </td>
+                        <td class="right">${qty}</td>
+                        <td class="right" style="padding-right:10px;"><b>${lineTotal.toLocaleString()}</b></td>
+                    </tr>
+                `;
+            }).join('');
+        };
+
         if (format === '80mm') {
             htmlContent = `
                 <html>${htmlHeader}
@@ -7593,25 +7883,18 @@ window.printReceipt = function(billId, hn, format) {
                     </div>
                     <div class="divider"></div>
                     <p style="margin: 3px 0;"><b>เลขที่:</b> ${invNo}</p>
-                    <p style="margin: 3px 0;"><b>วันที่:</b> ${bill.date}</p>
-                    <p style="margin: 3px 0;"><b>ลูกค้า:</b> ${bill.customerName || customer.fullname || 'ทั่วไป'} (${hn})</p>
+                    <p style="margin: 3px 0;"><b>วันที่:</b> ${billDate}</p>
+                    <p style="margin: 3px 0;"><b>ลูกค้า:</b> ${customerName} (${targetHN})</p>
                     <div class="divider"></div>
                     <table>
-                        <thead><tr style="border-bottom: 1px solid #eee;"><th align="left">รายการ</th><th class="right">รวม</th></tr></thead>
+                        <thead>
+                            <tr style="border-bottom: 1px solid #eee;">
+                                <th align="left">รายการ</th>
+                                <th class="right">รวม</th>
+                            </tr>
+                        </thead>
                         <tbody>
-                            ${(bill.items || []).map(item => {
-                                // 🎯 คำนวณเศษส่วนคอร์ส (ใช้ไป/ทั้งหมด)
-                                const used = (item.totalAmount || item.qty) - (item.remainAmount || 0);
-                                const total = item.totalAmount || item.qty;
-                                return `
-                                <tr>
-                                    <td style="padding: 5px 0;">
-                                        ${item.name}<br>
-                                        <small style="color:#888;">ครั้งที่ทำ: ${used}/${total}</small>
-                                    </td>
-                                    <td class="right bold">฿${parseFloat(item.total).toLocaleString()}</td>
-                                </tr>`;
-                            }).join('')}
+                            ${renderItemRows80()}
                         </tbody>
                     </table>
                     <div class="divider"></div>
@@ -7622,11 +7905,9 @@ window.printReceipt = function(billId, hn, format) {
                         </div>
                     </div>
                     <p class="center" style="font-size: 10px; margin-top: 20px;">ขอบคุณที่ให้ ACE Clinic ดูแลคุณค่ะ ❤️</p>
-                </body></html>`;
-        } 
-        
-        // 📄 2. กรณีพิมพ์ใบเสร็จมาตรฐาน (A5/A4)
-        else {
+                </body></html>
+            `;
+        } else {
             htmlContent = `
                 <html>${htmlHeader}
                 <body style="padding: 10mm; font-size: 14px;" onload="window.print(); window.close();">
@@ -7638,35 +7919,30 @@ window.printReceipt = function(billId, hn, format) {
                         <div class="right">
                             <h2 style="background:#D48197; color:white; padding: 5px 20px; border-radius: 8px; margin:0;">ใบเสร็จรับเงิน</h2>
                             <p style="margin: 10px 0 0 0;"><b>เลขที่:</b> ${invNo}</p>
-                            <p style="margin: 5px 0;"><b>วันที่:</b> ${bill.date}</p>
+                            <p style="margin: 5px 0;"><b>วันที่:</b> ${billDate}</p>
                         </div>
                     </div>
                     <div style="background:#fdf7f8; padding: 20px; border-radius: 15px; margin: 20px 0; display:flex; justify-content:space-between;">
                         <div>
-                            <p style="margin:0;"><b>ชื่อลูกค้า:</b> ${bill.customerName || customer.fullname || 'ลูกค้าทั่วไป'}</p>
-                            <p style="margin:5px 0 0 0;"><b>HN:</b> ${hn}</p>
+                            <p style="margin:0;"><b>ชื่อลูกค้า:</b> ${customerName}</p>
+                            <p style="margin:5px 0 0 0;"><b>HN:</b> ${targetHN}</p>
                         </div>
                         <div>
-                            <p style="margin:0;"><b>วิธีชำระเงิน:</b> ${bill.payment || '-'}</p>
-                            <p style="margin:5px 0 0 0;"><b>สาขา:</b> ${bill.branch || 'บางพลี'}</p>
+                            <p style="margin:0;"><b>วิธีชำระเงิน:</b> ${paymentMethod}</p>
+                            <p style="margin:5px 0 0 0;"><b>สาขา:</b> ${billBranch}</p>
                         </div>
                     </div>
                     <table style="margin-top: 20px;">
                         <thead style="background:#fdf2f4; color:#D48197;">
-                            <tr><th style="padding:10px; text-align:left;">ลำดับ</th><th style="text-align:left;">รายการบริการ</th><th class="right">จำนวน</th><th class="right" style="padding-right:10px;">รวม (บาท)</th></tr>
+                            <tr>
+                                <th style="padding:10px; text-align:left;">ลำดับ</th>
+                                <th style="text-align:left;">รายการบริการ</th>
+                                <th class="right">จำนวน</th>
+                                <th class="right" style="padding-right:10px;">รวม (บาท)</th>
+                            </tr>
                         </thead>
                         <tbody>
-                            ${(bill.items || []).map((item, idx) => {
-                                const used = (item.totalAmount || item.qty) - (item.remainAmount || 0);
-                                const total = item.totalAmount || item.qty;
-                                return `
-                                <tr style="border-bottom: 1px solid #eee;">
-                                    <td style="padding:12px 10px;">${idx+1}</td>
-                                    <td><b>${item.name}</b><br><small style="color:#999;">ประวัติการทำ: ${used}/${total} ครั้ง</small></td>
-                                    <td class="right">${item.qty}</td>
-                                    <td class="right" style="padding-right:10px;"><b>${parseFloat(item.total).toLocaleString()}</b></td>
-                                </tr>`;
-                            }).join('')}
+                            ${renderItemRowsA5()}
                         </tbody>
                     </table>
                     <div style="display:flex; justify-content:flex-end; margin-top: 30px;">
@@ -7677,15 +7953,17 @@ window.printReceipt = function(billId, hn, format) {
                             </div>
                         </div>
                     </div>
-                </body></html>`;
+                </body></html>
+            `;
         }
 
+        printWindow.document.open();
         printWindow.document.write(htmlContent);
         printWindow.document.close();
-        
+
     } catch (e) {
-        console.error(e);
-        Swal.fire('Error', 'ไม่สามารถสร้างหน้าพิมพ์ได้ กรุณาตรวจสอบข้อมูล Database', 'error');
+        console.error('printReceipt exception:', e);
+        Swal.fire('Error', 'ไม่สามารถสร้างหน้าพิมพ์ได้ กรุณาตรวจสอบข้อมูลในระบบ', 'error');
     }
 };
 
@@ -7699,7 +7977,7 @@ window.openNewBillProcess = function() {
 };
 
 // 2. ฟังก์ชันหลักสำหรับเปิดหน้าตีบิล
-window.openBillingTab = function(customerName = '', isStandalone = false, customerId = '') {
+window.openBillingTab = async function(customerName = '', isStandalone = false, customerId = '') {
     window.currentBillItems = [];
     window.selectedPaymentMethod = "";
     window.lastCalculatedNet = 0;
@@ -7856,95 +8134,8 @@ window.openBillingTab = function(customerName = '', isStandalone = false, custom
     }
 };
 
-// 🎯 ฟังก์ชันวาดรายการและคำนวณเงินแบบ Real-time (แก้ไขส่วนลดไม่ทำงาน)
-window.renderBillItems = function() {
-    const listBody = document.getElementById('billItemsList');
-    if (!listBody) return;
-    
-    let subTotal = 0;
-
-    if (!window.currentBillItems || window.currentBillItems.length === 0) {
-        listBody.innerHTML = `<tr><td colspan="5" class="p-12 text-center text-slate-300 font-normal italic">📭 ยังไม่มีรายการที่เลือก...</td></tr>`;
-    } else {
-        listBody.innerHTML = window.currentBillItems.map((item, index) => {
-            const itemTotal = parseFloat(item.total || 0);
-            subTotal += itemTotal;
-            return `
-                <tr class="bg-white hover:bg-pink-50/30 transition-all rounded-2xl shadow-sm group">
-                    <td class="py-5 pl-8 text-left font-black text-slate-700 italic">${item.name}</td>
-                    <td class="py-5 text-center text-slate-600 font-bold">${item.qty}</td>
-                    <td class="py-5 text-center text-slate-500">฿${parseFloat(item.price).toLocaleString()}</td>
-                    <td class="py-5 text-right text-slate-800 font-black">฿${itemTotal.toLocaleString()}</td>
-                    <td class="py-5 text-right pr-8">
-                        <button onclick="removeItemFromBill(${index})" class="w-8 h-8 rounded-full bg-slate-50 text-slate-300 hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center shadow-sm opacity-0 group-hover:opacity-100">✕</button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-    }
-
-    // 🎯 คำนวณส่วนลด
-    const discountInp = document.getElementById('billDiscount');
-    const discountVal = parseFloat(discountInp?.value || 0) || 0;
-    const finalTotal = Math.max(0, subTotal - discountVal);
-
-    // แสดงผลยอดรวม (NET TOTAL)
-    const totalDisplay = document.getElementById('grandTotalDisplay');
-    if (totalDisplay) {
-        totalDisplay.innerText = '฿' + finalTotal.toLocaleString(undefined, {minimumFractionDigits: 2});
-    }
-
-    // เก็บค่าลง Global เพื่อใช้บันทึก
-    window.lastCalculatedNet = finalTotal;
-    window.lastCalculatedDiscount = discountVal;
-};
-
-// 🎯 แก้ไขฟังก์ชันเลือกคนไข้ ให้แสดงประวัติ (ช่องสีฟ้า) ทันที
-window.selectCustomerToBill = function(customerId) {
-    const customerDB = window.getCustomers() || [];
-    const c = customerDB.find(item => String(item.id || '') === String(customerId || ''));
-    if (!c) return;
-
-    window.activeCustomer = c;
-
-    // เติมข้อมูลลงในช่องสีฟ้า
-    if (document.getElementById('billHN')) document.getElementById('billHN').innerText = c.hn || '-';
-    if (document.getElementById('billFullName')) document.getElementById('billFullName').innerText = c.fullname || '-';
-    if (document.getElementById('billNickName')) document.getElementById('billNickName').innerText = c.nickname || '-';
-    if (document.getElementById('billPhone')) document.getElementById('billPhone').innerText = c.phone || '-';
-    if (document.getElementById('billAllergy')) document.getElementById('billAllergy').innerText = c.allergy || 'ไม่มี';
-    if (document.getElementById('billNationality')) document.getElementById('billNationality').innerText = c.nationality || '-';
-    if (document.getElementById('billRight')) document.getElementById('billRight').innerText = c.right || 'ทั่วไป';
-
-    // รูปภาพ
-    const img = document.getElementById('billCustPhoto');
-    const ph = document.getElementById('billPhotoPlaceholder');
-    if (img && ph) {
-        if (c.photo) {
-            img.src = c.photo;
-            img.classList.remove('hidden');
-            ph.classList.add('hidden');
-        } else {
-            img.src = "";
-            img.classList.add('hidden');
-            ph.classList.remove('hidden');
-        }
-    }
-
-    // ซ่อนผลการค้นหาและโชว์ฟอร์ม
-    const resDiv = document.getElementById('customerSearchResult');
-    if (resDiv) resDiv.classList.add('hidden');
-    const searchInp = document.getElementById('custSearchForBillInp');
-    if (searchInp) searchInp.value = c.fullname || '';
-
-    const billArea = document.getElementById('billingFormArea');
-    if (billArea) billArea.classList.remove('hidden', 'opacity-0');
-    const hint = document.getElementById('noCustomerHint');
-    if (hint) hint.classList.add('hidden');
-};
-
 // --- 3. ฟังก์ชันค้นหาคนไข้ (ฉบับปลดล็อกให้ดึงชื่อใช้ได้ทุกสาขา 100%) ---
-window.searchCustomerForBill = function(val) {
+window.searchCustomerForBill = async function(val) {
     const resDiv = document.getElementById('customerSearchResult');
     if (!resDiv) return;
 
@@ -7956,18 +8147,28 @@ window.searchCustomerForBill = function(val) {
         return;
     }
 
-    const customerDB = window.getCustomers() || [];
+    const customerDB = Array.isArray(window.customerCache)
+        ? window.customerCache
+        : await window.loadCustomersForBilling();
 
     const matches = customerDB.filter(c => {
-        const fullName = String(c.fullname || c.fullName || '').toLowerCase();
+        const fullName = String(c.fullname || '').toLowerCase();
+        const firstName = String(c.first_name || '').toLowerCase();
+        const lastName = String(c.last_name || '').toLowerCase();
+        const nickName = String(c.nickname || '').toLowerCase();
         const hn = String(c.hn || '').toLowerCase();
-        const phone = String(c.phone || '');
+        const phone = String(c.phone || '').toLowerCase();
         const id = String(c.id || '').toLowerCase();
 
-        return fullName.includes(keyword) ||
-               hn.includes(keyword) ||
-               phone.includes(keyword) ||
-               id.includes(keyword);
+        return (
+            fullName.includes(keyword) ||
+            firstName.includes(keyword) ||
+            lastName.includes(keyword) ||
+            nickName.includes(keyword) ||
+            hn.includes(keyword) ||
+            phone.includes(keyword) ||
+            id.includes(keyword)
+        );
     });
 
     if (matches.length > 0) {
@@ -7975,7 +8176,7 @@ window.searchCustomerForBill = function(val) {
             <div onclick="window.selectCustomerToBill('${c.id}')"
                 class="p-4 hover:bg-pink-50 cursor-pointer border-b border-pink-50 flex justify-between items-center bg-white transition-all">
                 <div>
-                    <span class="text-sm text-slate-700 font-bold">${c.fullname || c.fullName || '-'}</span>
+                    <span class="text-sm text-slate-700 font-bold">${c.fullname || '-'}</span>
                     <p class="text-[9px] text-slate-400 font-bold uppercase italic">📌 สาขาที่สมัคร: ${c.branch || 'ไม่ระบุ'}</p>
                 </div>
                 <div class="text-right">
@@ -7992,9 +8193,7 @@ window.searchCustomerForBill = function(val) {
 
 // --- 4. ฟังก์ชันเลือกคนไข้เข้ากล่อง (ฉบับดั้งเดิมที่ใช้กับไฟล์คุณได้ 100%) ---
 window.selectCustomerToBill = function(customerId) {
-    if (typeof window.requirePermission === 'function' && !window.requirePermission(3, 'เลือกคนไข้เพื่อตีบิล')) return;
-
-    const customerDB = window.getCustomers() || [];
+    const customerDB = Array.isArray(window.customerCache) ? window.customerCache : [];
     const c = customerDB.find(item => String(item.id || '') === String(customerId || ''));
     if (!c) return;
 
@@ -8009,17 +8208,17 @@ window.selectCustomerToBill = function(customerId) {
     if (document.getElementById('billRight')) document.getElementById('billRight').innerText = c.right || 'ทั่วไป';
 
     const img = document.getElementById('billCustPhoto');
-    const icon = document.getElementById('billPhotoIcon');
+    const ph = document.getElementById('billPhotoPlaceholder');
 
-    if (img && icon) {
-        if (c.photo) {
-            img.src = c.photo;
+    if (img && ph) {
+        if (c.photo || c.avatar_url) {
+            img.src = c.photo || c.avatar_url;
             img.classList.remove('hidden');
-            icon.classList.add('hidden');
+            ph.classList.add('hidden');
         } else {
-            img.src = "";
+            img.src = '';
             img.classList.add('hidden');
-            icon.classList.remove('hidden');
+            ph.classList.remove('hidden');
         }
     }
 
@@ -8031,55 +8230,190 @@ window.selectCustomerToBill = function(customerId) {
 
     const billArea = document.getElementById('billingFormArea');
     if (billArea) billArea.classList.remove('hidden', 'opacity-0');
-
-    const hint = document.getElementById('noCustomerHint');
-    if (hint) hint.classList.add('hidden');
 };
 
-// --- 6. เพิ่มรายการลงตาราง (ฉบับปรับปรุงแก้ไขการเพิ่มรายการไม่ได้) ---
+window.searchProduct = async function(val) {
+    const resDiv = document.getElementById('searchResult');
+    if (!resDiv) return;
+
+    const keyword = String(val || '').trim().toLowerCase();
+
+    if (!keyword) {
+        resDiv.innerHTML = '';
+        resDiv.classList.add('hidden');
+        return;
+    }
+
+    let masterDB = Array.isArray(window.courseMasterCache) ? window.courseMasterCache : [];
+
+    if (masterDB.length === 0 && typeof window.loadCourseMaster === 'function') {
+        masterDB = await window.loadCourseMaster();
+        window.courseMasterCache = masterDB;
+    }
+
+    const pickPrice = (c) => {
+        const vals = [c.course_opd, c.course_ipd, c.course_fee, c.price];
+        for (const v of vals) {
+            const n = parseFloat(v);
+            if (!Number.isNaN(n) && n > 0) return n;
+        }
+        return 0;
+    };
+
+    const matches = masterDB.filter(c => {
+        const courseName = String(c.course_name || '').toLowerCase();
+        const code = String(c.old_course_code || '').toLowerCase();
+        return courseName.includes(keyword) || code.includes(keyword);
+    }).slice(0, 20);
+
+    if (matches.length > 0) {
+        resDiv.innerHTML = matches.map(c => {
+            const displayPrice = pickPrice(c);
+            return `
+                <div onclick="window.selectProductToBill('${c.id}')"
+                    class="p-4 hover:bg-pink-50 cursor-pointer border-b border-pink-50 flex justify-between items-center bg-white transition-all">
+                    <div>
+                        <div class="text-sm text-slate-700 font-bold">${c.course_name || '-'}</div>
+                        <div class="text-[10px] text-slate-400">${c.old_course_code || '-'} • ${c.unit || 'ครั้ง'}</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-[11px] font-bold text-[#D48197]">฿${displayPrice.toLocaleString()}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } else {
+        resDiv.innerHTML = '<div class="p-4 text-center text-xs text-slate-300 italic">ไม่พบรายการคอร์ส...</div>';
+    }
+
+    resDiv.classList.remove('hidden');
+};
+
+window.selectProductToBill = function(courseId) {
+    const masterDB = Array.isArray(window.courseMasterCache) ? window.courseMasterCache : [];
+    const c = masterDB.find(item => String(item.id) === String(courseId));
+    if (!c) return;
+
+    const nameInp = document.getElementById('itemName');
+    const priceInp = document.getElementById('billPrice');
+    const qtyInp = document.getElementById('billQty');
+    const resDiv = document.getElementById('searchResult');
+
+    const pickPrice = (row) => {
+        const vals = [row.course_opd, row.course_ipd, row.course_fee, row.price];
+        for (const v of vals) {
+            const n = parseFloat(v);
+            if (!Number.isNaN(n) && n > 0) return n;
+        }
+        return 0;
+    };
+
+    if (nameInp) {
+        nameInp.value = c.course_name || '';
+        nameInp.dataset.category = c.category_name || 'คอร์ส/บริการ';
+        nameInp.dataset.courseId = c.id || '';
+        nameInp.dataset.code = c.old_course_code || '';
+        nameInp.dataset.unit = c.unit || 'ครั้ง';
+        nameInp.dataset.staffDf = c.staff_df || 0;
+        nameInp.dataset.doctorDf = c.doctor_df || 0;
+    }
+
+    if (priceInp) {
+        priceInp.value = String(pickPrice(c)).replace(/,/g, '');
+    }
+
+    if (qtyInp && !qtyInp.value) {
+        qtyInp.value = 1;
+    }
+
+    if (resDiv) {
+        resDiv.innerHTML = '';
+        resDiv.classList.add('hidden');
+    }
+};
+
 window.addItemToBill = function() {
-    // 🛡️ 1. เช็คสิทธิ์การเข้าถึง (ID 3 คือ ระบบบัญชี)
-    if (!window.requirePermission(3, 'เพิ่มรายการบิล')) return;
+    if (typeof window.requirePermission === 'function' && !window.requirePermission(3, 'เพิ่มรายการบิล')) {
+        return;
+    }
 
     const nameInp = document.getElementById('itemName');
     const priceInp = document.getElementById('billPrice');
     const qtyInp = document.getElementById('billQty');
 
-    const name = nameInp ? nameInp.value.trim() : "";
+    const name = nameInp ? nameInp.value.trim() : '';
     const price = priceInp ? parseFloat(priceInp.value) || 0 : 0;
     const qty = qtyInp ? parseFloat(qtyInp.value) || 0 : 0;
-    
-    // ดึงหมวดหมู่จาก Dataset (ที่มาจากฟังก์ชันค้นหา)
-    const cat = nameInp.dataset.category || 'general';
 
-    // ⚠️ 2. ตรวจสอบความถูกต้องก่อนเพิ่ม
+    const cat = nameInp?.dataset.category || 'คอร์ส/บริการ';
+    const courseId = nameInp?.dataset.courseId || null;
+    const code = nameInp?.dataset.code || null;
+    const unit = nameInp?.dataset.unit || 'ครั้ง';
+    const staffDf = parseFloat(nameInp?.dataset.staffDf || 0) || 0;
+    const doctorDf = parseFloat(nameInp?.dataset.doctorDf || 0) || 0;
+
     if (!name) {
-        Swal.fire({ icon: 'warning', text: 'กรุณาระบุชื่อรายการก่อนค่ะ', confirmButtonColor: '#D48197' });
-        return;
-    }
-    if (price <= 0) {
-        Swal.fire({ icon: 'warning', text: 'กรุณาระบุราคาที่ถูกต้องค่ะ', confirmButtonColor: '#D48197' });
+        Swal.fire({
+            icon: 'warning',
+            text: 'กรุณาระบุชื่อรายการก่อนค่ะ',
+            confirmButtonColor: '#D48197'
+        });
         return;
     }
 
-    // ➕ 3. เพิ่มลงในรายการบิลชั่วคราว
-    window.currentBillItems.push({ 
-        name: name, 
-        price: price, 
-        qty: qty, 
-        cat: cat, 
-        total: price * qty 
+    if (price <= 0) {
+        Swal.fire({
+            icon: 'warning',
+            text: 'กรุณาระบุราคาที่ถูกต้องค่ะ',
+            confirmButtonColor: '#D48197'
+        });
+        return;
+    }
+
+    if (qty <= 0) {
+        Swal.fire({
+            icon: 'warning',
+            text: 'กรุณาระบุจำนวนให้ถูกต้องค่ะ',
+            confirmButtonColor: '#D48197'
+        });
+        return;
+    }
+
+    if (!Array.isArray(window.currentBillItems)) {
+        window.currentBillItems = [];
+    }
+
+    window.currentBillItems.push({
+        courseId: courseId,
+        code: code,
+        name: name,
+        price: price,
+        qty: qty,
+        unit: unit,
+        category_name: cat,
+        cat: cat,
+        staff_df: staffDf,
+        doctor_df: doctorDf,
+        item_type: 'course',
+        total: price * qty
     });
 
-    // 🔄 4. รีเฟรชตารางแสดงผลด้านล่าง
-    if(typeof renderBillItems === 'function') renderBillItems();
-    
-    // 🧹 5. ล้างช่องพิมพ์เพื่อรอรายการถัดไป
+    if (typeof window.renderBillItems === 'function') {
+        window.renderBillItems();
+    }
+
     nameInp.value = '';
     priceInp.value = '';
     qtyInp.value = '1';
-    delete nameInp.dataset.category; // ล้างค่าหมวดหมู่เก่าทิ้งเพื่อป้องกันข้อมูลปนกัน
+
+    delete nameInp.dataset.category;
+    delete nameInp.dataset.courseId;
+    delete nameInp.dataset.code;
+    delete nameInp.dataset.unit;
+    delete nameInp.dataset.staffDf;
+    delete nameInp.dataset.doctorDf;
 };
+
 // --- 7. วาดตารางบิล (ฉบับดึงข้อมูลและแสดงผลประเภทรายการ) ---
 window.renderBillItems = function() {
     const listBody = document.getElementById('billItemsList');
@@ -8136,16 +8470,19 @@ window.renderBillItems = function() {
 window.removeItemFromBill = function(index) {
     if (window.currentBillItems && window.currentBillItems[index]) {
         window.currentBillItems.splice(index, 1);
-        renderBillItems();
+        window.renderBillItems();
         
         // ถ้ามีฟังก์ชันคำนวณส่วนลดหรือภาษีเพิ่มเติม ให้เรียกที่นี่
         if (typeof updateTaxAndDiscount === 'function') updateTaxAndDiscount();
     }
 };
 
-// --- 9. บันทึกบิล (ฉบับอัปเกรดระบบหักคอร์สเศษส่วน 2/5 และ ID แม่นยำ) ---
-window.confirmFinalPayment = function() {
+window.confirmFinalPayment = async function() {
     try {
+        if (!window.supabaseClient) {
+            return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+        }
+
         const paymentValue = window.selectedPaymentMethod;
         const dateInput = document.getElementById('billDate');
         const billDate = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
@@ -8156,61 +8493,137 @@ window.confirmFinalPayment = function() {
         const customerId = activeCustomer?.id || '';
 
         if (customerHN === "-" || !customerName) {
-            Swal.fire('ข้อมูลไม่ครบ', 'กรุณาค้นหาและเลือกข้อมูลคนไข้ก่อนค่ะ', 'warning');
-            return;
+            return Swal.fire('ข้อมูลไม่ครบ', 'กรุณาค้นหาและเลือกข้อมูลคนไข้ก่อนค่ะ', 'warning');
         }
 
         if (!Array.isArray(window.currentBillItems) || window.currentBillItems.length === 0) {
-            Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเพิ่มรายการคอร์ส/ยา อย่างน้อย 1 รายการค่ะ', 'warning');
-            return;
+            return Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเพิ่มรายการคอร์ส/ยา อย่างน้อย 1 รายการค่ะ', 'warning');
         }
 
         if (!paymentValue) {
-            Swal.fire('ข้อมูลไม่ครบ', 'กรุณากดเลือกช่องทางชำระเงินด้านล่างด้วยค่ะ', 'warning');
-            return;
+            return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากดเลือกช่องทางชำระเงินด้านล่างด้วยค่ะ', 'warning');
         }
 
         const user = (typeof window.getCurrentUserSafe === 'function')
             ? window.getCurrentUserSafe()
             : (JSON.parse(localStorage.getItem('currentUser')) || {});
 
-        const staffBranch = (typeof window.getUserHomeBranch === 'function')
-            ? window.getUserHomeBranch()
-            : String(user.homeBranch || user.branch || 'บางพลี').replace('สาขา', '').trim();
+        const viewingBranch = (typeof window.getCurrentViewingBranch === 'function')
+            ? window.getCurrentViewingBranch()
+            : (user.viewingBranch || user.homeBranch || user.branch || '');
 
-        const totalAmount = window.currentBillItems.reduce((sum, item) => {
-            return sum + (Number(item.qty || 0) * Number(item.price || 0));
+        const safeViewingBranch = String(viewingBranch || '')
+            .replace('เอซคลินิก', '')
+            .replace('ACE Clinic', '')
+            .replace('สาขา', '')
+            .replace(':', '')
+            .trim();
+
+        if (!safeViewingBranch || safeViewingBranch === 'ทุกสาขา') {
+            return Swal.fire('กรุณาเลือกสาขา', 'ไม่สามารถบันทึกบิลในโหมดทุกสาขาได้ค่ะ', 'warning');
+        }
+
+        const subTotal = window.currentBillItems.reduce((sum, item) => {
+            return sum + ((Number(item.qty || 0) || 0) * (Number(item.price || 0) || 0));
         }, 0);
 
-        const billId = crypto.randomUUID();
+        const discountAmount = Number(window.lastCalculatedDiscount || 0) || 0;
+        const netTotal = Number(window.lastCalculatedNet || subTotal) || 0;
 
-        const newBillEntry = {
+        const billId = crypto.randomUUID();
+        const billNo = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Date.now()).slice(-6)}`;
+
+        // ✅ snapshot รายการสำหรับเก็บใน sales_header
+        const itemsSnapshot = window.currentBillItems.map(item => ({
+            course_id: item.courseId || item.id || item.code || null,
+            old_course_code: item.code || item.old_course_code || null,
+            name: item.name || '',
+            qty: Number(item.qty || 1) || 1,
+            unit: item.unit || 'ครั้ง',
+            price: Number(item.price || 0) || 0,
+            total: (Number(item.qty || 1) || 1) * (Number(item.price || 0) || 0),
+            category_name: item.category_name || item.category || null,
+            item_type: item.item_type || item.type || item.cat || 'course',
+            staff_df: Number(item.staff_df || item.staffDF || 0) || 0,
+            doctor_df: Number(item.doctor_df || item.doctorDF || 0) || 0,
+            totalAmount: Number(item.totalAmount || item.qty || 1) || 1,
+            remainAmount: Number(item.remainAmount || item.remain || item.qty || 1) || 1
+        }));
+
+        // ✅ header payload
+        const headerPayload = {
             id: billId,
-            billId: billId,
-            customer_id: customerId || '',
+            bill_no: billNo,
+            customer_id: customerId || null,
             hn: customerHN,
-            customerName: customerName,
             customer_name: customerName,
-            date: billDate,
-            items: [...window.currentBillItems],
-            total: totalAmount,
-            totalDisplay: '฿' + totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 }),
+            bill_date: billDate,
+            total: subTotal,
+            discount_amount: discountAmount,
+            net_total: netTotal,
             payment: paymentValue,
-            status: "เสร็จสิ้น",
-            type: "รายรับ",
-            branch: staffBranch,
-            seller: user.name || '-',
-            timestamp: Date.now(),
-            courseRestored: false
+            status: 'เสร็จสิ้น',
+            type: 'รายรับ',
+            branch_name: safeViewingBranch,
+            seller: user.name || user.fullname || '-',
+            note: null,
+            items_snapshot: itemsSnapshot,
+            course_restored: false
         };
 
-        // 1) บันทึกบิลลง localStorage
-        let accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
-        accountDB.push(newBillEntry);
-        localStorage.setItem('accountDB', JSON.stringify(accountDB));
+        const { error: headerError } = await window.supabaseClient
+            .from('sales_header')
+            .insert([headerPayload]);
 
-        // 2) เติมคอร์สให้ลูกค้า (ID BASED ก่อน / fallback HN)
-        let customers = window.getCustomers() || [];
+        if (headerError) {
+            console.error('sales_header insert error:', headerError);
+            return Swal.fire('บันทึกบิลไม่สำเร็จ', headerError.message || 'เกิดข้อผิดพลาด', 'error');
+        }
+
+        // ✅ items payload
+        const itemsPayload = window.currentBillItems.map(item => {
+            const qty = Number(item.qty || 1) || 1;
+            const unitPrice = Number(item.price || 0) || 0;
+
+            return {
+                sale_id: billId,
+                customer_id: customerId || null,
+                hn: customerHN,
+                item_name: item.name || '',
+                item_type: item.item_type || item.type || item.cat || 'course',
+                category_name: item.category_name || item.category || null,
+                course_id: item.courseId || item.id || item.code || null,
+                old_course_code: item.code || item.old_course_code || null,
+                unit: item.unit || 'ครั้ง',
+                qty: qty,
+                unit_price: unitPrice,
+                line_total: qty * unitPrice,
+                staff_df: Number(item.staff_df || item.staffDF || 0) || 0,
+                doctor_df: Number(item.doctor_df || item.doctorDF || 0) || 0,
+                branch_name: safeViewingBranch
+            };
+        });
+
+        if (itemsPayload.length > 0) {
+            const { error: itemsError } = await window.supabaseClient
+                .from('sales_items')
+                .insert(itemsPayload);
+
+            if (itemsError) {
+                console.error('sales_items insert error:', itemsError);
+
+                // rollback หัวบิลที่เพิ่ง insert ไป
+                await window.supabaseClient
+                    .from('sales_header')
+                    .delete()
+                    .eq('id', billId);
+
+                return Swal.fire('บันทึกรายการบิลไม่สำเร็จ', itemsError.message || 'เกิดข้อผิดพลาด', 'error');
+            }
+        }
+
+        // ✅ ชั่วคราว: ยังเติมคอร์สให้ customer แบบเดิมไปก่อน
+        let customers = window.getCustomers ? (window.getCustomers() || []) : [];
         const cIdx = customers.findIndex(c =>
             String(c.id || '') === String(customerId || '') ||
             String(c.hn || '') === String(customerHN || '')
@@ -8239,7 +8652,7 @@ window.confirmFinalPayment = function() {
 
                 const foundCourseIdx = customers[cIdx].courses.findIndex(c =>
                     String(c.name || '').trim() === itemName &&
-                    String(c.receiptId || '') === String(newBillEntry.id)
+                    String(c.receiptId || '') === String(billId)
                 );
 
                 if (foundCourseIdx !== -1) {
@@ -8250,11 +8663,11 @@ window.confirmFinalPayment = function() {
                     customers[cIdx].courses[foundCourseIdx].totalAmount = oldTotal + qty;
                     customers[cIdx].courses[foundCourseIdx].usedAmount = parseInt(customers[cIdx].courses[foundCourseIdx].usedAmount || 0, 10) || 0;
                     customers[cIdx].courses[foundCourseIdx].date = billDate;
-                    customers[cIdx].courses[foundCourseIdx].branch = staffBranch;
-                    customers[cIdx].courses[foundCourseIdx].fromBranch = staffBranch;
+                    customers[cIdx].courses[foundCourseIdx].branch = safeViewingBranch;
+                    customers[cIdx].courses[foundCourseIdx].fromBranch = safeViewingBranch;
                     customers[cIdx].courses[foundCourseIdx].unit = customers[cIdx].courses[foundCourseIdx].unit || unitRaw || 'ครั้ง';
                     customers[cIdx].courses[foundCourseIdx].status = 'active';
-                    customers[cIdx].courses[foundCourseIdx].receiptId = newBillEntry.id;
+                    customers[cIdx].courses[foundCourseIdx].receiptId = billId;
                 } else {
                     customers[cIdx].courses.push({
                         courseId: item.courseId || item.code || (typeof window.generateUID === 'function' ? window.generateUID('COURSE') : crypto.randomUUID()),
@@ -8265,11 +8678,11 @@ window.confirmFinalPayment = function() {
                         usedAmount: 0,
                         remain: qty,
                         date: billDate,
-                        fromBranch: staffBranch,
-                        branch: staffBranch,
+                        fromBranch: safeViewingBranch,
+                        branch: safeViewingBranch,
                         unit: unitRaw || 'ครั้ง',
                         status: 'active',
-                        receiptId: newBillEntry.id
+                        receiptId: billId
                     });
                 }
             });
@@ -8284,19 +8697,25 @@ window.confirmFinalPayment = function() {
         Swal.fire({
             icon: 'success',
             title: 'บันทึกบิลสำเร็จ!',
-            text: `ยอดเงินและคอร์สถูกบันทึกเรียบร้อยค่ะ`,
-            timer: 2000,
+            text: 'ยอดเงินและรายการขายถูกบันทึกเรียบร้อยค่ะ',
+            timer: 1800,
             showConfirmButton: false
-        }).then(() => {
-            if (typeof renderSalesPage === 'function') renderSalesPage();
+        }).then(async () => {
+            window.currentBillItems = [];
+            window.selectedPaymentMethod = '';
+            window.lastCalculatedNet = 0;
+            window.lastCalculatedDiscount = 0;
+
+            if (typeof window.renderSalesPage === 'function') {
+                await window.renderSalesPage();
+            }
         });
 
     } catch (e) {
         console.error(e);
-        Swal.fire('Error', 'เกิดข้อผิดพลาด: ' + e.message, 'error');
+        Swal.fire('Error', 'เกิดข้อผิดพลาด: ' + (e.message || e), 'error');
     }
 };
-
 
 //  คืนคอร์สลูกค้า
 function restoreCustomerCoursesFromReceipt(receipt){
@@ -8350,52 +8769,90 @@ function restoreCustomerCoursesFromReceipt(receipt){
 /* =======================================================
     💰 ZONE 5.5: BILLING & EXPENSE (ส่วนของรายจ่าย OUTGOING)
    ======================================================= */
+window.loadExpensesHistory = async function() {
+    if (!window.supabaseClient) {
+        console.error('No supabase');
+        return [];
+    }
 
-window.renderExpensePage = function() {
+    const currentUser = (typeof window.getCurrentUserSafe === 'function')
+        ? window.getCurrentUserSafe()
+        : (JSON.parse(localStorage.getItem('currentUser')) || {});
+
+    const rawViewingBranch = (typeof window.getCurrentViewingBranch === 'function')
+        ? window.getCurrentViewingBranch()
+        : (currentUser.viewingBranch || currentUser.homeBranch || currentUser.branch || 'ทุกสาขา');
+
+    const rawBranchText = String(rawViewingBranch || '').trim();
+    const isAllBranches = rawBranchText === 'ทุกสาขา';
+
+    const safeViewingBranch = rawBranchText
+        .replace('เอซคลินิก', '')
+        .replace('ACE Clinic', '')
+        .replace('สาขา', '')
+        .replace(':', '')
+        .trim();
+
+    let query = window.supabaseClient
+        .from('expenses')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    if (!isAllBranches && safeViewingBranch) {
+        query = query.eq('branch_name', safeViewingBranch);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+        console.error('loadExpensesHistory error:', error);
+        return [];
+    }
+
+    return data || [];
+};
+
+window.renderExpensePage = async function() {
     const target =
         document.getElementById('dynamicContent') ||
         document.getElementById('pageContent');
 
     if (!target) return;
-    
-    // 🎯 1. ดึงค่าจากฟิลเตอร์ (ถ้ายังไม่มีให้ใช้ค่าเริ่มต้น)
+
     const pageSize = parseInt(document.getElementById('expPageSize')?.value) || 10;
     const catFilter = document.getElementById('expCatFilter')?.value || "ทั้งหมด";
     const dateFilterVal = document.getElementById('expDateFilter')?.value || "";
     const searchTerm = (document.getElementById('expSearchInput')?.value || "").toLowerCase().trim();
 
-    // 🎯 2. ดึงข้อมูลรายจ่าย
-    let accountDB = [];
-    try {
-        accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
-    } catch (e) {
-        accountDB = [];
-    }
+    const rows = await window.loadExpensesHistory();
 
-    let expenseData = accountDB.filter(item => item.type === "รายจ่าย");
+    let expenseData = (rows || []).map(row => ({
+        id: row.id,
+        date: row.expense_date || '',
+        detail: row.detail || '',
+        category: row.category || 'ทั่วไป',
+        amount: Number(row.amount || 0) || 0,
+        total: Number(row.amount || 0) || 0,
+        account: row.account || 'เงินสด',
+        type: 'รายจ่าย',
+        status: row.status || 'เสร็จสิ้น',
+        branch: row.branch_name || '',
+        createdBy: row.created_by || '-',
+        timestamp: row.created_at ? new Date(row.created_at).getTime() : 0
+    }));
 
-    // 🎯 3. ล็อกสาขา
-    if (typeof window.filterByBranch === 'function' && typeof window.canViewAllBranches === 'function') {
-        if (!window.canViewAllBranches()) {
-            expenseData = window.filterByBranch(expenseData, item => item.branch);
-        }
-    }
-
-    // 🎯 4. กรองตาม UI
     expenseData = expenseData.filter(item => {
         const matchCat = (catFilter === "ทั้งหมด") || (item.category === catFilter);
         const matchDate = (dateFilterVal === "") || (item.date === dateFilterVal);
-        const detailText = String(item.detail || item.customer || "").toLowerCase();
-        const accountText = String(item.account || item.payment || "").toLowerCase();
+        const detailText = String(item.detail || "").toLowerCase();
+        const accountText = String(item.account || "").toLowerCase();
         const matchSearch = detailText.includes(searchTerm) || accountText.includes(searchTerm);
 
         return matchCat && matchDate && matchSearch;
     });
-    
-    // เรียงใหม่สุดขึ้นก่อน
+
     expenseData.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-    // ตัดจำนวนตามแสดงลำดับ
     const paginatedData = expenseData.slice(0, pageSize);
 
     target.innerHTML = `
@@ -8405,7 +8862,7 @@ window.renderExpensePage = function() {
             
             <div class="flex flex-col gap-1">
                 <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">แสดงลำดับ</label>
-                <select id="expPageSize" onchange="renderExpensePage()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[12px] font-light bg-slate-50 outline-none shadow-sm min-w-[120px] text-slate-600 appearance-none cursor-pointer h-[42px]">
+                <select id="expPageSize" onchange="window.renderExpensePage()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[12px] font-light bg-slate-50 outline-none shadow-sm min-w-[120px] text-slate-600 appearance-none cursor-pointer h-[42px]">
                     <option value="10" ${pageSize === 10 ? 'selected' : ''}>10 รายการ</option>
                     <option value="30" ${pageSize === 30 ? 'selected' : ''}>30 รายการ</option>
                     <option value="50" ${pageSize === 50 ? 'selected' : ''}>50 รายการ</option>
@@ -8414,7 +8871,7 @@ window.renderExpensePage = function() {
 
             <div class="flex flex-col gap-1">
                 <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">หมวดหมู่</label>
-                <select id="expCatFilter" onchange="renderExpensePage()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[12px] font-light bg-slate-50 outline-none shadow-sm min-w-[150px] text-slate-600 appearance-none cursor-pointer h-[42px]">
+                <select id="expCatFilter" onchange="window.renderExpensePage()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[12px] font-light bg-slate-50 outline-none shadow-sm min-w-[150px] text-slate-600 appearance-none cursor-pointer h-[42px]">
                     <option value="ทั้งหมด" ${catFilter === 'ทั้งหมด' ? 'selected' : ''}>ทั้งหมด</option>
                     <option value="ทั่วไป" ${catFilter === 'ทั่วไป' ? 'selected' : ''}>ทั่วไป</option>
                     <option value="ค่าของใช้" ${catFilter === 'ค่าของใช้' ? 'selected' : ''}>ค่าของใช้/วัสดุ</option>
@@ -8425,7 +8882,7 @@ window.renderExpensePage = function() {
 
             <div class="flex flex-col gap-1">
                 <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">เลือกวันที่</label>
-                <input type="date" id="expDateFilter" value="${dateFilterVal}" onchange="renderExpensePage()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[12px] font-light bg-slate-50 outline-none text-slate-600 shadow-sm cursor-pointer h-[42px]">
+                <input type="date" id="expDateFilter" value="${dateFilterVal}" onchange="window.renderExpensePage()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[12px] font-light bg-slate-50 outline-none text-slate-600 shadow-sm cursor-pointer h-[42px]">
             </div>
 
             <div class="flex flex-col gap-1 flex-1 min-w-[250px]">
@@ -8433,11 +8890,11 @@ window.renderExpensePage = function() {
                 <div class="flex gap-2">
                     <div class="relative flex-1">
                         <input type="text" id="expSearchInput" value="${searchTerm}" placeholder="พิมพ์เพื่อค้นหา..." 
-                            onkeyup="if(event.key === 'Enter') { renderExpensePage(); }" 
+                            onkeyup="if(event.key === 'Enter') { window.renderExpensePage(); }" 
                             class="w-full border border-pink-100 pl-10 pr-4 py-2.5 rounded-2xl text-[13px] font-light bg-slate-50 outline-none focus:ring-1 focus:ring-pink-200 transition-all text-slate-700 h-[42px]">
                         <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300">🔍</span>
                     </div>
-                    <button onclick="renderExpensePage()" class="bg-[#D48197] text-white px-6 rounded-2xl text-[11px] font-bold shadow-md hover:bg-black transition-all shrink-0 uppercase italic h-[42px]">ค้นหา</button>
+                    <button onclick="window.renderExpensePage()" class="bg-[#D48197] text-white px-6 rounded-2xl text-[11px] font-bold shadow-md hover:bg-black transition-all shrink-0 uppercase italic h-[42px]">ค้นหา</button>
                 </div>
             </div>
 
@@ -8464,16 +8921,16 @@ window.renderExpensePage = function() {
                         <tr class="border-b border-slate-50 hover:bg-red-50/10 transition-all" style="height: 65px;">
                             <td class="py-4 px-4 text-[11px] text-slate-400">${item.date || '-'}</td>
                             <td class="py-4 px-4">
-                                <div class="text-slate-800 font-bold">${item.detail || item.customer || '-'}</div>
+                                <div class="text-slate-800 font-bold">${item.detail || '-'}</div>
                             </td>
                             <td class="py-4 px-4 text-center">
                                 <span class="bg-slate-100 text-slate-500 px-3 py-1 rounded-full text-[10px] font-bold">${item.category || 'ทั่วไป'}</span>
                             </td>
                             <td class="py-4 px-4 text-right font-black text-red-600 text-base">
-                                - ฿${parseFloat(item.amount || item.total || 0).toLocaleString()}
+                                - ฿${parseFloat(item.amount || 0).toLocaleString()}
                             </td>
                             <td class="py-4 px-4 text-center">
-                                <span class="text-[11px] text-slate-500 font-bold">${item.account || item.payment || 'เงินสด'}</span>
+                                <span class="text-[11px] text-slate-500 font-bold">${item.account || 'เงินสด'}</span>
                             </td>
                             <td class="py-4 px-4 text-center">
                                 <span class="text-[11px] text-slate-400 font-bold">${item.branch || '-'}</span>
@@ -8555,102 +9012,83 @@ window.openNewExpenseModal = function() {
     });
 };
 
-// 3. ฟังก์ชัน Save (บันทึกและสั่งโหลดหน้าซ้ำ) — เวอร์ชันปลอดภัย ไม่พังระบบเดิม
 window.saveExpense = async function(data) {
-    let accountDB = [];
-    try {
-        accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
-    } catch (e) {
-        accountDB = [];
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
     }
 
     const user = (typeof window.getCurrentUserSafe === 'function')
         ? window.getCurrentUserSafe()
         : (JSON.parse(localStorage.getItem('currentUser')) || {});
 
-    const staffBranch = (typeof window.getUserHomeBranch === 'function')
-        ? window.getUserHomeBranch()
-        : String(user.homeBranch || user.branch || 'บางพลี').replace('สาขา', '').trim();
+    const viewingBranch = (typeof window.getCurrentViewingBranch === 'function')
+        ? window.getCurrentViewingBranch()
+        : (user.viewingBranch || user.homeBranch || user.branch || '');
+
+    const safeViewingBranch = String(viewingBranch || '')
+        .replace('เอซคลินิก', '')
+        .replace('ACE Clinic', '')
+        .replace('สาขา', '')
+        .replace(':', '')
+        .trim();
+
+    if (!safeViewingBranch || safeViewingBranch === 'ทุกสาขา') {
+        return Swal.fire('กรุณาเลือกสาขา', 'ไม่สามารถบันทึกรายจ่ายในโหมดทุกสาขาได้ค่ะ', 'warning');
+    }
 
     const amountNumber = Number(data.amount || 0);
+    if (amountNumber <= 0) {
+        return Swal.fire('ข้อมูลไม่ถูกต้อง', 'ยอดเงินต้องมากกว่า 0', 'warning');
+    }
 
-    const newEntry = {
-        id: "EXP-" + Date.now(),
-        date: data.date || new Date().toISOString().split('T')[0],
-        detail: data.detail || "",
-        category: data.category || "ทั่วไป",
+    const payload = {
+        expense_date: data.date || new Date().toISOString().split('T')[0],
+        detail: data.detail || '',
+        category: data.category || 'ทั่วไป',
         amount: amountNumber,
-        total: amountNumber,
-        account: data.account || "เงินสด",
-        type: "รายจ่าย",
-        status: "เสร็จสิ้น",
-        branch: staffBranch,
-        createdBy: user.name || user.fullName || '-',
-        timestamp: Date.now()
+        account: data.account || 'เงินสด',
+        status: 'เสร็จสิ้น',
+        branch_name: safeViewingBranch,
+        created_by: user.name || user.fullName || '-'
     };
 
-    // ✅ บันทึก localStorage ก่อน เพื่อให้ระบบเดิมยังใช้ได้
-    accountDB.push(newEntry);
-    localStorage.setItem('accountDB', JSON.stringify(accountDB));
+    const { error } = await window.supabaseClient
+        .from('expenses')
+        .insert([payload]);
 
-    // ✅ ถ้ามี Supabase ค่อย sync ขึ้นไป
-    try {
-        if (window.supabaseClient) {
-            const { error } = await window.supabaseClient
-                .from('account')
-                .insert([{
-                    id: newEntry.id,
-                    date: newEntry.date,
-                    detail: newEntry.detail,
-                    category: newEntry.category,
-                    amount: newEntry.amount,
-                    total: newEntry.total,
-                    account: newEntry.account,
-                    type: newEntry.type,
-                    status: newEntry.status,
-                    branch: newEntry.branch,
-                    createdBy: newEntry.createdBy,
-                    timestamp: newEntry.timestamp
-                }]);
-
-            if (error) {
-                console.error('saveExpense supabase error:', error);
-            }
-        }
-    } catch (e) {
-        console.error('saveExpense supabase catch:', e);
+    if (error) {
+        console.error('saveExpense error:', error);
+        return Swal.fire('บันทึกไม่สำเร็จ', error.message || 'เกิดข้อผิดพลาด', 'error');
     }
 
     Swal.fire({
         icon: 'success',
         title: 'บันทึกสำเร็จ',
-        text: `รายการนี้ถูกบันทึกในสาขา ${staffBranch}`,
+        text: `รายการนี้ถูกบันทึกในสาขา ${safeViewingBranch}`,
         showConfirmButton: false,
         timer: 1500
     });
 
     if (typeof window.renderExpensePage === 'function') {
-        window.renderExpensePage();
+        await window.renderExpensePage();
     }
 };
 
-// 4. ฟังก์ชันลบ — กันลบข้ามสาขา
-window.deleteExpense = function(id) {
-    let accountDB = [];
-    try {
-        accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
-    } catch (e) {
-        accountDB = [];
+window.deleteExpense = async function(id) {
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
     }
 
-    const idx = accountDB.findIndex(item => item.id === id);
+    const { data: row, error: findError } = await window.supabaseClient
+        .from('expenses')
+        .select('*')
+        .eq('id', id)
+        .single();
 
-    if (idx === -1) {
-        Swal.fire('ไม่พบข้อมูล', 'ไม่พบรายการที่ต้องการลบ', 'warning');
-        return;
+    if (findError || !row) {
+        return Swal.fire('ไม่พบข้อมูล', 'ไม่พบรายการที่ต้องการลบ', 'warning');
     }
 
-    const row = accountDB[idx];
     const user = (typeof window.getCurrentUserSafe === 'function')
         ? window.getCurrentUserSafe()
         : (JSON.parse(localStorage.getItem('currentUser')) || {});
@@ -8663,73 +9101,86 @@ window.deleteExpense = function(id) {
         ? window.getUserHomeBranch()
         : String(user.homeBranch || user.branch || '').replace('สาขา', '').trim();
 
-    const rowBranch = String(row.branch || '').replace('สาขา', '').trim();
+    const rowBranch = String(row.branch_name || '').replace('สาขา', '').trim();
 
     if (!isAdminAll && rowBranch !== homeBranch) {
-        Swal.fire('ไม่อนุญาต', 'คุณไม่สามารถลบรายจ่ายของสาขาอื่นได้ค่ะ', 'error');
-        return;
+        return Swal.fire('ไม่อนุญาต', 'คุณไม่สามารถลบรายจ่ายของสาขาอื่นได้ค่ะ', 'error');
     }
 
-    Swal.fire({
+    const result = await Swal.fire({
         title: 'ยืนยันการลบรายการนี้?',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonText: 'ลบรายการ',
         cancelButtonText: 'ยกเลิก',
         confirmButtonColor: '#ef4444'
-    }).then((result) => {
-        if (!result.isConfirmed) return;
-
-        accountDB = accountDB.filter(item => item.id !== id);
-        localStorage.setItem('accountDB', JSON.stringify(accountDB));
-
-        Swal.fire({
-            icon: 'success',
-            title: 'ลบสำเร็จ',
-            timer: 1200,
-            showConfirmButton: false
-        });
-
-        window.renderExpensePage();
     });
+
+    if (!result.isConfirmed) return;
+
+    const { error: deleteError } = await window.supabaseClient
+        .from('expenses')
+        .delete()
+        .eq('id', id);
+
+    if (deleteError) {
+        console.error('deleteExpense error:', deleteError);
+        return Swal.fire('ลบไม่สำเร็จ', deleteError.message || 'เกิดข้อผิดพลาด', 'error');
+    }
+
+    Swal.fire({
+        icon: 'success',
+        title: 'ลบสำเร็จ',
+        timer: 1200,
+        showConfirmButton: false
+    });
+
+    await window.renderExpensePage();
 };
 
-/* =======================================================
-   🖨️ ฟังก์ชันพิมพ์ใบเสร็จล่าสุดจากหน้าตารางลูกค้า
-   ======================================================= */
-window.printLatestReceipt = function(name, hn, customerId = '') {
-    const accountDB = JSON.parse(localStorage.getItem('accountDB')) || [];
+window.printLatestReceipt = async function(name, hn, customerId = '') {
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+    }
 
-    const activeCustomer = window.activeCustomer || {};
+    let query = window.supabaseClient
+        .from('sales_header')
+        .select('*')
+        .eq('type', 'รายรับ')
+        .eq('status', 'เสร็จสิ้น')
+        .order('created_at', { ascending: false })
+        .limit(20);
 
-    // ✅ ใช้ ID เป็นหลัก + fallback เป็น HN (กันข้อมูลเก่า)
-    const customerBills = accountDB.filter(b =>
-        (
-            String(b.customer_id || '') === String(customerId || activeCustomer.id || '') ||
-            String(b.hn || '') === String(hn || '') ||
-            String(b.customerHn || '') === String(hn || '')
-        ) &&
-        b.type === "รายรับ" &&
-        b.status === "เสร็จสิ้น"
-    );
+    if (customerId) {
+        query = query.eq('customer_id', customerId);
+    } else if (hn) {
+        query = query.eq('hn', hn);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+        console.error('printLatestReceipt load error:', error);
+        return Swal.fire('โหลดบิลไม่สำเร็จ', error.message || 'เกิดข้อผิดพลาด', 'error');
+    }
+
+    const customerBills = data || [];
 
     if (customerBills.length === 0) {
-        Swal.fire({
+        return Swal.fire({
             icon: 'info',
             title: 'ไม่พบประวัติการซื้อ',
             text: `คุณ ${name} ยังไม่มีประวัติการชำระเงินในระบบค่ะ`,
             confirmButtonColor: '#D48197'
         });
-        return;
     }
 
-    // เอาบิลล่าสุด
-    customerBills.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     const latestBill = customerBills[0];
+    const targetHN = latestBill.hn || '';
 
     Swal.fire({
         title: 'เลือกขนาดใบเสร็จ',
-        text: `บิลล่าสุดวันที่ ${latestBill.date} ยอด ฿${parseFloat(latestBill.total || 0).toLocaleString()}`,
+        text: `บิลล่าสุดวันที่ ${latestBill.bill_date || '-'} ยอด ฿${parseFloat(latestBill.net_total || latestBill.total || 0).toLocaleString()}`,
         icon: 'question',
         showDenyButton: true,
         showCancelButton: true,
@@ -8739,8 +9190,6 @@ window.printLatestReceipt = function(name, hn, customerId = '') {
         confirmButtonColor: '#000',
         denyButtonColor: '#D48197',
     }).then((result) => {
-        const targetHN = latestBill.hn || latestBill.customerHn || '';
-
         if (result.isConfirmed) {
             if (typeof window.printReceipt === 'function') {
                 window.printReceipt(latestBill.id, targetHN, '80mm');

@@ -2552,6 +2552,7 @@ document.addEventListener('click', function(event) {
 /* =======================================================
     👥 ZONE 3: CUSTOMER MANAGEMENT (ระบบประวัติลูกค้า & OPD)
    ======================================================= */
+
 window.__customerCache = {
     data: null,
     loadedAt: 0,
@@ -2675,10 +2676,6 @@ window.getCustomersPageFromSupabase = async function ({
     };
 };
 
-// --- ฟังก์ชันเมื่อกดปุ่ม + เพิ่มใบเสร็จ จากหน้าหลัก ---
-window.openNewBillProcess = function() {
-    window.openBillingTab('', true, '');
-};
 
 // --- ฟังก์ชันหน้าจอเปิดบิล (ปรับปรุงให้ใช้ ID แทนชื่อในการอ้างอิง) ---
 window.openBillingTab = function(customerName, isStandalone = false, customerId = null) {
@@ -3352,7 +3349,21 @@ window.clearModal = function () {
     });
 
     const branch = document.getElementById("modalBranch");
-    if (branch) branch.value = "สาขาบางพลี";
+if (branch) {
+    const currentBranch =
+        (typeof window.getCurrentViewingBranch === 'function' && window.getCurrentViewingBranch()) ||
+        (JSON.parse(localStorage.getItem('currentUser')) || {}).viewingBranch ||
+        (JSON.parse(localStorage.getItem('currentUser')) || {}).branch ||
+        'สาขาบางพลี';
+
+    const cleanBranch = String(currentBranch || '')
+        .replace('เอซคลินิก', '')
+        .replace('ACE Clinic', '')
+        .replace(':', '')
+        .trim();
+
+    branch.value = cleanBranch.startsWith('สาขา') ? cleanBranch : `สาขา${cleanBranch.replace('สาขา', '').trim()}`;
+}
 
     const status = document.getElementById("modalStatus");
     if (status) status.value = "ปกติ";
@@ -3812,16 +3823,16 @@ document.getElementById("profileReceiptBtn").onclick = async () => {
     const cust = customerDB.find(c => String(c.id) === String(customerId));
 
     if (cust) {
+        window.activeCustomer = cust; // ✅ สำคัญมาก
         wrap.classList.add("hidden");
         wrap.classList.remove("flex");
         window.openBillingTab(cust.fullname || '', true, cust.id);
     }
 };
-   
 }
 
 /* =======================================================
-   📊 ฟังก์ชันวาดเนื้อหาในแท็บโปรไฟล์ (ID BASED)
+   📊 ฟังก์ชันวาดเนื้อหาในแท็บโปรไฟล์ (ID BASED / SUPABASE REAL DATA)
    ======================================================= */
 window.renderProfileTab = async function(tab, customerId) {
     const box = document.getElementById("profileTabContent");
@@ -3829,155 +3840,334 @@ window.renderProfileTab = async function(tab, customerId) {
     const contentArea = box || alternateBox;
 
     if (!contentArea) return;
-
-    const customerDB = await window.getCustomersFromSupabase();
-    const c = customerDB.find(item => String(item.id || "").trim() === String(customerId || "").trim());
-
-    if (!c) {
-        contentArea.innerHTML = `<p class="text-center py-10 text-slate-400">ไม่พบข้อมูลลูกค้า</p>`;
+    if (!window.supabaseClient) {
+        contentArea.innerHTML = `<p class="text-center py-10 text-slate-400">ยังไม่พบการเชื่อมต่อ Supabase</p>`;
         return;
     }
 
-    contentArea.innerHTML = "";
+    const esc = (v) => String(v ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
 
-    if (tab === "courses" || tab === "course") {
-        let items = Array.isArray(c.courses) ? [...c.courses] : [];
+    const money = (v) => (Number(v || 0) || 0).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
 
-        if (items.length === 0) {
-            contentArea.innerHTML = `
-                <div class="flex flex-col items-center justify-center py-20 opacity-30">
-                    <span class="text-5xl mb-4">🎫</span>
-                    <p class="font-bold italic text-slate-400">คนไข้ท่านนี้ยังไม่มีรายการคอร์สค่ะ</p>
-                </div>`;
+    const dateOnly = (v) => String(v || '').slice(0, 10) || '-';
+
+    contentArea.innerHTML = `
+        <div class="flex items-center justify-center py-16 text-slate-300 text-sm font-bold">
+            กำลังโหลดข้อมูล...
+        </div>
+    `;
+
+    try {
+        // 1) โหลดข้อมูลลูกค้า
+        const { data: c, error: customerError } = await window.supabaseClient
+            .from('customers')
+            .select('*')
+            .eq('id', customerId)
+            .single();
+
+        if (customerError || !c) {
+            console.error('renderProfileTab customerError:', customerError);
+            contentArea.innerHTML = `<p class="text-center py-10 text-slate-400">ไม่พบข้อมูลลูกค้า</p>`;
             return;
         }
 
-        items.sort((a, b) => {
-            const aRemain = parseInt(a.amount || a.remain || 0);
-            const bRemain = parseInt(b.amount || b.remain || 0);
-            return (aRemain === 0) - (bRemain === 0);
-        });
+        // -------------------------
+        // INFO
+        // -------------------------
+        if (tab === "info") {
+            contentArea.innerHTML = `
+                <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600">
+                    <div><b class="text-slate-800">ชื่อ-สกุล:</b> ${esc(c.fullname || '-')}</div>
+                    <div><b class="text-slate-800">ชื่อเล่น:</b> ${esc(c.nickname || '-')}</div>
+                    <div><b class="text-slate-800">HN:</b> ${esc(c.hn || '-')}</div>
+                    <div><b class="text-slate-800">เบอร์โทร:</b> ${esc(c.phone || '-')}</div>
+                    <div><b class="text-slate-800">สาขา:</b> ${esc(c.branch || '-')}</div>
+                    <div><b class="text-slate-800">ผู้ดูแล:</b> ${esc(c.seller || c.sellerName || c.seller_name || '-')}</div>
+                    <div><b class="text-slate-800">แพ้ยา:</b> ${esc(c.allergy || 'ไม่มี')}</div>
+                    <div><b class="text-slate-800">โรคประจำตัว:</b> ${esc(c.chronic || '-')}</div>
+                    <div><b class="text-slate-800">อีเมล:</b> ${esc(c.email || '-')}</div>
+                    <div><b class="text-slate-800">Line ID:</b> ${esc(c.line_id || '-')}</div>
+                    <div class="md:col-span-2"><b class="text-slate-800">ที่อยู่:</b> ${esc(c.address || '-')}</div>
+                </div>
+            `;
+            return;
+        }
 
+        // -------------------------
+        // COURSES = ดึงจาก sales_items จริง
+        // -------------------------
+       if (tab === "courses" || tab === "course") {
+    const customerId = String(c.id || '').trim();
+    const customerHn = String(c.hn || '').trim();
+
+    const [
+        { data: saleItems, error: saleItemsError },
+        { data: usageRows, error: usageError }
+    ] = await Promise.all([
+        window.supabaseClient
+            .from('sales_items')
+            .select('*')
+            .or(`customer_id.eq.${customerId},hn.eq.${customerHn}`)
+            .order('created_at', { ascending: false }),
+
+        window.supabaseClient
+            .from('course_usage')
+            .select('*')
+            .or(`customer_id.eq.${customerId}`)
+            .order('used_date', { ascending: false })
+    ]);
+
+    if (saleItemsError) {
+        console.error('renderProfileTab saleItemsError:', saleItemsError);
+        contentArea.innerHTML = `<div class="text-center py-10 text-red-300 italic text-sm">โหลดข้อมูลคอร์สไม่สำเร็จ</div>`;
+        return;
+    }
+
+    if (usageError) {
+        console.error('renderProfileTab usageError:', usageError);
+        contentArea.innerHTML = `<div class="text-center py-10 text-red-300 italic text-sm">โหลดข้อมูลการใช้คอร์สไม่สำเร็จ</div>`;
+        return;
+    }
+
+    const rows = (Array.isArray(saleItems) ? saleItems : []).filter(row => {
+        const itemType = String(row.item_type || '').toLowerCase().trim();
+        const unit = String(row.unit || '').trim();
+        return (
+            itemType === 'course' ||
+            unit === 'ครั้ง' ||
+            !!row.course_id ||
+            !!row.old_course_code
+        );
+    });
+
+    const usages = Array.isArray(usageRows) ? usageRows : [];
+
+    if (rows.length === 0) {
         contentArea.innerHTML = `
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500 p-4">
-                ${items.map(x => {
-                    const total = parseInt(x.totalAmount || x.amount || 0);
-                    const remain = parseInt(x.amount || x.remain || 0);
-                    const used = Math.max(0, total - remain);
-                    const percent = total > 0 ? Math.min(100, Math.floor((used / total) * 100)) : 0;
-
-                    return `
-                    <div class="bg-white border border-pink-100 rounded-3xl p-5 shadow-sm relative overflow-hidden ${remain === 0 ? 'opacity-70 bg-slate-50' : ''}">
-                        <div class="absolute top-0 left-0 w-1.5 h-full ${remain === 0 ? 'bg-slate-300' : 'bg-[#D48197]'}"></div>
-                        <div class="flex justify-between items-start mb-2">
-                            <div class="text-left">
-                                <h5 class="text-[14px] font-black text-slate-800 leading-tight">${x.name || '-'}</h5>
-                                <p class="text-[9px] text-slate-400 font-bold mt-1 uppercase">วันที่ซื้อ: ${x.date || '-'}</p>
-                            </div>
-                            <div class="text-right">
-                                <span class="text-xl font-black ${remain === 0 ? 'text-slate-400' : 'text-[#D48197]'}">${used}/${total}</span>
-                                <p class="text-[8px] font-bold text-slate-300 uppercase">ใช้ไปแล้ว</p>
-                            </div>
-                        </div>
-                        <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden mb-2">
-                            <div class="h-full bg-[#D48197]" style="width: ${percent}%"></div>
-                        </div>
-                        <div class="text-[9px] font-bold ${remain === 0 ? 'text-slate-400' : 'text-[#D48197]'} uppercase text-right">
-                            ${remain === 0 ? 'คอร์สเสร็จสมบูรณ์' : `คงเหลือ ${remain} ครั้ง`}
-                        </div>
-                    </div>`;
-                }).join("")}
+            <div class="flex flex-col items-center justify-center py-20 opacity-30">
+                <span class="text-5xl mb-4">🎫</span>
+                <p class="font-bold italic text-slate-400">คนไข้ท่านนี้ยังไม่มีรายการคอร์สค่ะ</p>
             </div>`;
         return;
     }
 
-    if (tab === "appointments" || tab === "appointment") {
-        const appointmentDB = JSON.parse(localStorage.getItem("appointmentDB")) || [];
+    const usageBySaleItemId = {};
+    usages.forEach(u => {
+        const key = String(u.sale_item_id || '').trim();
+        if (!key) return;
+        usageBySaleItemId[key] = (usageBySaleItemId[key] || 0) + (Number(u.used_qty || 0) || 0);
+    });
 
-        const items = appointmentDB.filter(x =>
-            String(x.customer_id || "").trim() === String(c.id || "").trim()
-        );
+    const grouped = {};
 
-        contentArea.innerHTML = items.length
-            ? `<div class="space-y-3 p-4">
-                ${items.map(x => `
-                    <div class="border border-pink-50 rounded-2xl p-4 bg-white flex justify-between items-center shadow-sm">
-                        <div>
-                            <div class="font-bold text-slate-500 text-sm">${x.date || '-'} | ${x.time || '-'}</div>
-                            <div class="text-[10px] text-slate-400 uppercase font-bold mt-1">รายการ: ${x.course || '-'}</div>
+    rows.forEach(row => {
+        const groupKey = String(
+            row.course_id ||
+            row.old_course_code ||
+            row.item_name ||
+            row.id
+        ).trim();
+
+        const qtyBought = Number(row.qty || 0) || 0;
+        const qtyUsed = Number(usageBySaleItemId[String(row.id || '').trim()] || 0) || 0;
+
+        if (!grouped[groupKey]) {
+            grouped[groupKey] = {
+                course_id: row.course_id || null,
+                old_course_code: row.old_course_code || null,
+                name: row.item_name || '-',
+                qtyBought: 0,
+                qtyUsed: 0,
+                unit: row.unit || 'ครั้ง',
+                branch_name: row.branch_name || '-',
+                category_name: row.category_name || '-',
+                last_date: row.created_at || '',
+                history: []
+            };
+        }
+
+        grouped[groupKey].qtyBought += qtyBought;
+        grouped[groupKey].qtyUsed += qtyUsed;
+        grouped[groupKey].history.push({
+            sale_item_id: row.id,
+            qtyBought,
+            qtyUsed,
+            created_at: row.created_at || ''
+        });
+
+        const rowDate = row.created_at || '';
+        if (rowDate > grouped[groupKey].last_date) {
+            grouped[groupKey].last_date = rowDate;
+        }
+    });
+
+    const items = Object.values(grouped)
+        .map(item => ({
+            ...item,
+            qtyRemain: Math.max(0, (Number(item.qtyBought || 0) || 0) - (Number(item.qtyUsed || 0) || 0))
+        }))
+        .sort((a, b) => {
+            if (a.qtyRemain === 0 && b.qtyRemain > 0) return 1;
+            if (a.qtyRemain > 0 && b.qtyRemain === 0) return -1;
+            return String(b.last_date || '').localeCompare(String(a.last_date || ''));
+        });
+
+    contentArea.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500 p-4">
+            ${items.map(x => {
+                const total = Number(x.qtyBought || 0) || 0;
+                const used = Number(x.qtyUsed || 0) || 0;
+                const remain = Number(x.qtyRemain || 0) || 0;
+                const percent = total > 0 ? Math.min(100, Math.floor((used / total) * 100)) : 0;
+
+                return `
+                <div class="bg-white border border-pink-100 rounded-3xl p-5 shadow-sm relative overflow-hidden ${remain === 0 ? 'opacity-70 bg-slate-50' : ''}">
+                    <div class="absolute top-0 left-0 w-1.5 h-full ${remain === 0 ? 'bg-slate-300' : 'bg-[#D48197]'}"></div>
+
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="text-left">
+                            <h5 class="text-[14px] font-black text-slate-800 leading-tight">${x.name || '-'}</h5>
+                            <p class="text-[9px] text-slate-400 font-bold mt-1 uppercase">ซื้อครั้งล่าสุด: ${String(x.last_date || '').slice(0, 10) || '-'}</p>
+                            <p class="text-[9px] text-slate-300 font-bold mt-1 uppercase">สาขา: ${x.branch_name || '-'}</p>
                         </div>
-                        <span class="px-3 py-1 rounded-full text-[9px] font-bold bg-blue-50 text-blue-500 border border-blue-100">${x.status || '-'}</span>
-                    </div>
-                `).join("")}
-            </div>`
-            : `<div class="text-center py-10 text-slate-300 italic text-sm">ไม่มีประวัตินัดหมายค่ะ</div>`;
-        return;
-    }
-
-    if (tab === "receipts" || tab === "receipt") {
-        const accountDB = JSON.parse(localStorage.getItem("accountDB")) || [];
-
-        const items = accountDB.filter(x =>
-            String(x.type || '').trim() === 'รายรับ' &&
-            String(x.customer_id || '').trim() === String(c.id || '').trim()
-        );
-
-        contentArea.innerHTML = items.length
-            ? `<div class="space-y-3 p-4">
-                ${items.map(x => `
-                    <div class="border border-pink-50 rounded-2xl p-4 bg-white flex items-center justify-between shadow-sm">
-                        <div>
-                            <div class="font-bold text-slate-500 text-sm">
-                                วันที่ ${x.date || '-'} | ฿${parseFloat(String(x.total || 0).replace(/[^0-9.-]+/g, "") || 0).toLocaleString()}
-                            </div>
-                            <div class="text-[10px] text-slate-400 font-bold uppercase mt-1">
-                                วิธีชำระ: ${x.payment || '-'}
-                            </div>
+                        <div class="text-right">
+                            <span class="text-xl font-black ${remain === 0 ? 'text-slate-400' : 'text-[#D48197]'}">${used}/${total}</span>
+                            <p class="text-[8px] font-bold text-slate-300 uppercase">ใช้ไปแล้ว</p>
                         </div>
-                        <button onclick="window.printReceipt('${x.id}', '${c.hn || ''}', 'A5')"
-                            class="px-4 py-2 rounded-xl bg-[#D48197] text-white text-[10px] font-bold shadow-sm hover:bg-black transition-all">
-                            พิมพ์ใบเสร็จ
-                        </button>
                     </div>
-                `).join("")}
-            </div>`
-            : `<div class="text-center py-10 text-slate-300 italic text-sm">ไม่มีประวัติใบเสร็จค่ะ</div>`;
-        return;
-    }
 
-    if (tab === "files" || tab === "file") {
-        const items = Array.isArray(c.files) ? c.files : [];
-
-        contentArea.innerHTML = items.length
-            ? `<div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-                ${items.map(x => `
-                    <div class="border border-pink-50 rounded-2xl p-4 bg-white text-xs font-bold text-slate-500 shadow-sm">
-                        ${x.name || x.fileName || x.url || 'ไฟล์แนบ'}
+                    <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden mb-2">
+                        <div class="h-full bg-[#D48197]" style="width: ${percent}%"></div>
                     </div>
-                `).join("")}
-            </div>`
-            : `<div class="text-center py-10 text-slate-300 italic text-sm">ยังไม่มีเอกสารแนบค่ะ</div>`;
+
+                    <div class="flex justify-between items-center mt-2">
+                        <div class="text-[10px] text-slate-400 font-bold uppercase">
+                            หน่วย: ${x.unit || 'ครั้ง'}
+                        </div>
+                        <div class="text-[10px] font-bold ${remain === 0 ? 'text-slate-400' : 'text-[#D48197]'} uppercase">
+                            ${remain === 0 ? 'คอร์สเสร็จสมบูรณ์' : `คงเหลือ ${remain} ${x.unit || 'ครั้ง'}`}
+                        </div>
+                    </div>
+                </div>`;
+            }).join("")}
+        </div>`;
+    return;
+}
+
+        // -------------------------
+        // APPOINTMENTS = ดึงจาก appointments จริง
+        // -------------------------
+        if (tab === "appointments" || tab === "appointment") {
+            const { data: items, error: appError } = await window.supabaseClient
+                .from('appointments')
+                .select('*')
+                .eq('customer_id', c.id)
+                .order('date', { ascending: false })
+                .order('time', { ascending: false });
+
+            if (appError) {
+                console.error('renderProfileTab appError:', appError);
+                contentArea.innerHTML = `<div class="text-center py-10 text-red-300 italic text-sm">โหลดข้อมูลนัดหมายไม่สำเร็จ</div>`;
+                return;
+            }
+
+            contentArea.innerHTML = (items && items.length)
+                ? `<div class="space-y-3 p-4">
+                    ${items.map(x => `
+                        <div class="border border-pink-50 rounded-2xl p-4 bg-white flex justify-between items-center shadow-sm">
+                            <div>
+                                <div class="font-bold text-slate-500 text-sm">${esc(x.date || '-')} | ${esc(x.time || '-')}</div>
+                                <div class="text-[10px] text-slate-400 uppercase font-bold mt-1">รายการ: ${esc(x.course || '-')}</div>
+                                <div class="text-[10px] text-slate-300 uppercase font-bold mt-1">แพทย์: ${esc(x.doctor || '-')} | พนักงาน: ${esc(x.staff || '-')}</div>
+                            </div>
+                            <span class="px-3 py-1 rounded-full text-[9px] font-bold bg-blue-50 text-blue-500 border border-blue-100">${esc(x.status || '-')}</span>
+                        </div>
+                    `).join("")}
+                </div>`
+                : `<div class="text-center py-10 text-slate-300 italic text-sm">ไม่มีประวัตินัดหมายค่ะ</div>`;
+            return;
+        }
+
+        // -------------------------
+        // RECEIPTS = ดึงจาก sales_header จริง
+        // -------------------------
+      if (tab === "receipts" || tab === "receipt") {
+    const customerId = String(c.id || '').trim();
+    const customerHn = String(c.hn || '').trim();
+
+    const { data: receiptRows, error: receiptError } = await window.supabaseClient
+        .from('sales_header')
+        .select('*')
+        .or(`customer_id.eq.${customerId},hn.eq.${customerHn}`)
+        .eq('type', 'รายรับ')
+        .order('bill_date', { ascending: false });
+
+    if (receiptError) {
+        console.error('renderProfileTab receiptError:', receiptError);
+        contentArea.innerHTML = `<div class="text-center py-10 text-red-300 italic text-sm">โหลดข้อมูลใบเสร็จไม่สำเร็จ</div>`;
         return;
     }
 
-    if (tab === "info") {
-        contentArea.innerHTML = `
-            <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600">
-                <div><b class="text-slate-800">ชื่อ-สกุล:</b> ${c.fullname || '-'}</div>
-                <div><b class="text-slate-800">ชื่อเล่น:</b> ${c.nickname || '-'}</div>
-                <div><b class="text-slate-800">HN:</b> ${c.hn || '-'}</div>
-                <div><b class="text-slate-800">เบอร์โทร:</b> ${c.phone || '-'}</div>
-                <div><b class="text-slate-800">สาขา:</b> ${c.branch || '-'}</div>
-                <div><b class="text-slate-800">ผู้ดูแล:</b> ${c.seller || c.sellerName || c.seller_name || '-'}</div>
-                <div><b class="text-slate-800">แพ้ยา:</b> ${c.allergy || 'ไม่มี'}</div>
-                <div><b class="text-slate-800">โรคประจำตัว:</b> ${c.chronic || '-'}</div>
-                <div class="md:col-span-2"><b class="text-slate-800">ที่อยู่:</b> ${c.address || '-'}</div>
-            </div>
-        `;
-        return;
-    }
+    const items = Array.isArray(receiptRows) ? receiptRows : [];
 
-    contentArea.innerHTML = `<div class="text-center py-10 text-slate-300 italic text-sm">ยังไม่มีข้อมูลในแท็บนี้ค่ะ</div>`;
+    contentArea.innerHTML = items.length
+        ? `<div class="space-y-3 p-4">
+            ${items.map(x => `
+                <div class="border border-pink-50 rounded-2xl p-4 bg-white flex items-center justify-between shadow-sm">
+                    <div>
+                        <div class="font-bold text-slate-500 text-sm">
+                            วันที่ ${x.bill_date || '-'} | ฿${parseFloat(x.net_total ?? x.total ?? 0).toLocaleString()}
+                        </div>
+                        <div class="text-[10px] text-slate-400 font-bold uppercase mt-1">
+                            วิธีชำระ: ${x.payment || '-'}
+                        </div>
+                        <div class="text-[10px] text-slate-300 font-bold uppercase mt-1">
+                            เลขที่บิล: ${x.bill_no || '-'}
+                        </div>
+                    </div>
+                    <button onclick="window.printReceipt('${x.id}', '${x.hn || c.hn || ''}', 'A5')"
+                        class="px-4 py-2 rounded-xl bg-[#D48197] text-white text-[10px] font-bold shadow-sm hover:bg-black transition-all">
+                        พิมพ์ใบเสร็จ
+                    </button>
+                </div>
+            `).join("")}
+        </div>`
+        : `<div class="text-center py-10 text-slate-300 italic text-sm">ไม่มีประวัติใบเสร็จค่ะ</div>`;
+    return;
+}
+
+        // -------------------------
+        // FILES
+        // -------------------------
+        if (tab === "files" || tab === "file") {
+            const items = Array.isArray(c.files) ? c.files : [];
+
+            contentArea.innerHTML = items.length
+                ? `<div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+                    ${items.map(x => `
+                        <div class="border border-pink-50 rounded-2xl p-4 bg-white text-xs font-bold text-slate-500 shadow-sm">
+                            ${esc(x.name || x.fileName || x.url || 'ไฟล์แนบ')}
+                        </div>
+                    `).join("")}
+                </div>`
+                : `<div class="text-center py-10 text-slate-300 italic text-sm">ยังไม่มีเอกสารแนบค่ะ</div>`;
+            return;
+        }
+
+        contentArea.innerHTML = `<div class="text-center py-10 text-slate-300 italic text-sm">ยังไม่มีข้อมูลในแท็บนี้ค่ะ</div>`;
+
+    } catch (e) {
+        console.error('renderProfileTab catch:', e);
+        contentArea.innerHTML = `<div class="text-center py-10 text-red-300 italic text-sm">เกิดข้อผิดพลาดในการโหลดข้อมูล</div>`;
+    }
 };
 
 /* =======================================================
@@ -7286,38 +7476,70 @@ window.getCustomers = async function() {
     return allData;
 };
 
-window.loadCustomersForBilling = async function() {
-    if (!window.supabaseClient) {
-        console.error('No supabase');
-        return [];
-    }
+window.customerCache = Array.isArray(window.customerCache) ? window.customerCache : [];
+window.customerCacheLoadedAt = window.customerCacheLoadedAt || 0;
 
-    let allData = [];
-    let from = 0;
-    const pageSize = 1000;
+window.loadCustomersForBilling = async function(forceRefresh = false) {
+    try {
+        const cacheAgeMs = 5 * 60 * 1000; // 5 นาที
 
-    while (true) {
-        const { data, error } = await window.supabaseClient
-            .from('customers')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .range(from, from + pageSize - 1);
+        const hasFreshCache =
+            !forceRefresh &&
+            Array.isArray(window.customerCache) &&
+            window.customerCache.length > 0 &&
+            (Date.now() - Number(window.customerCacheLoadedAt || 0) < cacheAgeMs);
 
-        if (error) {
-            console.error('loadCustomersForBilling error:', error);
-            break;
+        if (hasFreshCache) {
+            return window.customerCache;
         }
 
-        if (!data || data.length === 0) break;
+        if (!window.supabaseClient) {
+            return Array.isArray(window.customerCache) ? window.customerCache : [];
+        }
 
-        allData = allData.concat(data);
+        let allRows = [];
+        let from = 0;
+        const pageSize = 1000;
 
-        if (data.length < pageSize) break;
-        from += pageSize;
+        while (true) {
+            const { data, error } = await window.supabaseClient
+                .from('customers')
+                .select('id, hn, fullname, first_name, last_name, nickname, phone, branch, status')
+                .order('created_at', { ascending: false })
+                .range(from, from + pageSize - 1);
+
+            if (error) {
+                console.error('loadCustomersForBilling error:', error);
+                return Array.isArray(window.customerCache) ? window.customerCache : [];
+            }
+
+            if (!data || data.length === 0) break;
+
+            allRows = allRows.concat(data);
+
+            if (data.length < pageSize) break;
+            from += pageSize;
+        }
+
+        window.customerCache = allRows;
+        window.customerCacheLoadedAt = Date.now();
+
+        return allRows;
+    } catch (e) {
+        console.error('loadCustomersForBilling catch:', e);
+        return Array.isArray(window.customerCache) ? window.customerCache : [];
     }
+};
 
-    window.customerCache = allData;
-    return allData;
+window.billCustomerSearchTimer = null;
+
+window.handleCustomerSearchForBill = function(val) {
+    clearTimeout(window.billCustomerSearchTimer);
+    window.billCustomerSearchTimer = setTimeout(() => {
+        if (typeof window.searchCustomerForBill === 'function') {
+            window.searchCustomerForBill(val);
+        }
+    }, 180);
 };
 
 // --- 1. หน้าตีบิลใบเสร็จ (INCOMING) ---
@@ -7590,29 +7812,75 @@ document.addEventListener('click', function (e) {
     }
 });
 
-// --- 👁️ ฟังก์ชัน "ดูใบเสร็จ" แบบ Alert สวยๆ ---
-window.viewBillOnly = function(billId) {
-    const allBills = JSON.parse(localStorage.getItem('accountDB')) || [];
-    const bill = allBills.find(b => b.id == billId);
-    
-    if (bill) {
-        const itemList = (bill.items || []).map(i => 
-            `• ${i.name} (จำนวน ${i.qty || 1} ครั้ง) -> ฿${parseFloat(i.total || 0).toLocaleString()}`
-        ).join('\n');
+// --- 👁️ ดูบิลจาก Supabase ---
+window.viewBillOnly = async function(billId) {
+    try {
+        if (!billId) {
+            return Swal.fire('ข้อผิดพลาด', 'ไม่พบรหัสบิล', 'error');
+        }
+
+        if (!window.supabaseClient) {
+            return Swal.fire('ข้อผิดพลาด', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+        }
+
+        const { data: bill, error } = await window.supabaseClient
+            .from('sales_header')
+            .select('*')
+            .eq('id', billId)
+            .single();
+
+        if (error) {
+            console.error('viewBillOnly error:', error);
+            return Swal.fire('ข้อผิดพลาด', error.message || 'โหลดข้อมูลบิลไม่สำเร็จ', 'error');
+        }
+
+        if (!bill) {
+            return Swal.fire('ข้อผิดพลาด', 'ไม่พบข้อมูลบิลรหัสนี้ในระบบค่ะ', 'error');
+        }
+
+        const items = Array.isArray(bill.items_snapshot) ? bill.items_snapshot : [];
+
+        const itemList = items.length > 0
+            ? items.map(i => {
+                const qty = Number(i.qty || 1) || 1;
+                const total = Number(i.total || (Number(i.price || 0) * qty) || 0);
+                return `• ${i.name || '-'} (จำนวน ${qty} ${i.unit || 'ครั้ง'}) -> ฿${total.toLocaleString()}`;
+            }).join('\n')
+            : 'ไม่มีรายการสินค้า/คอร์สในบิลนี้';
 
         Swal.fire({
             title: `<span class="text-[#D48197] font-black italic">📄 รายละเอียดใบเสร็จ</span>`,
             html: `
                 <div class="text-left text-sm space-y-2 mt-4 font-normal text-slate-600">
-                    <p><b>สถานะบิล:</b> <span class="${bill.status === 'เสร็จสิ้น' ? 'text-green-500' : 'text-red-500'}">${bill.status}</span></p>
-                    <p><b>ชื่อคนไข้:</b> ${bill.customer || bill.customerName} (${bill.hn || '-'})</p>
-                    <p><b>ช่องทางชำระเงิน:</b> ${bill.payment}</p>
+                    <p><b>สถานะบิล:</b> 
+                        <span class="${bill.status === 'เสร็จสิ้น' ? 'text-green-500' : 'text-red-500'}">
+                            ${bill.status || '-'}
+                        </span>
+                    </p>
+                    <p><b>เลขที่บิล:</b> ${bill.bill_no || '-'}</p>
+                    <p><b>วันที่:</b> ${bill.bill_date || '-'}</p>
+                    <p><b>ชื่อคนไข้:</b> ${bill.customer_name || '-'} (${bill.hn || '-'})</p>
+                    <p><b>ช่องทางชำระเงิน:</b> ${bill.payment || '-'}</p>
+                    <p><b>สาขา:</b> ${bill.branch_name || '-'}</p>
+
                     <div class="border-t border-pink-50 my-3 pt-3">
                         <p class="font-bold text-[#D48197] mb-2">📋 รายการที่ซื้อ:</p>
                         <div class="bg-slate-50 p-3 rounded-xl whitespace-pre-line text-xs">${itemList}</div>
                     </div>
-                    <div class="text-right text-xl font-black text-slate-800 mt-4">
-                        ยอดเงินสุทธิ: <span class="text-[#D48197]">฿${parseFloat(String(bill.total).replace(/[^0-9.-]+/g,"")).toLocaleString()}</span>
+
+                    <div class="space-y-1 text-right mt-4">
+                        <div class="text-sm text-slate-500">
+                            ยอดก่อนส่วนลด: ฿${Number(bill.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <div class="text-sm text-rose-500">
+                            ส่วนลด: ฿${Number(bill.discount_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <div class="text-xl font-black text-slate-800">
+                            ยอดเงินสุทธิ: 
+                            <span class="text-[#D48197]">
+                                ฿${Number(bill.net_total || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                        </div>
                     </div>
                 </div>
             `,
@@ -7621,8 +7889,10 @@ window.viewBillOnly = function(billId) {
             width: '32em',
             customClass: { popup: 'rounded-[2rem]' }
         });
-    } else {
-        Swal.fire('ข้อผิดพลาด', 'ไม่พบข้อมูลบิลรหัสนี้ในระบบค่ะ', 'error');
+
+    } catch (e) {
+        console.error('viewBillOnly catch:', e);
+        Swal.fire('ข้อผิดพลาด', e.message || 'เปิดดูบิลไม่สำเร็จ', 'error');
     }
 };
 
@@ -7752,6 +8022,58 @@ window.askPrintFormat = function(billId, hn) {
     });
 };
 
+// --- helper: ดึงข้อมูลหัวใบเสร็จตามสาขา ---
+window.getReceiptBranchProfile = function(branchName = '') {
+    const safeBranch = String(branchName || '')
+        .replace('เอซคลินิก', '')
+        .replace('ACE Clinic', '')
+        .replace('สาขา', '')
+        .replace(':', '')
+        .trim();
+
+    // ✅ fallback ใช้ได้ทันที แม้ยังไม่ได้ตั้งค่าหน้า setting
+    const defaults = {
+        'บางพลี': {
+            clinicName: 'ACE CLINIC สาขาบางพลี',
+            clinicAddress: '456/7 หมู่ 10 ต.บางปลา อ.บางพลี จ.สมุทรปราการ 10540\nโทร: 097-0942875',
+            taxId: '011101005166'
+        },
+        'อุดมสุข': {
+            clinicName: 'ACE CLINIC สาขาอุดมสุข',
+            clinicAddress: 'สาขาอุดมสุข\nกรุณาใส่ที่อยู่จริงของสาขาอุดมสุขในหน้าตั้งค่าภายหลัง',
+            taxId: '011101005166'
+        },
+        'ชลบุรี': {
+            clinicName: 'ACE CLINIC สาขาชลบุรี',
+            clinicAddress: 'สาขาชลบุรี\nกรุณาใส่ที่อยู่จริงของสาขาชลบุรีในหน้าตั้งค่าภายหลัง',
+            taxId: '011101005166'
+        }
+    };
+
+    // ✅ เผื่ออนาคตมีการบันทึกค่าจากหน้าตั้งค่า
+    try {
+        const raw = localStorage.getItem('receiptBranchSettings');
+        const settings = raw ? JSON.parse(raw) : {};
+        const branchConfig = settings?.[safeBranch];
+
+        if (branchConfig) {
+            return {
+                clinicName: branchConfig.clinicName || defaults[safeBranch]?.clinicName || 'ACE CLINIC',
+                clinicAddress: branchConfig.clinicAddress || defaults[safeBranch]?.clinicAddress || '-',
+                taxId: branchConfig.taxId || defaults[safeBranch]?.taxId || '-'
+            };
+        }
+    } catch (e) {
+        console.error('getReceiptBranchProfile settings parse error:', e);
+    }
+
+    return defaults[safeBranch] || {
+        clinicName: `ACE CLINIC${safeBranch ? ' สาขา' + safeBranch : ''}`,
+        clinicAddress: '-',
+        taxId: '011101005166'
+    };
+};
+
 window.printReceipt = async function(billId, hn, format) {
     try {
         if (!window.supabaseClient) {
@@ -7770,7 +8092,7 @@ window.printReceipt = async function(billId, hn, format) {
             return Swal.fire('Error', 'ไม่พบข้อมูลบิลในระบบ', 'error');
         }
 
-        // 2) โหลดลูกค้าจาก customers (ใช้ HN ก่อน / fallback customer_id)
+        // 2) โหลดลูกค้าจาก customers
         let customer = {};
 
         if (bill.hn) {
@@ -7796,14 +8118,27 @@ window.printReceipt = async function(billId, hn, format) {
 
         const items = Array.isArray(bill.items_snapshot) ? bill.items_snapshot : [];
         const invNo = bill.bill_no || ("INV" + String(bill.id).slice(-8));
-        const clinicAddress = "456/7 หมู่ 10 ต.บางปลา อ.บางพลี จ.สมุทรปราการ 10540\nโทร: 097-0942875 | เลขประจำตัวผู้เสียภาษี: 011101005166";
-        const billDate = bill.bill_date || '-';
-        const customerName = bill.customer_name || customer.fullname || 'ลูกค้าทั่วไป';
-        const targetHN = bill.hn || hn || '-';
+
+        const billBranch = String(
+            bill.branch_name ||
+            bill.branch ||
+            (typeof window.getCurrentViewingBranch === 'function' ? window.getCurrentViewingBranch() : '')
+        ).replace('สาขา', '').trim();
+
+        const receiptProfile = window.getReceiptBranchProfile(billBranch);
+
+        const clinicName = receiptProfile.clinicName || 'ACE CLINIC';
+        const clinicAddress = `${receiptProfile.clinicAddress || '-'}\nเลขประจำตัวผู้เสียภาษี: ${receiptProfile.taxId || '-'}`;
+
+        const netTotalStr = parseFloat(
+            String(bill.net_total ?? bill.total ?? 0).replace(/[^0-9.-]+/g, "")
+        ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        // ✅ ตัวแปรที่ต้องใช้ใน template
+        const billDate = bill.bill_date || bill.date || '-';
+        const customerName = bill.customer_name || bill.customerName || customer.fullname || '-';
+        const targetHN = bill.hn || hn || customer.hn || '-';
         const paymentMethod = bill.payment || '-';
-        const billBranch = bill.branch_name || 'บางพลี';
-        const netTotal = Number(bill.net_total ?? bill.total ?? 0) || 0;
-        const netTotalStr = netTotal.toLocaleString(undefined, { minimumFractionDigits: 2 });
 
         const printWindow = window.open('', '_blank');
         if (!printWindow) {
@@ -7878,7 +8213,7 @@ window.printReceipt = async function(billId, hn, format) {
                 <html>${htmlHeader}
                 <body style="width: 80mm; padding: 5mm; box-sizing: border-box; font-size: 13px;" onload="window.print(); window.close();">
                     <div class="center">
-                        <h2 class="text-pink" style="margin:0;">ACE CLINIC</h2>
+                        <h2 class="text-pink" style="margin:0;">${clinicName}</h2>
                         <p style="font-size: 10px; margin: 5px 0; white-space: pre-line;">${clinicAddress}</p>
                     </div>
                     <div class="divider"></div>
@@ -7913,7 +8248,7 @@ window.printReceipt = async function(billId, hn, format) {
                 <body style="padding: 10mm; font-size: 14px;" onload="window.print(); window.close();">
                     <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                         <div>
-                            <h1 class="text-pink" style="margin:0; font-size: 32px;">ACE CLINIC</h1>
+                            <h1 class="text-pink" style="margin:0; font-size: 32px;">${clinicName}</h1>
                             <p style="font-size: 12px; white-space: pre-line;">${clinicAddress}</p>
                         </div>
                         <div class="right">
@@ -7929,7 +8264,7 @@ window.printReceipt = async function(billId, hn, format) {
                         </div>
                         <div>
                             <p style="margin:0;"><b>วิธีชำระเงิน:</b> ${paymentMethod}</p>
-                            <p style="margin:5px 0 0 0;"><b>สาขา:</b> ${billBranch}</p>
+                            <p style="margin:5px 0 0 0;"><b>สาขา:</b> ${bill.branch_name || bill.branch || '-'}</p>
                         </div>
                     </div>
                     <table style="margin-top: 20px;">
@@ -7970,12 +8305,33 @@ window.printReceipt = async function(billId, hn, format) {
 /* =======================================================
     🧾 ฟังก์ชันระบบตีบิล/ออกใบเสร็จ (ฉบับสมบูรณ์: ส่วนลด + ประวัติครบ)
    ======================================================= */
-
-// 1. กดจากหน้าหลัก
 window.openNewBillProcess = function() {
-    window.openBillingTab('', true); 
-};
+    try {
+        // ✅ เปิดหน้าไปก่อนทันที
+        window.openBillingTab('', true, '');
 
+        // ✅ ค่อย preload ข้อมูลด้านหลัง
+        setTimeout(async () => {
+            try {
+                if (typeof window.loadCustomersForBilling === 'function') {
+                    await window.loadCustomersForBilling();
+                }
+
+                if (
+                    (!Array.isArray(window.courseMasterCache) || window.courseMasterCache.length === 0) &&
+                    typeof window.loadCourseMaster === 'function'
+                ) {
+                    window.courseMasterCache = await window.loadCourseMaster();
+                }
+            } catch (e) {
+                console.error('openNewBillProcess preload error:', e);
+            }
+        }, 0);
+
+    } catch (e) {
+        console.error('openNewBillProcess error:', e);
+    }
+};
 // 2. ฟังก์ชันหลักสำหรับเปิดหน้าตีบิล
 window.openBillingTab = async function(customerName = '', isStandalone = false, customerId = '') {
     window.currentBillItems = [];
@@ -8147,29 +8503,31 @@ window.searchCustomerForBill = async function(val) {
         return;
     }
 
-    const customerDB = Array.isArray(window.customerCache)
-        ? window.customerCache
-        : await window.loadCustomersForBilling();
+    let customerDB = Array.isArray(window.customerCache) ? window.customerCache : [];
+
+    if (customerDB.length === 0) {
+        customerDB = await window.loadCustomersForBilling();
+    }
 
     const matches = customerDB.filter(c => {
-        const fullName = String(c.fullname || '').toLowerCase();
+        const fullname = String(c.fullname || '').toLowerCase();
         const firstName = String(c.first_name || '').toLowerCase();
         const lastName = String(c.last_name || '').toLowerCase();
-        const nickName = String(c.nickname || '').toLowerCase();
+        const nickname = String(c.nickname || '').toLowerCase();
         const hn = String(c.hn || '').toLowerCase();
         const phone = String(c.phone || '').toLowerCase();
         const id = String(c.id || '').toLowerCase();
 
         return (
-            fullName.includes(keyword) ||
+            fullname.includes(keyword) ||
             firstName.includes(keyword) ||
             lastName.includes(keyword) ||
-            nickName.includes(keyword) ||
+            nickname.includes(keyword) ||
             hn.includes(keyword) ||
             phone.includes(keyword) ||
             id.includes(keyword)
         );
-    });
+    }).slice(0, 20);
 
     if (matches.length > 0) {
         resDiv.innerHTML = matches.map(c => `
@@ -8177,10 +8535,14 @@ window.searchCustomerForBill = async function(val) {
                 class="p-4 hover:bg-pink-50 cursor-pointer border-b border-pink-50 flex justify-between items-center bg-white transition-all">
                 <div>
                     <span class="text-sm text-slate-700 font-bold">${c.fullname || '-'}</span>
-                    <p class="text-[9px] text-slate-400 font-bold uppercase italic">📌 สาขาที่สมัคร: ${c.branch || 'ไม่ระบุ'}</p>
+                    <p class="text-[9px] text-slate-400 font-bold uppercase italic">
+                        📌 สาขาที่สมัคร: ${c.branch || 'ไม่ระบุ'}
+                    </p>
                 </div>
                 <div class="text-right">
-                    <span class="text-[10px] bg-cyan-50 text-cyan-600 px-3 py-1 rounded-full font-bold">${c.hn || c.id || '-'}</span>
+                    <span class="text-[10px] bg-cyan-50 text-cyan-600 px-3 py-1 rounded-full font-bold">
+                        ${c.hn || c.id || '-'}
+                    </span>
                 </div>
             </div>
         `).join('');
@@ -8192,44 +8554,71 @@ window.searchCustomerForBill = async function(val) {
 };
 
 // --- 4. ฟังก์ชันเลือกคนไข้เข้ากล่อง (ฉบับดั้งเดิมที่ใช้กับไฟล์คุณได้ 100%) ---
-window.selectCustomerToBill = function(customerId) {
-    const customerDB = Array.isArray(window.customerCache) ? window.customerCache : [];
-    const c = customerDB.find(item => String(item.id || '') === String(customerId || ''));
-    if (!c) return;
+window.selectCustomerToBill = async function(customerId) {
+    try {
+        let customerDB = Array.isArray(window.customerCache) ? window.customerCache : [];
 
-    window.activeCustomer = c;
-
-    if (document.getElementById('billHN')) document.getElementById('billHN').innerText = c.hn || '-';
-    if (document.getElementById('billFullName')) document.getElementById('billFullName').innerText = c.fullname || '-';
-    if (document.getElementById('billNickName')) document.getElementById('billNickName').innerText = c.nickname || '-';
-    if (document.getElementById('billPhone')) document.getElementById('billPhone').innerText = c.phone || '-';
-    if (document.getElementById('billAllergy')) document.getElementById('billAllergy').innerText = c.allergy || 'ไม่มี';
-    if (document.getElementById('billNationality')) document.getElementById('billNationality').innerText = c.nationality || '-';
-    if (document.getElementById('billRight')) document.getElementById('billRight').innerText = c.right || 'ทั่วไป';
-
-    const img = document.getElementById('billCustPhoto');
-    const ph = document.getElementById('billPhotoPlaceholder');
-
-    if (img && ph) {
-        if (c.photo || c.avatar_url) {
-            img.src = c.photo || c.avatar_url;
-            img.classList.remove('hidden');
-            ph.classList.add('hidden');
-        } else {
-            img.src = '';
-            img.classList.add('hidden');
-            ph.classList.remove('hidden');
+        // ✅ ถ้า cache ยังไม่มี ให้โหลดก่อน
+        if (customerDB.length === 0 && typeof window.loadCustomersForBilling === 'function') {
+            customerDB = await window.loadCustomersForBilling();
         }
+
+        const c = customerDB.find(item => String(item.id || '') === String(customerId || ''));
+        if (!c) {
+            return Swal.fire('ไม่พบข้อมูล', 'ไม่พบข้อมูลลูกค้าในระบบค่ะ', 'warning');
+        }
+
+        window.activeCustomer = c;
+
+        if (document.getElementById('billHN')) document.getElementById('billHN').innerText = c.hn || '-';
+        if (document.getElementById('billFullName')) document.getElementById('billFullName').innerText = c.fullname || '-';
+        if (document.getElementById('billNickName')) document.getElementById('billNickName').innerText = c.nickname || '-';
+        if (document.getElementById('billPhone')) document.getElementById('billPhone').innerText = c.phone || '-';
+        if (document.getElementById('billAllergy')) document.getElementById('billAllergy').innerText = c.allergy || 'ไม่มี';
+        if (document.getElementById('billNationality')) document.getElementById('billNationality').innerText = c.nationality || '-';
+        if (document.getElementById('billRight')) document.getElementById('billRight').innerText = c.right || 'ทั่วไป';
+
+        // ✅ เผื่ออยากโชว์สาขาที่สมัครไว้ใช้งานต่อ
+        if (document.getElementById('billCustomerBranch')) {
+            document.getElementById('billCustomerBranch').innerText = c.branch || '-';
+        }
+
+        const img = document.getElementById('billCustPhoto');
+        const ph = document.getElementById('billPhotoPlaceholder');
+
+        if (img && ph) {
+            if (c.photo || c.avatar_url) {
+                img.src = c.photo || c.avatar_url;
+                img.classList.remove('hidden');
+                ph.classList.add('hidden');
+            } else {
+                img.src = '';
+                img.classList.add('hidden');
+                ph.classList.remove('hidden');
+            }
+        }
+
+        const resDiv = document.getElementById('customerSearchResult');
+        if (resDiv) {
+            resDiv.classList.add('hidden');
+            resDiv.innerHTML = '';
+        }
+
+        const searchInp = document.getElementById('custSearchForBillInp');
+        if (searchInp) {
+            searchInp.value = c.fullname || '';
+            searchInp.dataset.customerId = c.id || '';
+            searchInp.dataset.hn = c.hn || '';
+            searchInp.dataset.branch = c.branch || '';
+        }
+
+        const billArea = document.getElementById('billingFormArea');
+        if (billArea) billArea.classList.remove('hidden', 'opacity-0');
+
+    } catch (e) {
+        console.error('selectCustomerToBill error:', e);
+        Swal.fire('ผิดพลาด', 'ไม่สามารถเลือกข้อมูลลูกค้าได้ค่ะ', 'error');
     }
-
-    const resDiv = document.getElementById('customerSearchResult');
-    if (resDiv) resDiv.classList.add('hidden');
-
-    const searchInp = document.getElementById('custSearchForBillInp');
-    if (searchInp) searchInp.value = c.fullname || '';
-
-    const billArea = document.getElementById('billingFormArea');
-    if (billArea) billArea.classList.remove('hidden', 'opacity-0');
 };
 
 window.searchProduct = async function(val) {
@@ -8414,42 +8803,51 @@ window.addItemToBill = function() {
     delete nameInp.dataset.doctorDf;
 };
 
-// --- 7. วาดตารางบิล (ฉบับดึงข้อมูลและแสดงผลประเภทรายการ) ---
+// --- 7. วาดตารางบิล + คำนวณส่วนลด + อัปเดตยอดสุทธิ ---
 window.renderBillItems = function() {
     const listBody = document.getElementById('billItemsList');
     if (!listBody) return;
-    
-    let grandTotal = 0;
 
-    if (!window.currentBillItems || window.currentBillItems.length === 0) {
-        listBody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-300 font-normal italic">ยังไม่มีรายการ...</td></tr>`;
-        // รีเซ็ตยอดรวมเป็น 0 เมื่อไม่มีรายการ
-        const totalDisplay = document.getElementById('grandTotalDisplay');
-        if (totalDisplay) totalDisplay.innerText = '฿0.00';
+    if (!Array.isArray(window.currentBillItems)) {
+        window.currentBillItems = [];
+    }
+
+    let subTotal = 0;
+
+    if (window.currentBillItems.length === 0) {
+        listBody.innerHTML = `
+            <tr>
+                <td colspan="5" class="p-8 text-center text-slate-300 font-normal italic">
+                    ยังไม่มีรายการ...
+                </td>
+            </tr>
+        `;
     } else {
         listBody.innerHTML = window.currentBillItems.map((item, index) => {
-            // คำนวณยอดรวมสะสม
-            const itemTotal = parseFloat(item.total || 0);
-            grandTotal += itemTotal;
+            const qty = Number(item.qty || 0) || 0;
+            const price = Number(item.price || 0) || 0;
+            const itemTotal = Number(item.total || (qty * price)) || 0;
 
-            // กำหนดป้ายกำกับประเภท (สินค้า หรือ คอร์ส)
-            const categoryTag = item.cat === 'medicine' || item.type === 'product' 
-                ? '<span class="bg-blue-50 text-blue-500 px-2 py-0.5 rounded text-[9px] uppercase font-bold">สินค้า</span>'
-                : '<span class="bg-pink-50 text-[#FF4B91] px-2 py-0.5 rounded text-[9px] uppercase font-bold">คอร์ส</span>';
+            subTotal += itemTotal;
+
+            const categoryTag =
+                item.cat === 'medicine' || item.type === 'product' || item.item_type === 'product'
+                    ? '<span class="bg-blue-50 text-blue-500 px-2 py-0.5 rounded text-[9px] uppercase font-bold">สินค้า</span>'
+                    : '<span class="bg-pink-50 text-[#FF4B91] px-2 py-0.5 rounded text-[9px] uppercase font-bold">คอร์ส</span>';
 
             return `
                 <tr class="hover:bg-slate-50 transition-all group border-b border-slate-100">
                     <td class="py-4 pl-4 text-left">
                         <div class="flex items-center gap-2">
                             ${categoryTag}
-                            <span class="text-slate-700 font-bold">${item.name}</span>
+                            <span class="text-slate-700 font-bold">${item.name || '-'}</span>
                         </div>
                     </td>
-                    <td class="py-4 text-center text-slate-600 font-bold">${item.qty}</td>
-                    <td class="py-4 text-center text-slate-600">${parseFloat(item.price || 0).toLocaleString()}</td>
-                    <td class="py-4 text-right text-slate-700 font-black">฿${itemTotal.toLocaleString()}</td>
+                    <td class="py-4 text-center text-slate-600 font-bold">${qty}</td>
+                    <td class="py-4 text-center text-slate-600">${price.toLocaleString()}</td>
+                    <td class="py-4 text-right text-slate-700 font-black">฿${itemTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     <td class="py-4 text-right pr-4">
-                        <button onclick="removeItemFromBill(${index})" 
+                        <button onclick="window.removeItemFromBill(${index})"
                                 class="bg-white p-2 rounded-full shadow-sm border border-slate-100 hover:bg-red-50 text-slate-300 hover:text-red-500 transition-all text-xs opacity-50 group-hover:opacity-100">
                             ✕
                         </button>
@@ -8459,11 +8857,41 @@ window.renderBillItems = function() {
         }).join('');
     }
 
-    // อัปเดตตัวเลขยอดรวมสุทธิ (Grand Total)
+    // ✅ คำนวณส่วนลด
+    const discountInput = document.getElementById('billDiscount');
+    const discountAmount = Number(discountInput?.value || 0) || 0;
+
+    // ✅ ยอดสุทธิ
+    const netTotal = Math.max(0, subTotal - discountAmount);
+
+    // ✅ แสดงยอดรวมสุทธิ
     const totalDisplay = document.getElementById('grandTotalDisplay');
     if (totalDisplay) {
-        totalDisplay.innerText = '฿' + grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2});
+        totalDisplay.innerText = '฿' + netTotal.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
     }
+
+    // ✅ เก็บค่าล่าสุดไว้ให้ confirmFinalPayment ใช้
+    window.lastCalculatedDiscount = discountAmount;
+    window.lastCalculatedNet = netTotal;
+};
+
+window.selectPaymentType = function(btn, method) {
+    window.selectedPaymentMethod = method || '';
+
+    document.querySelectorAll('#paymentMethods button').forEach(b => {
+        b.classList.remove('bg-[#FF4B91]', 'text-white', 'border-[#FF4B91]');
+        b.classList.add('bg-white', 'text-slate-500', 'border-slate-100');
+    });
+
+    if (btn) {
+        btn.classList.remove('bg-white', 'text-slate-500', 'border-slate-100');
+        btn.classList.add('bg-[#FF4B91]', 'text-white', 'border-[#FF4B91]');
+    }
+
+    console.log('selectedPaymentMethod =', window.selectedPaymentMethod);
 };
 
 // --- 8. ลบรายการออก ---
@@ -8765,6 +9193,458 @@ function restoreCustomerCoursesFromReceipt(receipt){
     localStorage.setItem("customerDB",JSON.stringify(customerDB));
 
 }
+
+/* =======================================================
+    👁️ ฟังก์ชันดูข้อมูลลูกค้า (New Luxury Sharp Design + Updated Fields)
+   ======================================================= */
+window.viewCustomerDetailById = async function(customerId) {
+    try {
+        if (!customerId) return;
+
+        // 1. ดึงข้อมูลล่าสุดจาก Supabase
+        const { data: c, error } = await window.supabaseClient
+            .from('customers')
+            .select('*')
+            .eq('id', customerId)
+            .single();
+
+        if (error || !c) {
+            Swal.fire('ไม่พบข้อมูล', 'ไม่สามารถดึงข้อมูลลูกค้าได้ค่ะ', 'error');
+            return;
+        }
+
+        window.activeCustomer = c;
+        const target = document.getElementById('dynamicContent');
+        if (!target) return;
+
+        // 2. วาดโครงสร้างใหม่ เน้นความคมชัดและปุ่มทรงมนขนาดเล็ก
+        target.innerHTML = `
+            <div class="animate-in fade-in slide-in-from-top duration-500 font-sans pb-20 text-left">
+                
+                <div class="bg-white p-8 rounded-[3rem] shadow-xl border-2 border-slate-100 mb-8 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
+                     <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02] select-none z-0">
+                        <h1 style="font-size: 20rem;" class="font-black italic text-pink-300">ACE</h1>
+                    </div>
+                    
+                    <div class="text-center md:text-left relative z-10">
+                        <h2 class="text-4xl font-black text-slate-900 leading-tight italic uppercase drop-shadow-sm">${c.fullname || '-'}</h2>
+                        <div class="flex flex-wrap gap-3 mt-3 justify-center md:justify-start">
+                            <span class="bg-slate-100 text-slate-600 px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest border border-slate-200 shadow-inner">HN: ${c.hn || '-'}</span>
+                            <span class="bg-pink-50 text-[#D48197] px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest border border-pink-100 shadow-inner">📍 สาขา: ${c.branch || '-'}</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-3 relative z-10">
+    <button onclick="window.openBillingTab('${c.fullname}', true, '${c.id}')" 
+        class="bg-[#D48197] text-white px-6 py-2.5 rounded-full font-black text-xs shadow-lg hover:scale-105 transition-all italic border-b-4 border-pink-800/20">
+        + เพิ่มใบเสร็จ
+    </button>
+                        <button onclick="loadPage(2, 'จัดการลูกค้า/ประวัติ')" class="bg-slate-800 text-white px-6 py-2.5 rounded-full text-[10px] font-black hover:bg-black transition-all uppercase italic shadow-md border-b-4 border-black/20">🔙 กลับหน้าหลัก</button>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-2 mb-8 bg-slate-100/80 p-2.5 rounded-[2.5rem] border-2 border-slate-200 w-max mx-auto md:mx-0 shadow-inner">
+                    <button onclick="window.switchCustomerTab('info', '${c.id}')" class="cust-tab active px-8 py-3.5 rounded-full text-[12px] font-black transition-all flex items-center gap-2" data-tab="info"><i data-lucide="pin" class="w-4 h-4"></i> ข้อมูลพื้นฐาน</button>
+                    <button onclick="window.switchCustomerTab('remaining', '${c.id}')" class="cust-tab px-8 py-3.5 rounded-full text-[12px] font-black transition-all text-slate-500 hover:text-pink-600 flex items-center gap-2" data-tab="remaining"><i data-lucide="ticket" class="w-4 h-4"></i> คอร์สคงเหลือ</button>
+                    <button onclick="window.switchCustomerTab('usage', '${c.id}')" class="cust-tab px-8 py-3.5 rounded-full text-[12px] font-black transition-all text-slate-500 hover:text-pink-600 flex items-center gap-2" data-tab="usage"><i data-lucide="scroll" class="w-4 h-4"></i> ประวัติใช้คอร์ส</button>
+                    <button onclick="window.switchCustomerTab('receipts', '${c.id}')" class="cust-tab px-8 py-3.5 rounded-full text-[12px] font-black transition-all text-slate-500 hover:text-pink-600 flex items-center gap-2" data-tab="receipts"><i data-lucide="file-text" class="w-4 h-4"></i> ใบเสร็จย้อนหลัง</button>
+                    <button onclick="window.switchCustomerTab('appoints', '${c.id}')" class="cust-tab px-8 py-3.5 rounded-full text-[12px] font-black transition-all text-slate-500 hover:text-pink-600 flex items-center gap-2" data-tab="appoints"><i data-lucide="calendar-days" class="w-4 h-4"></i> ประวัตินัดหมาย</button>
+                </div>
+
+                <div id="customerTabContent" class="bg-white rounded-[4rem] shadow-2xl border-2 border-slate-200 p-12 min-h-[500px] text-left relative overflow-hidden">
+                    <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.015] select-none">
+                        <h1 style="font-size: 25rem;" class="font-black italic text-pink-300">ACE</h1>
+                    </div>
+                    <div id="tabContentInner" class="relative z-10"></div>
+                </div>
+            </div>
+
+            <style>
+                /* CSS สำหรับปุ่ม Tab ที่เลือก */
+                .cust-tab.active {
+                    background-color: #D48197 !important;
+                    color: white !important;
+                    box-shadow: 0 8px 20px rgba(212, 129, 151, 0.4);
+                    transform: translateY(-2px);
+                }
+                .detail-box {
+                    background: #f8fafc;
+                    border: 2px solid #f1f5f9;
+                    padding: 20px 25px;
+                    border-radius: 25px;
+                    transition: all 0.3s;
+                    box-shadow: inset 0 2px 5px rgba(0,0,0,0.02);
+                }
+                .detail-box:hover {
+                    border-color: #D48197;
+                    background: white;
+                    box-shadow: 0 10px 25px rgba(212, 129, 151, 0.1);
+                }
+                .detail-label {
+                    font-size: 10px;
+                    color: #94a3b8; /* slate-400 */
+                    font-weight: 900; /* black */
+                    text-transform: uppercase;
+                    letter-spacing: 0.15em;
+                    display: block;
+                    margin-bottom: 4px;
+                }
+                .detail-value {
+                    font-size: 1.125rem; /* text-lg */
+                    font-weight: 900; /* black */
+                    color: #1e293b; /* slate-800 */
+                }
+            </style>
+        `;
+
+        // สั่งสร้างไอคอน Lucide ใหม่
+        if (window.lucide) lucide.createIcons();
+        
+        window.switchCustomerTab('info', c.id);
+
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Error', 'เกิดข้อผิดพลาดในการโหลดข้อมูล', 'error');
+    }
+};
+
+window.switchCustomerTab = async function(tabName, customerId) {
+    const container = document.getElementById('tabContentInner');
+    if (!container) return;
+
+    // เปลี่ยนสีปุ่มที่ถูกกด
+    document.querySelectorAll('.cust-tab').forEach(btn => {
+        btn.classList.remove('active');
+        btn.classList.add('text-slate-500');
+    });
+    const activeBtn = document.querySelector(`.cust-tab[data-tab="${tabName}"]`);
+    if (activeBtn) {
+        activeBtn.classList.add('active');
+        activeBtn.classList.remove('text-slate-500');
+    }
+
+    container.innerHTML = `<div class="flex justify-center py-20"><span class="animate-spin text-3xl">⌛</span></div>`;
+    const c = window.activeCustomer;
+
+    // ฟังก์ชันช่วยจัดรูปแบบวันที่เป็นภาษาไทย
+    const formatThaiDate = (dateString) => {
+        if (!dateString) return '-';
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('th-TH', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+            });
+        } catch (e) {
+            return dateString;
+        }
+    };
+
+    if (tabName === 'info') {
+        container.innerHTML = `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+                <div class="detail-box">
+                    <label class="detail-label">รหัสประจำตัว (HN)</label>
+                    <p class="detail-value italic">${c.hn || '-'}</p>
+                </div>
+                <div class="detail-box">
+                    <label class="detail-label">เบอร์โทรศัพท์ติดต่อ</label>
+                    <p class="detail-value text-blue-600 italic">${c.phone || '-'}</p>
+                </div>
+                
+                <div class="detail-box">
+                    <label class="detail-label">วัน/เดือน/ปี เกิด (Birthday)</label>
+                    <p class="detail-value text-slate-700 font-bold">${formatThaiDate(c.birth_date)}</p>
+                </div>
+                <div class="detail-box">
+                    <label class="detail-label">เลขประจำตัวประชาชน (National ID)</label>
+                    <p class="detail-value text-slate-700 font-bold tracking-tight">${c.citizen_id || '-'}</p>
+                </div>
+                <div class="detail-box md:col-span-2">
+                    <label class="detail-label">พนักงานขายที่ดูแล (Seller)</label>
+                    <p class="detail-value text-slate-800 font-black italic bg-pink-50 px-4 py-2 rounded-xl inline-block mt-1">${c.seller || '-'}</p>
+                </div>
+                <div class="detail-box">
+                    <label class="detail-label">ชื่อเล่น (Nickname)</label>
+                    <p class="detail-value italic">${c.nickname || '-'}</p>
+                </div>
+                <div class="detail-box">
+                    <label class="detail-label">สถานะในระบบ</label>
+                    <p class="detail-value text-emerald-600 italic">● ${c.status || 'ปกติ'}</p>
+                </div>
+                <div class="col-span-1 md:col-span-2 detail-box" style="background: #fff1f2; border-color: #fecdd3;">
+                    <label class="detail-label text-rose-400 italic underline decoration-rose-200">🚨 ประวัติการแพ้ยา / ยาประจำตัว</label>
+                    <p class="text-2xl font-black text-rose-600 italic tracking-tight">${c.allergy || 'ไม่มีข้อมูล'}</p>
+                </div>
+                <div class="col-span-1 md:col-span-2 detail-box">
+                    <label class="detail-label">ที่อยู่สำหรับการจัดส่งเอกสาร</label>
+                    <p class="text-base font-bold text-slate-600 leading-relaxed">${c.address || '-'}</p>
+                </div>
+            </div>
+        `;
+    } 
+    
+    else if (tabName === 'remaining') {
+    const customerIdStr = String(customerId || '').trim();
+    const customerHN = String(c.hn || '').trim();
+
+    const [
+        { data: saleItems, error: saleItemsError },
+        { data: usageRows, error: usageError }
+    ] = await Promise.all([
+        window.supabaseClient
+            .from('sales_items')
+            .select('*')
+            .or(`customer_id.eq.${customerIdStr},hn.eq.${customerHN}`)
+            .order('created_at', { ascending: false }),
+
+        window.supabaseClient
+            .from('course_usage')
+            .select('*')
+            .eq('customer_id', customerIdStr)
+            .order('created_at', { ascending: false })
+    ]);
+
+    if (saleItemsError) {
+        console.error('remaining saleItemsError:', saleItemsError);
+        container.innerHTML = `<p class="py-20 text-center text-red-300 italic font-bold">โหลดข้อมูลคอร์สไม่สำเร็จ</p>`;
+        return;
+    }
+
+    if (usageError) {
+        console.error('remaining usageError:', usageError);
+        container.innerHTML = `<p class="py-20 text-center text-red-300 italic font-bold">โหลดข้อมูลการใช้คอร์สไม่สำเร็จ</p>`;
+        return;
+    }
+
+    const courseRows = (saleItems || []).filter(item => {
+        const itemType = String(item.item_type || '').toLowerCase().trim();
+        const unit = String(item.unit || '').trim();
+        return (
+            itemType === 'course' ||
+            unit === 'ครั้ง' ||
+            !!item.course_id ||
+            !!item.old_course_code
+        );
+    });
+
+    if (courseRows.length === 0) {
+        container.innerHTML = `
+            <div class="border-2 border-slate-100 bg-slate-50/50 rounded-[2.5rem] p-8 shadow-inner overflow-hidden mb-6 relative z-10">
+                <table class="w-full text-left font-bold border-separate" style="border-spacing: 0 12px;">
+                    <tbody class="text-[13px] text-slate-700 bg-white rounded-3xl">
+                        <tr>
+                            <td colspan="4" class="p-16 text-center text-slate-300 italic font-bold rounded-3xl border-2 border-slate-100 bg-white">
+                                📭 ไม่พบรายการคอร์สสะสมในฐานข้อมูลค่ะ
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        `;
+        return;
+    }
+
+    const usageMap = {};
+    (usageRows || []).forEach(u => {
+        const saleItemId = String(u.sale_item_id || '').trim();
+        if (!saleItemId) return;
+        usageMap[saleItemId] = (usageMap[saleItemId] || 0) + (Number(u.used_qty || 0) || 0);
+    });
+
+    const grouped = {};
+
+    courseRows.forEach(item => {
+        const key = String(
+            item.course_id ||
+            item.old_course_code ||
+            item.item_name ||
+            item.id
+        ).trim();
+
+        if (!grouped[key]) {
+            grouped[key] = {
+                name: item.item_name || '-',
+                unit: item.unit || 'ครั้ง',
+                date: item.created_at || '',
+                totalQty: 0,
+                usedQty: 0
+            };
+        }
+
+        grouped[key].totalQty += Number(item.qty || 0) || 0;
+        grouped[key].usedQty += Number(usageMap[String(item.id || '').trim()] || 0) || 0;
+
+        if (String(item.created_at || '') > String(grouped[key].date || '')) {
+            grouped[key].date = item.created_at || '';
+        }
+    });
+
+    const courses = Object.values(grouped).map(item => ({
+        ...item,
+        remainQty: Math.max(0, (Number(item.totalQty || 0) || 0) - (Number(item.usedQty || 0) || 0))
+    }));
+
+    container.innerHTML = `
+        <div class="border-2 border-slate-100 bg-slate-50/50 rounded-[2.5rem] p-8 shadow-inner overflow-hidden mb-6 relative z-10">
+            <table class="w-full text-left font-bold border-separate" style="border-spacing: 0 12px;">
+                <thead class="text-[11px] text-slate-400 uppercase font-black italic tracking-widest pb-4">
+                    <tr>
+                        <th class="px-6 pb-2 w-1/2">ชื่อรายการคอร์ส</th>
+                        <th class="px-6 pb-2 text-center">วันที่ซื้อ</th>
+                        <th class="px-6 pb-2 text-right">คงเหลือ</th>
+                        <th class="px-6 pb-2 text-center">หน่วย</th>
+                    </tr>
+                </thead>
+                <tbody class="text-[13px] text-slate-700 bg-white rounded-3xl">
+                    ${courses.length > 0 ? courses.map(item => `
+                        <tr class="shadow-sm hover:shadow-md hover:border-pink-300 transition-all group">
+                            <td class="px-6 py-5 rounded-l-3xl border-y-2 border-l-2 border-slate-100 group-hover:border-pink-200">
+                                <p class="font-black text-slate-900 text-base italic">${item.name}</p>
+                                <p class="text-[10px] text-slate-300 font-bold mt-1">ใช้ไป ${item.usedQty}/${item.totalQty}</p>
+                            </td>
+                            <td class="px-6 py-5 border-y-2 border-slate-100 group-hover:border-pink-200 text-center text-slate-500 font-medium">
+                                ${formatThaiDate(item.date)}
+                            </td>
+                            <td class="px-6 py-5 border-y-2 border-slate-100 group-hover:border-pink-200 text-right">
+                                <p class="text-3xl font-black text-[#D48197] leading-none drop-shadow-sm">${item.remainQty}</p>
+                            </td>
+                            <td class="px-6 py-5 rounded-r-3xl border-y-2 border-r-2 border-slate-100 group-hover:border-pink-200 text-center text-slate-400 font-black uppercase italic">
+                                ${item.unit || 'ครั้ง'}
+                            </td>
+                        </tr>
+                    `).join('') : `
+                        <tr>
+                            <td colspan="4" class="p-16 text-center text-slate-300 italic font-bold rounded-3xl border-2 border-slate-100 bg-white">
+                                📭 ไม่พบรายการคอร์สสะสมในฐานข้อมูลค่ะ
+                            </td>
+                        </tr>
+                    `}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+    // ... ส่วนของแท็บอื่น (usage, receipts, appoints) ปรับปรุงสีปุ่มพิมพ์ใบเสร็จ ...
+    
+    else if (tabName === 'usage') {
+    const customerIdStr = String(customerId || '').trim();
+
+    const { data: usageRows, error: usageError } = await window.supabaseClient
+        .from('course_usage')
+        .select('*')
+        .eq('customer_id', customerIdStr)
+        .order('used_date', { ascending: false })
+        .order('created_at', { ascending: false });
+
+    if (usageError) {
+        console.error('usageError:', usageError);
+        container.innerHTML = `<p class="py-20 text-center text-red-300 italic font-bold relative z-10">โหลดประวัติใช้คอร์สไม่สำเร็จ</p>`;
+        return;
+    }
+
+    const saleItemIds = [...new Set((usageRows || []).map(x => x.sale_item_id).filter(Boolean))];
+
+    let saleItemsMap = {};
+    if (saleItemIds.length > 0) {
+        const { data: linkedSaleItems, error: linkedSaleItemsError } = await window.supabaseClient
+            .from('sales_items')
+            .select('*')
+            .in('id', saleItemIds);
+
+        if (!linkedSaleItemsError && Array.isArray(linkedSaleItems)) {
+            linkedSaleItems.forEach(item => {
+                saleItemsMap[String(item.id)] = item;
+            });
+        }
+    }
+
+    container.innerHTML = `
+        <div class="space-y-4 relative z-10">
+            ${usageRows && usageRows.length > 0 ? usageRows.map(item => {
+                const saleItem = saleItemsMap[String(item.sale_item_id || '')] || null;
+                const courseName = saleItem?.item_name || item.note || '-';
+                return `
+                    <div class="p-6 bg-slate-50 rounded-[2.5rem] border-2 border-white shadow-sm flex justify-between items-center hover:bg-white hover:shadow-md transition-all">
+                        <div class="text-left">
+                            <p class="text-[10px] text-[#D48197] font-black uppercase mb-1">📅 ${formatThaiDate(item.used_date || item.created_at)}</p>
+                            <p class="font-black text-slate-800 text-base italic">${courseName}</p>
+                            <p class="text-[10px] text-slate-400 mt-2 font-bold italic">ใช้ไป ${Number(item.used_qty || 0)} ครั้ง</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="bg-emerald-500 text-white px-5 py-2 rounded-full text-[10px] font-black uppercase shadow-lg border-b-2 border-emerald-700">USED</span>
+                            <p class="text-[10px] text-slate-400 mt-2 font-bold italic">${item.note || '-'}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('') : '<p class="py-20 text-center text-slate-300 italic font-bold relative z-10">ยังไม่พบประวัติการใช้คอร์ส</p>'}
+        </div>
+    `;
+}
+
+   else if (tabName === 'receipts') {
+    const customerIdStr = String(customerId || '').trim();
+    const customerHN = String(c.hn || '').trim();
+
+    const { data: receipts, error: receiptsError } = await window.supabaseClient
+        .from('sales_header')
+        .select('*')
+        .or(`customer_id.eq.${customerIdStr},hn.eq.${customerHN}`)
+        .eq('type', 'รายรับ')
+        .order('bill_date', { ascending: false });
+
+    if (receiptsError) {
+        console.error('receiptsError:', receiptsError);
+        container.innerHTML = `<p class="col-span-2 py-20 text-center text-red-300 italic font-bold relative z-10">โหลดใบเสร็จไม่สำเร็จ</p>`;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+            ${receipts && receipts.length > 0 ? receipts.map(item => `
+                <div class="p-8 bg-white rounded-[2.5rem] border-2 border-slate-100 flex justify-between items-center shadow-xl hover:border-[#D48197] transition-all group">
+                    <div class="text-left">
+                        <p class="text-[10px] text-slate-400 font-black uppercase mb-1">RECEIPT DATE: ${formatThaiDate(item.bill_date)}</p>
+                        <p class="font-black text-slate-900 text-2xl italic">฿${parseFloat(item.net_total ?? item.total ?? 0).toLocaleString()}</p>
+                        <p class="text-[10px] text-[#D48197] font-black uppercase mt-1 italic tracking-widest">💳 ${item.payment || '-'}</p>
+                        <p class="text-[10px] text-slate-300 font-black uppercase mt-1 italic tracking-widest">${item.bill_no || '-'}</p>
+                    </div>
+                    <button onclick="window.printReceipt('${item.id}', '${item.hn || c.hn || ''}', 'A5')" 
+                        class="w-14 h-14 rounded-2xl bg-[#D48197] text-white flex items-center justify-center shadow-lg hover:bg-pink-600 transition-all scale-100 hover:scale-110 border-b-4 border-pink-800/30">
+                        🖨️
+                    </button>
+                </div>
+            `).join('') : '<p class="col-span-2 py-20 text-center text-slate-300 italic font-bold relative z-10">ไม่พบประวัติใบเสร็จ</p>'}
+        </div>
+    `;
+}
+
+    else if (tabName === 'appoints') {
+        const { data: appoints } = await window.supabaseClient.from('appointments').select('*').eq('customer_id', customerId).order('date', { ascending: false });
+        container.innerHTML = `
+            <div class="space-y-4 relative z-10">
+                ${appoints && appoints.length > 0 ? appoints.map(item => `
+                    <div class="p-8 border-2 border-slate-100 rounded-[3rem] flex justify-between items-center shadow-md ${item.status === 'ยกเลิก' ? 'opacity-40 grayscale bg-slate-200' : 'bg-white hover:border-blue-400'} transition-all">
+                        <div class="text-left">
+                            <p class="text-[12px] text-blue-500 font-black uppercase mb-1 italic underline underline-offset-4 decoration-2">นัดหมาย: ${formatThaiDate(item.date)} (${item.time || '-'} น.)</p>
+                            <p class="font-black text-slate-800 text-lg italic">${item.course}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[10px] font-black italic uppercase py-2.5 px-6 rounded-full border-2 ${item.status === 'เสร็จสิ้น' ? 'text-emerald-500 border-emerald-500' : item.status === 'รอดำเนินการ' ? 'text-blue-500 border-blue-500' : 'text-rose-500 border-rose-500'}">
+                                ${item.status}
+                            </p>
+                        </div>
+                    </div>
+                `).join('') : '<p class="py-20 text-center text-slate-300 italic font-bold relative z-10">ไม่มีรายการนัดหมาย</p>'}
+            </div>
+        `;
+    }
+    
+    // สั่งสร้างไอคอน Lucide ใหม่ในเนื้อหา Tab
+    if (window.lucide) lucide.createIcons();
+};
+
+
 
 /* =======================================================
     💰 ZONE 5.5: BILLING & EXPENSE (ส่วนของรายจ่าย OUTGOING)
@@ -15387,259 +16267,6 @@ window.guardEditAction = function(menuId, actionFn) {
     return false;
 };
 
-/* =======================================================
-   🛠️ ZONE 9: UTILITIES (ฟังก์ชันช่วยเหลือ & มือถือ)
-   ======================================================= */
-window.readSmartCard = function() {
-    const firstName = document.getElementById("modalFirstName");
-    const lastName = document.getElementById("modalLastName");
-    const citizenId = document.getElementById("modalCitizenId");
-    const birthDate = document.getElementById("modalBirthDate");
-
-    if (firstName) firstName.value = "สมหญิง";
-    if (lastName) lastName.value = "รักสะอาด";
-    if (citizenId) citizenId.value = "1100100223344";
-    if (birthDate) birthDate.value = "12/03/2530";
-
-    Swal.fire('ดึงข้อมูลสำเร็จ', 'เชื่อมต่อ Smart Card Reader เรียบร้อยแล้วค่ะ', 'success');
-};
-
-// -------------------------
-// Preview Staff Photo
-// -------------------------
-window.previewStaffPhoto = function(input) {
-    if (!input || !input.files || !input.files[0]) return;
-
-    const previewImg = document.getElementById('previewImg');
-    const uploadText = document.getElementById('uploadText');
-    if (!previewImg) return;
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        previewImg.src = e.target.result;
-        previewImg.classList.remove('hidden');
-        if (uploadText) uploadText.classList.add('hidden');
-    };
-    reader.readAsDataURL(input.files[0]);
-};
-
-// -------------------------
-// Header Time
-// -------------------------
-function updateHeaderTime() {
-    const timeEl = document.getElementById('headerLastUpdate');
-    if (timeEl) {
-        timeEl.innerText = new Date().toLocaleTimeString('th-TH', { hour12: false });
-    }
-}
-setInterval(updateHeaderTime, 1000);
-
-// -------------------------
-// Mobile Tables
-// -------------------------
-window.fixMobileTables = function(root = document) {
-    if (window.innerWidth > 768) return;
-
-    const tables = root.querySelectorAll('#dynamicContent table');
-
-    tables.forEach(table => {
-        const parent = table.parentElement;
-        if (parent && parent.classList.contains('mobile-table-wrap')) return;
-
-        table.classList.remove('w-full');
-        table.classList.add('mobile-table');
-
-        const wrap = document.createElement('div');
-        wrap.className = 'mobile-table-wrap';
-
-        table.parentNode.insertBefore(wrap, table);
-        wrap.appendChild(table);
-    });
-};
-
-// -------------------------
-// Initial Load
-// -------------------------
-window.addEventListener('load', function() {
-    const datePicker = document.getElementById('headerDatePicker');
-    if (datePicker) {
-        datePicker.valueAsDate = new Date();
-    }
-
-    updateHeaderTime();
-
-    setTimeout(() => {
-        if (typeof window.fixMobileTables === 'function') {
-            window.fixMobileTables(document);
-        }
-    }, 200);
-
-    const loginPage = document.getElementById('loginPage');
-    if (loginPage && window.aceObserver) {
-        window.aceObserver.observe(loginPage, {
-            attributes: true,
-            attributeFilter: ['class', 'style']
-        });
-    }
-
-    manageBtnVisibility();
-});
-
-// เฝ้าดูการเปลี่ยนหน้าใน dynamicContent แล้วครอบตารางใหม่อัตโนมัติ
-const mobileTableObserver = new MutationObserver(() => {
-    if (typeof window.fixMobileTables === 'function') {
-        window.fixMobileTables(document);
-    }
-
-    if (typeof window.manageBtnVisibility === 'function') {
-        window.manageBtnVisibility();
-    }
-});
-
-window.addEventListener('load', function() {
-    const dynamicContent = document.getElementById('dynamicContent');
-    if (dynamicContent) {
-        mobileTableObserver.observe(dynamicContent, {
-            childList: true,
-            subtree: true
-        });
-    }
-});
-
-window.addEventListener('resize', function() {
-    setTimeout(() => {
-        if (typeof window.fixMobileTables === 'function') {
-            window.fixMobileTables(document);
-        }
-        manageBtnVisibility();
-
-        if (window.innerWidth > 768) {
-            document.body.classList.remove('sidebar-open');
-        }
-    }, 100);
-});
-
-// -------------------------
-// Sidebar / Mobile Menu
-// -------------------------
-let aceSidebarAutoCloseTimer = null;
-
-function resetSidebarAutoCloseTimer() {
-    clearTimeout(aceSidebarAutoCloseTimer);
-
-    if (window.innerWidth > 768) return;
-    if (!document.body.classList.contains('sidebar-open')) return;
-
-    aceSidebarAutoCloseTimer = setTimeout(() => {
-        document.body.classList.remove('sidebar-open');
-        const arrow = document.getElementById('ace-arrow-icon');
-        if (arrow) arrow.innerText = '❮';
-    }, 4000);
-}
-
-function aceToggleSidebar() {
-    const body = document.body;
-    const arrow = document.getElementById('ace-arrow-icon');
-
-    // มือถือ
-    if (window.innerWidth <= 768) {
-        const isOpen = body.classList.toggle('sidebar-open');
-        body.classList.remove('sidebar-collapsed');
-
-        if (arrow) {
-            arrow.innerText = isOpen ? '❯' : '❮';
-        }
-
-        if (isOpen) {
-            resetSidebarAutoCloseTimer();
-        } else {
-            clearTimeout(aceSidebarAutoCloseTimer);
-        }
-        return;
-    }
-
-    // เดสก์ท็อป
-    const isCollapsed = body.classList.toggle('sidebar-collapsed');
-    body.classList.remove('sidebar-open');
-
-    if (arrow) {
-        arrow.innerText = isCollapsed ? '❯' : '❮';
-    }
-
-    if (window.lucide) {
-        window.lucide.createIcons();
-    }
-}
-window.aceToggleSidebar = aceToggleSidebar;
-
-function manageBtnVisibility() {
-    const loginPage = document.getElementById('loginPage');
-    const btn = document.getElementById('ace-toggle-btn');
-    if (!btn) return;
-
-    // เช็คว่าหน้า Login แสดงอยู่หรือไม่
-    const loginVisible =
-        loginPage &&
-        !loginPage.classList.contains('hidden') &&
-        loginPage.style.display !== 'none';
-
-    if (loginVisible) {
-        btn.style.display = 'none'; // ถ้าอยู่หน้า Login ให้ซ่อนปุ่ม
-        document.body.classList.remove('sidebar-open');
-    } else {
-        // 🎯 แก้บรรทัดนี้: ให้แสดงปุ่ม 'flex' ตลอดเวลาหลังจาก Login แล้ว (ไม่ว่าจะจอคอมหรือมือถือ)
-        btn.style.display = 'flex'; 
-    }
-}
-
-window.manageBtnVisibility = manageBtnVisibility;
-
-const aceObserver = new MutationObserver(() => {
-    manageBtnVisibility();
-});
-
-// กดนอกเมนูให้หุบ
-document.addEventListener('click', function(e) {
-    if (window.innerWidth > 768) return;
-
-    const sidebar = document.getElementById('appSidebar');
-    const toggleBtn = document.getElementById('ace-toggle-btn');
-
-    if (!document.body.classList.contains('sidebar-open')) return;
-
-    if (sidebar && sidebar.contains(e.target)) {
-        resetSidebarAutoCloseTimer();
-        return;
-    }
-
-    if (toggleBtn && toggleBtn.contains(e.target)) return;
-
-    document.body.classList.remove('sidebar-open');
-    const arrow = document.getElementById('ace-arrow-icon');
-    if (arrow) arrow.innerText = '❮';
-});
-
-// แตะหน้าจอใหม่ ให้นับเวลาหุบเมนูใหม่
-document.addEventListener('touchstart', function() {
-    resetSidebarAutoCloseTimer();
-}, { passive: true });
-
-// -------------------------
-// Notification
-// -------------------------
-window.requestNotificationPermission = function() {
-    if (!("Notification" in window)) return;
-    if (Notification.permission === 'default') {
-        Notification.requestPermission().catch(() => {});
-    }
-};
-
-setTimeout(() => {
-    if (document.visibilityState === 'visible') {
-        window.requestNotificationPermission();
-    }
-}, 2000);
-
 // -------------------------
 // Registration (PRO) - Supabase only
 // -------------------------
@@ -16810,7 +17437,7 @@ window.addEventListener('load', function() {
 }); 
 
 /* =======================================================
-   🔔 ระบบแจ้งเตือนอัจฉริยะ (เชื่อมต่อ Database)
+   🔔 ระบบแจ้งเตือนนัดหมายและวันเกิด
    ======================================================= */
 window.getAppointments = function() {
     try {
@@ -17115,306 +17742,328 @@ window.saveStaff = async function(data = []) {
         return false;
     }
 };
+
 /* =======================================================
-    👁️ ฟังก์ชันดูข้อมูลลูกค้า (New Luxury Sharp Design + Updated Fields)
+   🛠️ ZONE 9: UTILITIES (ฟังก์ชันช่วยเหลือ & มือถือ)
    ======================================================= */
-window.viewCustomerDetailById = async function(customerId) {
-    try {
-        if (!customerId) return;
 
-        // 1. ดึงข้อมูลล่าสุดจาก Supabase
-        const { data: c, error } = await window.supabaseClient
-            .from('customers')
-            .select('*')
-            .eq('id', customerId)
-            .single();
+// -------------------------
+// Smart Card Mock
+// -------------------------
+window.readSmartCard = function() {
+    const firstName = document.getElementById("modalFirstName");
+    const lastName = document.getElementById("modalLastName");
+    const citizenId = document.getElementById("modalCitizenId");
+    const birthDate = document.getElementById("modalBirthDate");
 
-        if (error || !c) {
-            Swal.fire('ไม่พบข้อมูล', 'ไม่สามารถดึงข้อมูลลูกค้าได้ค่ะ', 'error');
+    if (firstName) firstName.value = "สมหญิง";
+    if (lastName) lastName.value = "รักสะอาด";
+    if (citizenId) citizenId.value = "1100100223344";
+    if (birthDate) birthDate.value = "12/03/2530";
+
+    Swal.fire('ดึงข้อมูลสำเร็จ', 'เชื่อมต่อ Smart Card Reader เรียบร้อยแล้วค่ะ', 'success');
+};
+
+// -------------------------
+// Preview Staff Photo
+// -------------------------
+window.previewStaffPhoto = function(input) {
+    if (!input || !input.files || !input.files[0]) return;
+
+    const previewImg = document.getElementById('previewImg');
+    const uploadText = document.getElementById('uploadText');
+    if (!previewImg) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        previewImg.src = e.target.result;
+        previewImg.classList.remove('hidden');
+        if (uploadText) uploadText.classList.add('hidden');
+    };
+    reader.readAsDataURL(input.files[0]);
+};
+
+// -------------------------
+// Header Time
+// -------------------------
+window.updateHeaderTime = function() {
+    const timeEl = document.getElementById('headerLastUpdate');
+    if (timeEl) {
+        timeEl.innerText = new Date().toLocaleTimeString('th-TH', { hour12: false });
+    }
+};
+
+// กัน interval ซ้ำ
+if (window.__headerTimeInterval) {
+    clearInterval(window.__headerTimeInterval);
+}
+window.__headerTimeInterval = setInterval(() => {
+    if (typeof window.updateHeaderTime === 'function') {
+        window.updateHeaderTime();
+    }
+}, 1000);
+
+// -------------------------
+// Mobile Tables
+// -------------------------
+window.fixMobileTables = function(root = document) {
+    if (window.innerWidth > 768) return;
+
+    const tables = root.querySelectorAll('#dynamicContent table');
+
+    tables.forEach(table => {
+        if (!table || !table.parentNode) return;
+
+        const parent = table.parentElement;
+        if (parent && parent.classList.contains('mobile-table-wrap')) return;
+
+        table.classList.remove('w-full');
+        table.classList.add('mobile-table');
+
+        const wrap = document.createElement('div');
+        wrap.className = 'mobile-table-wrap';
+
+        table.parentNode.insertBefore(wrap, table);
+        wrap.appendChild(table);
+    });
+};
+
+// -------------------------
+// Sidebar / Mobile Menu
+// -------------------------
+window.aceSidebarAutoCloseTimer = window.aceSidebarAutoCloseTimer || null;
+
+window.resetSidebarAutoCloseTimer = function() {
+    clearTimeout(window.aceSidebarAutoCloseTimer);
+
+    if (window.innerWidth > 768) return;
+    if (!document.body.classList.contains('sidebar-open')) return;
+
+    window.aceSidebarAutoCloseTimer = setTimeout(() => {
+        document.body.classList.remove('sidebar-open');
+        const arrow = document.getElementById('ace-arrow-icon');
+        if (arrow) arrow.innerText = '❮';
+    }, 4000);
+};
+
+window.aceToggleSidebar = function() {
+    const body = document.body;
+    const arrow = document.getElementById('ace-arrow-icon');
+
+    // มือถือ
+    if (window.innerWidth <= 768) {
+        const isOpen = body.classList.toggle('sidebar-open');
+        body.classList.remove('sidebar-collapsed');
+
+        if (arrow) {
+            arrow.innerText = isOpen ? '❯' : '❮';
+        }
+
+        if (isOpen) {
+            window.resetSidebarAutoCloseTimer();
+        } else {
+            clearTimeout(window.aceSidebarAutoCloseTimer);
+        }
+        return;
+    }
+
+    // เดสก์ท็อป
+    const isCollapsed = body.classList.toggle('sidebar-collapsed');
+    body.classList.remove('sidebar-open');
+
+    if (arrow) {
+        arrow.innerText = isCollapsed ? '❯' : '❮';
+    }
+
+    if (window.lucide) {
+        window.lucide.createIcons();
+    }
+};
+
+// -------------------------
+// Manage Toggle Button
+// -------------------------
+window.manageBtnVisibility = function() {
+    const loginPage = document.getElementById('loginPage');
+    const btn = document.getElementById('ace-toggle-btn');
+    if (!btn) return;
+
+    const loginVisible =
+        loginPage &&
+        !loginPage.classList.contains('hidden') &&
+        loginPage.style.display !== 'none';
+
+    if (loginVisible) {
+        btn.style.display = 'none';
+        document.body.classList.remove('sidebar-open');
+    } else {
+        btn.style.display = 'flex';
+    }
+};
+
+// -------------------------
+// Observers
+// -------------------------
+if (window.aceObserver) {
+    try { window.aceObserver.disconnect(); } catch (e) {}
+}
+window.aceObserver = new MutationObserver(() => {
+    if (typeof window.manageBtnVisibility === 'function') {
+        window.manageBtnVisibility();
+    }
+});
+
+if (window.mobileTableObserver) {
+    try { window.mobileTableObserver.disconnect(); } catch (e) {}
+}
+window.mobileTableObserver = new MutationObserver(() => {
+    if (typeof window.fixMobileTables === 'function') {
+        window.fixMobileTables(document);
+    }
+
+    if (typeof window.manageBtnVisibility === 'function') {
+        window.manageBtnVisibility();
+    }
+});
+
+// -------------------------
+// Initial Load
+// -------------------------
+if (!window.__utilitiesLoadBound) {
+    window.__utilitiesLoadBound = true;
+
+    window.addEventListener('load', function() {
+        const datePicker = document.getElementById('headerDatePicker');
+        if (datePicker) {
+            datePicker.valueAsDate = new Date();
+        }
+
+        if (typeof window.updateHeaderTime === 'function') {
+            window.updateHeaderTime();
+        }
+
+        setTimeout(() => {
+            if (typeof window.fixMobileTables === 'function') {
+                window.fixMobileTables(document);
+            }
+        }, 200);
+
+        const loginPage = document.getElementById('loginPage');
+        if (loginPage && window.aceObserver) {
+            try {
+                window.aceObserver.observe(loginPage, {
+                    attributes: true,
+                    attributeFilter: ['class', 'style']
+                });
+            } catch (e) {
+                console.error('aceObserver observe error:', e);
+            }
+        }
+
+        const dynamicContent = document.getElementById('dynamicContent');
+        if (dynamicContent && window.mobileTableObserver) {
+            try {
+                window.mobileTableObserver.observe(dynamicContent, {
+                    childList: true,
+                    subtree: true
+                });
+            } catch (e) {
+                console.error('mobileTableObserver observe error:', e);
+            }
+        }
+
+        if (typeof window.manageBtnVisibility === 'function') {
+            window.manageBtnVisibility();
+        }
+    });
+}
+
+// -------------------------
+// Resize
+// -------------------------
+if (!window.__utilitiesResizeBound) {
+    window.__utilitiesResizeBound = true;
+
+    window.addEventListener('resize', function() {
+        setTimeout(() => {
+            if (typeof window.fixMobileTables === 'function') {
+                window.fixMobileTables(document);
+            }
+
+            if (typeof window.manageBtnVisibility === 'function') {
+                window.manageBtnVisibility();
+            }
+
+            if (window.innerWidth > 768) {
+                document.body.classList.remove('sidebar-open');
+            }
+        }, 100);
+    });
+}
+
+// -------------------------
+// Click Outside Sidebar
+// -------------------------
+if (!window.__utilitiesSidebarClickBound) {
+    window.__utilitiesSidebarClickBound = true;
+
+    document.addEventListener('click', function(e) {
+        if (window.innerWidth > 768) return;
+
+        const sidebar = document.getElementById('appSidebar');
+        const toggleBtn = document.getElementById('ace-toggle-btn');
+
+        if (!document.body.classList.contains('sidebar-open')) return;
+
+        if (sidebar && sidebar.contains(e.target)) {
+            if (typeof window.resetSidebarAutoCloseTimer === 'function') {
+                window.resetSidebarAutoCloseTimer();
+            }
             return;
         }
 
-        window.activeCustomer = c;
-        const target = document.getElementById('dynamicContent');
-        if (!target) return;
+        if (toggleBtn && toggleBtn.contains(e.target)) return;
 
-        // 2. วาดโครงสร้างใหม่ เน้นความคมชัดและปุ่มทรงมนขนาดเล็ก
-        target.innerHTML = `
-            <div class="animate-in fade-in slide-in-from-top duration-500 font-sans pb-20 text-left">
-                
-                <div class="bg-white p-8 rounded-[3rem] shadow-xl border-2 border-slate-100 mb-8 flex flex-col md:flex-row justify-between items-center gap-6 relative overflow-hidden">
-                     <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02] select-none z-0">
-                        <h1 style="font-size: 20rem;" class="font-black italic text-pink-300">ACE</h1>
-                    </div>
-                    
-                    <div class="text-center md:text-left relative z-10">
-                        <h2 class="text-4xl font-black text-slate-900 leading-tight italic uppercase drop-shadow-sm">${c.fullname || '-'}</h2>
-                        <div class="flex flex-wrap gap-3 mt-3 justify-center md:justify-start">
-                            <span class="bg-slate-100 text-slate-600 px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest border border-slate-200 shadow-inner">HN: ${c.hn || '-'}</span>
-                            <span class="bg-pink-50 text-[#D48197] px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest border border-pink-100 shadow-inner">📍 สาขา: ${c.branch || '-'}</span>
-                        </div>
-                    </div>
-                    <div class="flex gap-3 relative z-10">
-    <button onclick="window.openBillingTab('${c.fullname}', true, '${c.id}')" 
-        class="bg-[#D48197] text-white px-6 py-2.5 rounded-full font-black text-xs shadow-lg hover:scale-105 transition-all italic border-b-4 border-pink-800/20">
-        + เพิ่มใบเสร็จ
-    </button>
-                        <button onclick="loadPage(2, 'จัดการลูกค้า/ประวัติ')" class="bg-slate-800 text-white px-6 py-2.5 rounded-full text-[10px] font-black hover:bg-black transition-all uppercase italic shadow-md border-b-4 border-black/20">🔙 กลับหน้าหลัก</button>
-                    </div>
-                </div>
-
-                <div class="flex flex-wrap gap-2 mb-8 bg-slate-100/80 p-2.5 rounded-[2.5rem] border-2 border-slate-200 w-max mx-auto md:mx-0 shadow-inner">
-                    <button onclick="window.switchCustomerTab('info', '${c.id}')" class="cust-tab active px-8 py-3.5 rounded-full text-[12px] font-black transition-all flex items-center gap-2" data-tab="info"><i data-lucide="pin" class="w-4 h-4"></i> ข้อมูลพื้นฐาน</button>
-                    <button onclick="window.switchCustomerTab('remaining', '${c.id}')" class="cust-tab px-8 py-3.5 rounded-full text-[12px] font-black transition-all text-slate-500 hover:text-pink-600 flex items-center gap-2" data-tab="remaining"><i data-lucide="ticket" class="w-4 h-4"></i> คอร์สคงเหลือ</button>
-                    <button onclick="window.switchCustomerTab('usage', '${c.id}')" class="cust-tab px-8 py-3.5 rounded-full text-[12px] font-black transition-all text-slate-500 hover:text-pink-600 flex items-center gap-2" data-tab="usage"><i data-lucide="scroll" class="w-4 h-4"></i> ประวัติใช้คอร์ส</button>
-                    <button onclick="window.switchCustomerTab('receipts', '${c.id}')" class="cust-tab px-8 py-3.5 rounded-full text-[12px] font-black transition-all text-slate-500 hover:text-pink-600 flex items-center gap-2" data-tab="receipts"><i data-lucide="file-text" class="w-4 h-4"></i> ใบเสร็จย้อนหลัง</button>
-                    <button onclick="window.switchCustomerTab('appoints', '${c.id}')" class="cust-tab px-8 py-3.5 rounded-full text-[12px] font-black transition-all text-slate-500 hover:text-pink-600 flex items-center gap-2" data-tab="appoints"><i data-lucide="calendar-days" class="w-4 h-4"></i> ประวัตินัดหมาย</button>
-                </div>
-
-                <div id="customerTabContent" class="bg-white rounded-[4rem] shadow-2xl border-2 border-slate-200 p-12 min-h-[500px] text-left relative overflow-hidden">
-                    <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.015] select-none">
-                        <h1 style="font-size: 25rem;" class="font-black italic text-pink-300">ACE</h1>
-                    </div>
-                    <div id="tabContentInner" class="relative z-10"></div>
-                </div>
-            </div>
-
-            <style>
-                /* CSS สำหรับปุ่ม Tab ที่เลือก */
-                .cust-tab.active {
-                    background-color: #D48197 !important;
-                    color: white !important;
-                    box-shadow: 0 8px 20px rgba(212, 129, 151, 0.4);
-                    transform: translateY(-2px);
-                }
-                .detail-box {
-                    background: #f8fafc;
-                    border: 2px solid #f1f5f9;
-                    padding: 20px 25px;
-                    border-radius: 25px;
-                    transition: all 0.3s;
-                    box-shadow: inset 0 2px 5px rgba(0,0,0,0.02);
-                }
-                .detail-box:hover {
-                    border-color: #D48197;
-                    background: white;
-                    box-shadow: 0 10px 25px rgba(212, 129, 151, 0.1);
-                }
-                .detail-label {
-                    font-size: 10px;
-                    color: #94a3b8; /* slate-400 */
-                    font-weight: 900; /* black */
-                    text-transform: uppercase;
-                    letter-spacing: 0.15em;
-                    display: block;
-                    margin-bottom: 4px;
-                }
-                .detail-value {
-                    font-size: 1.125rem; /* text-lg */
-                    font-weight: 900; /* black */
-                    color: #1e293b; /* slate-800 */
-                }
-            </style>
-        `;
-
-        // สั่งสร้างไอคอน Lucide ใหม่
-        if (window.lucide) lucide.createIcons();
-        
-        window.switchCustomerTab('info', c.id);
-
-    } catch (e) {
-        console.error(e);
-        Swal.fire('Error', 'เกิดข้อผิดพลาดในการโหลดข้อมูล', 'error');
-    }
-};
-
-window.switchCustomerTab = async function(tabName, customerId) {
-    const container = document.getElementById('tabContentInner');
-    if (!container) return;
-
-    // เปลี่ยนสีปุ่มที่ถูกกด
-    document.querySelectorAll('.cust-tab').forEach(btn => {
-        btn.classList.remove('active');
-        btn.classList.add('text-slate-500');
+        document.body.classList.remove('sidebar-open');
+        const arrow = document.getElementById('ace-arrow-icon');
+        if (arrow) arrow.innerText = '❮';
     });
-    const activeBtn = document.querySelector(`.cust-tab[data-tab="${tabName}"]`);
-    if (activeBtn) {
-        activeBtn.classList.add('active');
-        activeBtn.classList.remove('text-slate-500');
-    }
+}
 
-    container.innerHTML = `<div class="flex justify-center py-20"><span class="animate-spin text-3xl">⌛</span></div>`;
-    const c = window.activeCustomer;
+// -------------------------
+// Touch Reset Sidebar Timer
+// -------------------------
+if (!window.__utilitiesTouchBound) {
+    window.__utilitiesTouchBound = true;
 
-    // ฟังก์ชันช่วยจัดรูปแบบวันที่เป็นภาษาไทย
-    const formatThaiDate = (dateString) => {
-        if (!dateString) return '-';
-        try {
-            const date = new Date(dateString);
-            return date.toLocaleDateString('th-TH', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-            });
-        } catch (e) {
-            return dateString;
+    document.addEventListener('touchstart', function() {
+        if (typeof window.resetSidebarAutoCloseTimer === 'function') {
+            window.resetSidebarAutoCloseTimer();
         }
-    };
+    }, { passive: true });
+}
 
-    if (tabName === 'info') {
-        container.innerHTML = `
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
-                <div class="detail-box">
-                    <label class="detail-label">รหัสประจำตัว (HN)</label>
-                    <p class="detail-value italic">${c.hn || '-'}</p>
-                </div>
-                <div class="detail-box">
-                    <label class="detail-label">เบอร์โทรศัพท์ติดต่อ</label>
-                    <p class="detail-value text-blue-600 italic">${c.phone || '-'}</p>
-                </div>
-                
-                <div class="detail-box">
-                    <label class="detail-label">วัน/เดือน/ปี เกิด (Birthday)</label>
-                    <p class="detail-value text-slate-700 font-bold">${formatThaiDate(c.birth_date)}</p>
-                </div>
-                <div class="detail-box">
-                    <label class="detail-label">เลขประจำตัวประชาชน (National ID)</label>
-                    <p class="detail-value text-slate-700 font-bold tracking-tight">${c.citizen_id || '-'}</p>
-                </div>
-                <div class="detail-box md:col-span-2">
-                    <label class="detail-label">พนักงานขายที่ดูแล (Seller)</label>
-                    <p class="detail-value text-slate-800 font-black italic bg-pink-50 px-4 py-2 rounded-xl inline-block mt-1">${c.seller || '-'}</p>
-                </div>
-                <div class="detail-box">
-                    <label class="detail-label">ชื่อเล่น (Nickname)</label>
-                    <p class="detail-value italic">${c.nickname || '-'}</p>
-                </div>
-                <div class="detail-box">
-                    <label class="detail-label">สถานะในระบบ</label>
-                    <p class="detail-value text-emerald-600 italic">● ${c.status || 'ปกติ'}</p>
-                </div>
-                <div class="col-span-1 md:col-span-2 detail-box" style="background: #fff1f2; border-color: #fecdd3;">
-                    <label class="detail-label text-rose-400 italic underline decoration-rose-200">🚨 ประวัติการแพ้ยา / ยาประจำตัว</label>
-                    <p class="text-2xl font-black text-rose-600 italic tracking-tight">${c.allergy || 'ไม่มีข้อมูล'}</p>
-                </div>
-                <div class="col-span-1 md:col-span-2 detail-box">
-                    <label class="detail-label">ที่อยู่สำหรับการจัดส่งเอกสาร</label>
-                    <p class="text-base font-bold text-slate-600 leading-relaxed">${c.address || '-'}</p>
-                </div>
-            </div>
-        `;
-    } 
-    
-    else if (tabName === 'remaining') {
-        // 🎯 ปรับรูปทรงแถวคอร์สใหม่ ให้ดูง่ายเหมือนหน้าตีบิล
-        const courses = Array.isArray(c.courses) ? c.courses : [];
-        container.innerHTML = `
-            <div class="border-2 border-slate-100 bg-slate-50/50 rounded-[2.5rem] p-8 shadow-inner overflow-hidden mb-6 relative z-10">
-                <table class="w-full text-left font-bold border-separate" style="border-spacing: 0 12px;">
-                    <thead class="text-[11px] text-slate-400 uppercase font-black italic tracking-widest pb-4">
-                        <tr>
-                            <th class="px-6 pb-2 w-1/2">ชื่อรายการคอร์ส</th>
-                            <th class="px-6 pb-2 text-center">วันที่ซื้อ</th>
-                            <th class="px-6 pb-2 text-right">คงเหลือ</th>
-                            <th class="px-6 pb-2 text-center">หน่วย</th>
-                        </tr>
-                    </thead>
-                    <tbody class="text-[13px] text-slate-700 bg-white rounded-3xl">
-                        ${courses.length > 0 ? courses.map(item => `
-                            <tr class="shadow-sm hover:shadow-md hover:border-pink-300 transition-all group">
-                                <td class="px-6 py-5 rounded-l-3xl border-y-2 border-l-2 border-slate-100 group-hover:border-pink-200">
-                                    <p class="font-black text-slate-900 text-base italic">${item.name}</p>
-                                </td>
-                                <td class="px-6 py-5 border-y-2 border-slate-100 group-hover:border-pink-200 text-center text-slate-500 font-medium">
-                                    ${formatThaiDate(item.date)}
-                                </td>
-                                <td class="px-6 py-5 border-y-2 border-slate-100 group-hover:border-pink-200 text-right">
-                                    <p class="text-3xl font-black text-[#D48197] leading-none drop-shadow-sm">${item.amount}</p>
-                                </td>
-                                <td class="px-6 py-5 rounded-r-3xl border-y-2 border-r-2 border-slate-100 group-hover:border-pink-200 text-center text-slate-400 font-black uppercase italic">
-                                    ${item.unit || 'ครั้ง'}
-                                </td>
-                            </tr>
-                        `).join('') : `
-                            <tr>
-                                <td colspan="4" class="p-16 text-center text-slate-300 italic font-bold rounded-3xl border-2 border-slate-100 bg-white">
-                                    📭 ไม่พบรายการคอร์สสะสมในฐานข้อมูลค่ะ
-                                </td>
-                            </tr>
-                        `}
-                    </tbody>
-                </table>
-            </div>
-        `;
+// -------------------------
+// Notification
+// -------------------------
+window.requestNotificationPermission = function() {
+    if (!("Notification" in window)) return;
+    if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
     }
-
-    // ... ส่วนของแท็บอื่น (usage, receipts, appoints) ปรับปรุงสีปุ่มพิมพ์ใบเสร็จ ...
-    
-    else if (tabName === 'usage') {
-        const { data: history } = await window.supabaseClient.from('queues').select('*').eq('customer_id', customerId).eq('status', 'เสร็จสิ้น').order('created_at', { ascending: false });
-        container.innerHTML = `
-            <div class="space-y-4 relative z-10">
-                ${history && history.length > 0 ? history.map(item => `
-                    <div class="p-6 bg-slate-50 rounded-[2.5rem] border-2 border-white shadow-sm flex justify-between items-center hover:bg-white hover:shadow-md transition-all">
-                        <div class="text-left">
-                            <p class="text-[10px] text-[#D48197] font-black uppercase mb-1">📅 ${formatThaiDate(item.date)} | ${item.time || '-'} น.</p>
-                            <p class="font-black text-slate-800 text-base italic">${item.course}</p>
-                        </div>
-                        <div class="text-right">
-                            <span class="bg-emerald-500 text-white px-5 py-2 rounded-full text-[10px] font-black uppercase shadow-lg border-b-2 border-emerald-700">DONE</span>
-                            <p class="text-[10px] text-slate-400 mt-2 font-bold italic">ผู้ทำ: ${item.staff || '-'}</p>
-                        </div>
-                    </div>
-                `).join('') : '<p class="py-20 text-center text-slate-300 italic font-bold relative z-10">ยังไม่พบประวัติการรับบริการ</p>'}
-            </div>
-        `;
-    }
-
-    else if (tabName === 'receipts') {
-        const { data: receipts } = await window.supabaseClient.from('account').select('*').eq('customer_id', customerId).eq('type', 'รายรับ').order('date', { ascending: false });
-        container.innerHTML = `
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
-                ${receipts && receipts.length > 0 ? receipts.map(item => `
-                    <div class="p-8 bg-white rounded-[2.5rem] border-2 border-slate-100 flex justify-between items-center shadow-xl hover:border-[#D48197] transition-all group">
-                        <div class="text-left">
-                            <p class="text-[10px] text-slate-400 font-black uppercase mb-1">RECEIPT DATE: ${formatThaiDate(item.date)}</p>
-                            <p class="font-black text-slate-900 text-2xl italic">฿${parseFloat(item.total).toLocaleString()}</p>
-                            <p class="text-[10px] text-[#D48197] font-black uppercase mt-1 italic tracking-widest">💳 ${item.payment}</p>
-                        </div>
-                        <button onclick="window.printReceipt('${item.id}', '${c.hn}', 'A5')" 
-                            class="w-14 h-14 rounded-2xl bg-[#D48197] text-white flex items-center justify-center shadow-lg hover:bg-pink-600 transition-all scale-100 hover:scale-110 border-b-4 border-pink-800/30">
-                            🖨️
-                        </button>
-                    </div>
-                `).join('') : '<p class="col-span-2 py-20 text-center text-slate-300 italic font-bold relative z-10">ไม่พบประวัติใบเสร็จ</p>'}
-            </div>
-        `;
-    }
-
-    else if (tabName === 'appoints') {
-        const { data: appoints } = await window.supabaseClient.from('appointments').select('*').eq('customer_id', customerId).order('date', { ascending: false });
-        container.innerHTML = `
-            <div class="space-y-4 relative z-10">
-                ${appoints && appoints.length > 0 ? appoints.map(item => `
-                    <div class="p-8 border-2 border-slate-100 rounded-[3rem] flex justify-between items-center shadow-md ${item.status === 'ยกเลิก' ? 'opacity-40 grayscale bg-slate-200' : 'bg-white hover:border-blue-400'} transition-all">
-                        <div class="text-left">
-                            <p class="text-[12px] text-blue-500 font-black uppercase mb-1 italic underline underline-offset-4 decoration-2">นัดหมาย: ${formatThaiDate(item.date)} (${item.time || '-'} น.)</p>
-                            <p class="font-black text-slate-800 text-lg italic">${item.course}</p>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-[10px] font-black italic uppercase py-2.5 px-6 rounded-full border-2 ${item.status === 'เสร็จสิ้น' ? 'text-emerald-500 border-emerald-500' : item.status === 'รอดำเนินการ' ? 'text-blue-500 border-blue-500' : 'text-rose-500 border-rose-500'}">
-                                ${item.status}
-                            </p>
-                        </div>
-                    </div>
-                `).join('') : '<p class="py-20 text-center text-slate-300 italic font-bold relative z-10">ไม่มีรายการนัดหมาย</p>'}
-            </div>
-        `;
-    }
-    
-    // สั่งสร้างไอคอน Lucide ใหม่ในเนื้อหา Tab
-    if (window.lucide) lucide.createIcons();
 };
+
+if (window.__notificationPermissionTimer) {
+    clearTimeout(window.__notificationPermissionTimer);
+}
+window.__notificationPermissionTimer = setTimeout(() => {
+    if (document.visibilityState === 'visible') {
+        if (typeof window.requestNotificationPermission === 'function') {
+            window.requestNotificationPermission();
+        }
+    }
+}, 2000);
+
 </script>
 
 <div id="ace-toggle-btn" onclick="aceToggleSidebar()">
@@ -17423,6 +18072,8 @@ window.switchCustomerTab = async function(tabName, customerId) {
 
 <style>
   aside {
+    width: 280px;
+    min-width: 280px;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
     overflow-x: hidden;
     white-space: normal;
@@ -17471,15 +18122,15 @@ window.switchCustomerTab = async function(tabName, customerId) {
   }
 
   main {
-    flex-grow: 1;
+    flex: 1 1 auto;
     min-width: 0;
     width: 100%;
     max-width: 100%;
     transition: all 0.3s ease;
     overflow-x: hidden;
+    box-sizing: border-box;
   }
 
-  /* ===== TABLE FIX GLOBAL ===== */
   .mobile-table-wrap {
     display: block !important;
     width: 100% !important;
@@ -17504,7 +18155,6 @@ window.switchCustomerTab = async function(tabName, customerId) {
     word-break: keep-all !important;
   }
 
-  /* ========= MOBILE FIX ========= */
   @media screen and (max-width: 768px) {
     html,
     body {
@@ -17523,7 +18173,6 @@ window.switchCustomerTab = async function(tabName, customerId) {
       overflow-x: hidden !important;
     }
 
-    /* สำคัญ: อย่า hidden แนวนอนที่ dynamicContent */
     #dynamicContent {
       width: 100% !important;
       max-width: 100vw !important;
@@ -17545,6 +18194,7 @@ window.switchCustomerTab = async function(tabName, customerId) {
       box-shadow: 0 10px 40px rgba(0,0,0,0.18);
       z-index: 1000000 !important;
       overflow-y: auto !important;
+      transition: transform 0.3s ease !important;
     }
 
     body.sidebar-open #appSidebar {
@@ -17562,9 +18212,7 @@ window.switchCustomerTab = async function(tabName, customerId) {
     #dynamicContent > div,
     #dynamicContent .bg-white,
     #dynamicContent .glass-card,
-    #dynamicContent .rounded-\[3rem\],
-    #dynamicContent .rounded-\[3\.5rem\],
-    #dynamicContent .rounded-\[2\.5rem\] {
+    #dynamicContent [class*="rounded-"] {
       max-width: 100% !important;
       width: 100% !important;
       box-sizing: border-box !important;
@@ -17585,13 +18233,12 @@ window.switchCustomerTab = async function(tabName, customerId) {
 
     #dynamicContent input,
     #dynamicContent select,
-    #dynamicContent button {
+    #dynamicContent button,
+    #dynamicContent textarea {
       max-width: 100% !important;
       box-sizing: border-box !important;
     }
   }
-
 </style>
-
 </body>
 </html>

@@ -9195,8 +9195,154 @@ function restoreCustomerCoursesFromReceipt(receipt){
 }
 
 /* =======================================================
-    👁️ ฟังก์ชันดูข้อมูลลูกค้า (New Luxury Sharp Design + Updated Fields)
+    👁️ ฟังก์ชันดูข้อมูลลูกค้า 🔴 CUSTOMER DETAIL REALTIME
    ======================================================= */
+window.__customerDetailRealtime = window.__customerDetailRealtime || {
+    channel: null,
+    customerId: null
+};
+
+window.stopCustomerDetailRealtime = function() {
+    try {
+        if (window.__customerDetailRealtime?.channel && window.supabaseClient) {
+            window.supabaseClient.removeChannel(window.__customerDetailRealtime.channel);
+        }
+    } catch (e) {
+        console.error('stopCustomerDetailRealtime error:', e);
+    }
+
+    window.__customerDetailRealtime = {
+        channel: null,
+        customerId: null
+    };
+};
+
+window.startCustomerDetailRealtime = function(customerId) {
+    try {
+        if (!window.supabaseClient || !customerId) return;
+
+        const customerIdStr = String(customerId).trim();
+
+        // ปิดของเดิมก่อน
+        window.stopCustomerDetailRealtime();
+
+        const channel = window.supabaseClient
+            .channel(`customer-detail-${customerIdStr}-${Date.now()}`)
+
+            // customers
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'customers',
+                filter: `id=eq.${customerIdStr}`
+            }, async () => {
+                console.log('Realtime customers changed');
+                await window.refreshActiveCustomerDetailRealtime(customerIdStr);
+            })
+
+            // sales_header
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'sales_header'
+            }, async (payload) => {
+                const row = payload.new || payload.old || {};
+                if (
+                    String(row.customer_id || '').trim() === customerIdStr ||
+                    String(row.hn || '').trim() === String(window.activeCustomer?.hn || '').trim()
+                ) {
+                    console.log('Realtime sales_header changed');
+                    await window.refreshActiveCustomerDetailRealtime(customerIdStr);
+                }
+            })
+
+            // sales_items
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'sales_items'
+            }, async (payload) => {
+                const row = payload.new || payload.old || {};
+                if (
+                    String(row.customer_id || '').trim() === customerIdStr ||
+                    String(row.hn || '').trim() === String(window.activeCustomer?.hn || '').trim()
+                ) {
+                    console.log('Realtime sales_items changed');
+                    await window.refreshActiveCustomerDetailRealtime(customerIdStr);
+                }
+            })
+
+            // course_usage
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'course_usage',
+                filter: `customer_id=eq.${customerIdStr}`
+            }, async () => {
+                console.log('Realtime course_usage changed');
+                await window.refreshActiveCustomerDetailRealtime(customerIdStr);
+            })
+
+            // appointments
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'appointments'
+            }, async (payload) => {
+                const row = payload.new || payload.old || {};
+                if (String(row.customer_id || '').trim() === customerIdStr) {
+                    console.log('Realtime appointments changed');
+                    await window.refreshActiveCustomerDetailRealtime(customerIdStr);
+                }
+            })
+
+            .subscribe((status) => {
+                console.log('customer detail realtime status:', status);
+            });
+
+        window.__customerDetailRealtime = {
+            channel,
+            customerId: customerIdStr
+        };
+
+    } catch (e) {
+        console.error('startCustomerDetailRealtime error:', e);
+    }
+};
+
+window.refreshActiveCustomerDetailRealtime = async function(customerId) {
+    try {
+        const currentId = String(customerId || '').trim();
+        if (!currentId) return;
+
+        const { data: freshCustomer, error } = await window.supabaseClient
+            .from('customers')
+            .select('*')
+            .eq('id', currentId)
+            .single();
+
+        if (error || !freshCustomer) {
+            console.error('refreshActiveCustomerDetailRealtime error:', error);
+            return;
+        }
+
+        window.activeCustomer = freshCustomer;
+
+        const activeTabBtn = document.querySelector('.cust-tab.active');
+        const activeTab = activeTabBtn?.dataset?.tab || 'info';
+
+        await window.switchCustomerTab(activeTab, currentId);
+    } catch (e) {
+        console.error('refreshActiveCustomerDetailRealtime catch:', e);
+    }
+};
+
+window.addEventListener('beforeunload', function() {
+    if (typeof window.stopCustomerDetailRealtime === 'function') {
+        window.stopCustomerDetailRealtime();
+    }
+});
+
 window.viewCustomerDetailById = async function(customerId) {
     try {
         if (!customerId) return;
@@ -9238,7 +9384,7 @@ window.viewCustomerDetailById = async function(customerId) {
         class="bg-[#D48197] text-white px-6 py-2.5 rounded-full font-black text-xs shadow-lg hover:scale-105 transition-all italic border-b-4 border-pink-800/20">
         + เพิ่มใบเสร็จ
     </button>
-                        <button onclick="loadPage(2, 'จัดการลูกค้า/ประวัติ')" class="bg-slate-800 text-white px-6 py-2.5 rounded-full text-[10px] font-black hover:bg-black transition-all uppercase italic shadow-md border-b-4 border-black/20">🔙 กลับหน้าหลัก</button>
+                        <button onclick="window.stopCustomerDetailRealtime(); loadPage(2, 'จัดการลูกค้า/ประวัติ')" class="bg-slate-800 text-white px-6 py-2.5 rounded-full text-[10px] font-black hover:bg-black transition-all uppercase italic shadow-md border-b-4 border-black/20">🔙 กลับหน้าหลัก</button>
                     </div>
                 </div>
 
@@ -9298,8 +9444,9 @@ window.viewCustomerDetailById = async function(customerId) {
 
         // สั่งสร้างไอคอน Lucide ใหม่
         if (window.lucide) lucide.createIcons();
-        
-        window.switchCustomerTab('info', c.id);
+
+	window.startCustomerDetailRealtime(c.id);
+	await window.switchCustomerTab('info', c.id);
 
     } catch (e) {
         console.error(e);
@@ -9311,11 +9458,11 @@ window.switchCustomerTab = async function(tabName, customerId) {
     const container = document.getElementById('tabContentInner');
     if (!container) return;
 
-    // เปลี่ยนสีปุ่มที่ถูกกด
     document.querySelectorAll('.cust-tab').forEach(btn => {
         btn.classList.remove('active');
         btn.classList.add('text-slate-500');
     });
+
     const activeBtn = document.querySelector(`.cust-tab[data-tab="${tabName}"]`);
     if (activeBtn) {
         activeBtn.classList.add('active');
@@ -9323,9 +9470,9 @@ window.switchCustomerTab = async function(tabName, customerId) {
     }
 
     container.innerHTML = `<div class="flex justify-center py-20"><span class="animate-spin text-3xl">⌛</span></div>`;
-    const c = window.activeCustomer;
 
-    // ฟังก์ชันช่วยจัดรูปแบบวันที่เป็นภาษาไทย
+    const customerIdStr = String(customerId || '').trim();
+
     const formatThaiDate = (dateString) => {
         if (!dateString) return '-';
         try {
@@ -9336,315 +9483,361 @@ window.switchCustomerTab = async function(tabName, customerId) {
                 day: 'numeric',
             });
         } catch (e) {
-            return dateString;
+            return dateString || '-';
         }
     };
 
-    if (tabName === 'info') {
-        container.innerHTML = `
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
-                <div class="detail-box">
-                    <label class="detail-label">รหัสประจำตัว (HN)</label>
-                    <p class="detail-value italic">${c.hn || '-'}</p>
-                </div>
-                <div class="detail-box">
-                    <label class="detail-label">เบอร์โทรศัพท์ติดต่อ</label>
-                    <p class="detail-value text-blue-600 italic">${c.phone || '-'}</p>
-                </div>
-                
-                <div class="detail-box">
-                    <label class="detail-label">วัน/เดือน/ปี เกิด (Birthday)</label>
-                    <p class="detail-value text-slate-700 font-bold">${formatThaiDate(c.birth_date)}</p>
-                </div>
-                <div class="detail-box">
-                    <label class="detail-label">เลขประจำตัวประชาชน (National ID)</label>
-                    <p class="detail-value text-slate-700 font-bold tracking-tight">${c.citizen_id || '-'}</p>
-                </div>
-                <div class="detail-box md:col-span-2">
-                    <label class="detail-label">พนักงานขายที่ดูแล (Seller)</label>
-                    <p class="detail-value text-slate-800 font-black italic bg-pink-50 px-4 py-2 rounded-xl inline-block mt-1">${c.seller || '-'}</p>
-                </div>
-                <div class="detail-box">
-                    <label class="detail-label">ชื่อเล่น (Nickname)</label>
-                    <p class="detail-value italic">${c.nickname || '-'}</p>
-                </div>
-                <div class="detail-box">
-                    <label class="detail-label">สถานะในระบบ</label>
-                    <p class="detail-value text-emerald-600 italic">● ${c.status || 'ปกติ'}</p>
-                </div>
-                <div class="col-span-1 md:col-span-2 detail-box" style="background: #fff1f2; border-color: #fecdd3;">
-                    <label class="detail-label text-rose-400 italic underline decoration-rose-200">🚨 ประวัติการแพ้ยา / ยาประจำตัว</label>
-                    <p class="text-2xl font-black text-rose-600 italic tracking-tight">${c.allergy || 'ไม่มีข้อมูล'}</p>
-                </div>
-                <div class="col-span-1 md:col-span-2 detail-box">
-                    <label class="detail-label">ที่อยู่สำหรับการจัดส่งเอกสาร</label>
-                    <p class="text-base font-bold text-slate-600 leading-relaxed">${c.address || '-'}</p>
-                </div>
-            </div>
-        `;
-    } 
-    
-    else if (tabName === 'remaining') {
-    const customerIdStr = String(customerId || '').trim();
-    const customerHN = String(c.hn || '').trim();
+    try {
+        // ✅ ดึงข้อมูลลูกค้าล่าสุดทุกครั้ง
+        let c = window.activeCustomer || null;
 
-    const [
-        { data: saleItems, error: saleItemsError },
-        { data: usageRows, error: usageError }
-    ] = await Promise.all([
-        window.supabaseClient
-            .from('sales_items')
-            .select('*')
-            .or(`customer_id.eq.${customerIdStr},hn.eq.${customerHN}`)
-            .order('created_at', { ascending: false }),
+        if (!c || String(c.id || '').trim() !== customerIdStr) {
+            const { data: freshCustomer, error: customerError } = await window.supabaseClient
+                .from('customers')
+                .select('*')
+                .eq('id', customerIdStr)
+                .single();
 
-        window.supabaseClient
-            .from('course_usage')
-            .select('*')
-            .eq('customer_id', customerIdStr)
-            .order('created_at', { ascending: false })
-    ]);
+            if (customerError || !freshCustomer) {
+                console.error('switchCustomerTab customerError:', customerError);
+                container.innerHTML = `<p class="py-20 text-center text-red-300 italic font-bold">ไม่พบข้อมูลลูกค้า</p>`;
+                return;
+            }
 
-    if (saleItemsError) {
-        console.error('remaining saleItemsError:', saleItemsError);
-        container.innerHTML = `<p class="py-20 text-center text-red-300 italic font-bold">โหลดข้อมูลคอร์สไม่สำเร็จ</p>`;
-        return;
-    }
-
-    if (usageError) {
-        console.error('remaining usageError:', usageError);
-        container.innerHTML = `<p class="py-20 text-center text-red-300 italic font-bold">โหลดข้อมูลการใช้คอร์สไม่สำเร็จ</p>`;
-        return;
-    }
-
-    const courseRows = (saleItems || []).filter(item => {
-        const itemType = String(item.item_type || '').toLowerCase().trim();
-        const unit = String(item.unit || '').trim();
-        return (
-            itemType === 'course' ||
-            unit === 'ครั้ง' ||
-            !!item.course_id ||
-            !!item.old_course_code
-        );
-    });
-
-    if (courseRows.length === 0) {
-        container.innerHTML = `
-            <div class="border-2 border-slate-100 bg-slate-50/50 rounded-[2.5rem] p-8 shadow-inner overflow-hidden mb-6 relative z-10">
-                <table class="w-full text-left font-bold border-separate" style="border-spacing: 0 12px;">
-                    <tbody class="text-[13px] text-slate-700 bg-white rounded-3xl">
-                        <tr>
-                            <td colspan="4" class="p-16 text-center text-slate-300 italic font-bold rounded-3xl border-2 border-slate-100 bg-white">
-                                📭 ไม่พบรายการคอร์สสะสมในฐานข้อมูลค่ะ
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        `;
-        return;
-    }
-
-    const usageMap = {};
-    (usageRows || []).forEach(u => {
-        const saleItemId = String(u.sale_item_id || '').trim();
-        if (!saleItemId) return;
-        usageMap[saleItemId] = (usageMap[saleItemId] || 0) + (Number(u.used_qty || 0) || 0);
-    });
-
-    const grouped = {};
-
-    courseRows.forEach(item => {
-        const key = String(
-            item.course_id ||
-            item.old_course_code ||
-            item.item_name ||
-            item.id
-        ).trim();
-
-        if (!grouped[key]) {
-            grouped[key] = {
-                name: item.item_name || '-',
-                unit: item.unit || 'ครั้ง',
-                date: item.created_at || '',
-                totalQty: 0,
-                usedQty: 0
-            };
+            c = freshCustomer;
+            window.activeCustomer = freshCustomer;
         }
 
-        grouped[key].totalQty += Number(item.qty || 0) || 0;
-        grouped[key].usedQty += Number(usageMap[String(item.id || '').trim()] || 0) || 0;
+        const customerHN = String(c.hn || '').trim();
+        const customerFullname = String(c.fullname || '').trim();
 
-        if (String(item.created_at || '') > String(grouped[key].date || '')) {
-            grouped[key].date = item.created_at || '';
+        if (tabName === 'info') {
+            container.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+                    <div class="detail-box">
+                        <label class="detail-label">รหัสประจำตัว (HN)</label>
+                        <p class="detail-value italic">${c.hn || '-'}</p>
+                    </div>
+                    <div class="detail-box">
+                        <label class="detail-label">เบอร์โทรศัพท์ติดต่อ</label>
+                        <p class="detail-value text-blue-600 italic">${c.phone || '-'}</p>
+                    </div>
+
+                    <div class="detail-box">
+                        <label class="detail-label">วัน/เดือน/ปี เกิด (Birthday)</label>
+                        <p class="detail-value text-slate-700 font-bold">${formatThaiDate(c.birth_date)}</p>
+                    </div>
+                    <div class="detail-box">
+                        <label class="detail-label">เลขประจำตัวประชาชน (National ID)</label>
+                        <p class="detail-value text-slate-700 font-bold tracking-tight">${c.citizen_id || '-'}</p>
+                    </div>
+                    <div class="detail-box md:col-span-2">
+                        <label class="detail-label">พนักงานขายที่ดูแล (Seller)</label>
+                        <p class="detail-value text-slate-800 font-black italic bg-pink-50 px-4 py-2 rounded-xl inline-block mt-1">${c.seller || '-'}</p>
+                    </div>
+                    <div class="detail-box">
+                        <label class="detail-label">ชื่อเล่น (Nickname)</label>
+                        <p class="detail-value italic">${c.nickname || '-'}</p>
+                    </div>
+                    <div class="detail-box">
+                        <label class="detail-label">สถานะในระบบ</label>
+                        <p class="detail-value text-emerald-600 italic">● ${c.status || 'ปกติ'}</p>
+                    </div>
+                    <div class="col-span-1 md:col-span-2 detail-box" style="background: #fff1f2; border-color: #fecdd3;">
+                        <label class="detail-label text-rose-400 italic underline decoration-rose-200">🚨 ประวัติการแพ้ยา / ยาประจำตัว</label>
+                        <p class="text-2xl font-black text-rose-600 italic tracking-tight">${c.allergy || 'ไม่มีข้อมูล'}</p>
+                    </div>
+                    <div class="col-span-1 md:col-span-2 detail-box">
+                        <label class="detail-label">ที่อยู่สำหรับการจัดส่งเอกสาร</label>
+                        <p class="text-base font-bold text-slate-600 leading-relaxed">${c.address || '-'}</p>
+                    </div>
+                </div>
+            `;
         }
-    });
 
-    const courses = Object.values(grouped).map(item => ({
-        ...item,
-        remainQty: Math.max(0, (Number(item.totalQty || 0) || 0) - (Number(item.usedQty || 0) || 0))
-    }));
+        else if (tabName === 'remaining') {
+            const [
+                { data: saleItems, error: saleItemsError },
+                { data: usageRows, error: usageError }
+            ] = await Promise.all([
+                window.supabaseClient
+                    .from('sales_items')
+                    .select('*')
+                    .or(`customer_id.eq.${customerIdStr},hn.eq.${customerHN}`)
+                    .order('created_at', { ascending: false }),
 
-    container.innerHTML = `
-        <div class="border-2 border-slate-100 bg-slate-50/50 rounded-[2.5rem] p-8 shadow-inner overflow-hidden mb-6 relative z-10">
-            <table class="w-full text-left font-bold border-separate" style="border-spacing: 0 12px;">
-                <thead class="text-[11px] text-slate-400 uppercase font-black italic tracking-widest pb-4">
-                    <tr>
-                        <th class="px-6 pb-2 w-1/2">ชื่อรายการคอร์ส</th>
-                        <th class="px-6 pb-2 text-center">วันที่ซื้อ</th>
-                        <th class="px-6 pb-2 text-right">คงเหลือ</th>
-                        <th class="px-6 pb-2 text-center">หน่วย</th>
-                    </tr>
-                </thead>
-                <tbody class="text-[13px] text-slate-700 bg-white rounded-3xl">
-                    ${courses.length > 0 ? courses.map(item => `
-                        <tr class="shadow-sm hover:shadow-md hover:border-pink-300 transition-all group">
-                            <td class="px-6 py-5 rounded-l-3xl border-y-2 border-l-2 border-slate-100 group-hover:border-pink-200">
-                                <p class="font-black text-slate-900 text-base italic">${item.name}</p>
-                                <p class="text-[10px] text-slate-300 font-bold mt-1">ใช้ไป ${item.usedQty}/${item.totalQty}</p>
-                            </td>
-                            <td class="px-6 py-5 border-y-2 border-slate-100 group-hover:border-pink-200 text-center text-slate-500 font-medium">
-                                ${formatThaiDate(item.date)}
-                            </td>
-                            <td class="px-6 py-5 border-y-2 border-slate-100 group-hover:border-pink-200 text-right">
-                                <p class="text-3xl font-black text-[#D48197] leading-none drop-shadow-sm">${item.remainQty}</p>
-                            </td>
-                            <td class="px-6 py-5 rounded-r-3xl border-y-2 border-r-2 border-slate-100 group-hover:border-pink-200 text-center text-slate-400 font-black uppercase italic">
-                                ${item.unit || 'ครั้ง'}
-                            </td>
-                        </tr>
-                    `).join('') : `
-                        <tr>
-                            <td colspan="4" class="p-16 text-center text-slate-300 italic font-bold rounded-3xl border-2 border-slate-100 bg-white">
-                                📭 ไม่พบรายการคอร์สสะสมในฐานข้อมูลค่ะ
-                            </td>
-                        </tr>
-                    `}
-                </tbody>
-            </table>
-        </div>
-    `;
-}
-    // ... ส่วนของแท็บอื่น (usage, receipts, appoints) ปรับปรุงสีปุ่มพิมพ์ใบเสร็จ ...
-    
-    else if (tabName === 'usage') {
-    const customerIdStr = String(customerId || '').trim();
+                window.supabaseClient
+                    .from('course_usage')
+                    .select('*')
+                    .eq('customer_id', customerIdStr)
+                    .order('created_at', { ascending: false })
+            ]);
 
-    const { data: usageRows, error: usageError } = await window.supabaseClient
-        .from('course_usage')
-        .select('*')
-        .eq('customer_id', customerIdStr)
-        .order('used_date', { ascending: false })
-        .order('created_at', { ascending: false });
+            if (saleItemsError) {
+                console.error('remaining saleItemsError:', saleItemsError);
+                container.innerHTML = `<p class="py-20 text-center text-red-300 italic font-bold">โหลดข้อมูลคอร์สไม่สำเร็จ</p>`;
+                return;
+            }
 
-    if (usageError) {
-        console.error('usageError:', usageError);
-        container.innerHTML = `<p class="py-20 text-center text-red-300 italic font-bold relative z-10">โหลดประวัติใช้คอร์สไม่สำเร็จ</p>`;
-        return;
-    }
+            if (usageError) {
+                console.error('remaining usageError:', usageError);
+                container.innerHTML = `<p class="py-20 text-center text-red-300 italic font-bold">โหลดข้อมูลการใช้คอร์สไม่สำเร็จ</p>`;
+                return;
+            }
 
-    const saleItemIds = [...new Set((usageRows || []).map(x => x.sale_item_id).filter(Boolean))];
-
-    let saleItemsMap = {};
-    if (saleItemIds.length > 0) {
-        const { data: linkedSaleItems, error: linkedSaleItemsError } = await window.supabaseClient
-            .from('sales_items')
-            .select('*')
-            .in('id', saleItemIds);
-
-        if (!linkedSaleItemsError && Array.isArray(linkedSaleItems)) {
-            linkedSaleItems.forEach(item => {
-                saleItemsMap[String(item.id)] = item;
+            const courseRows = (saleItems || []).filter(item => {
+                const itemType = String(item.item_type || '').toLowerCase().trim();
+                const unit = String(item.unit || '').trim();
+                return (
+                    itemType === 'course' ||
+                    unit === 'ครั้ง' ||
+                    !!item.course_id ||
+                    !!item.old_course_code
+                );
             });
-        }
-    }
 
-    container.innerHTML = `
-        <div class="space-y-4 relative z-10">
-            ${usageRows && usageRows.length > 0 ? usageRows.map(item => {
-                const saleItem = saleItemsMap[String(item.sale_item_id || '')] || null;
-                const courseName = saleItem?.item_name || item.note || '-';
-                return `
-                    <div class="p-6 bg-slate-50 rounded-[2.5rem] border-2 border-white shadow-sm flex justify-between items-center hover:bg-white hover:shadow-md transition-all">
-                        <div class="text-left">
-                            <p class="text-[10px] text-[#D48197] font-black uppercase mb-1">📅 ${formatThaiDate(item.used_date || item.created_at)}</p>
-                            <p class="font-black text-slate-800 text-base italic">${courseName}</p>
-                            <p class="text-[10px] text-slate-400 mt-2 font-bold italic">ใช้ไป ${Number(item.used_qty || 0)} ครั้ง</p>
-                        </div>
-                        <div class="text-right">
-                            <span class="bg-emerald-500 text-white px-5 py-2 rounded-full text-[10px] font-black uppercase shadow-lg border-b-2 border-emerald-700">USED</span>
-                            <p class="text-[10px] text-slate-400 mt-2 font-bold italic">${item.note || '-'}</p>
-                        </div>
+            if (courseRows.length === 0) {
+                container.innerHTML = `
+                    <div class="border-2 border-slate-100 bg-slate-50/50 rounded-[2.5rem] p-8 shadow-inner overflow-hidden mb-6 relative z-10">
+                        <table class="w-full text-left font-bold border-separate" style="border-spacing: 0 12px;">
+                            <tbody class="text-[13px] text-slate-700 bg-white rounded-3xl">
+                                <tr>
+                                    <td colspan="4" class="p-16 text-center text-slate-300 italic font-bold rounded-3xl border-2 border-slate-100 bg-white">
+                                        📭 ไม่พบรายการคอร์สสะสมในฐานข้อมูลค่ะ
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 `;
-            }).join('') : '<p class="py-20 text-center text-slate-300 italic font-bold relative z-10">ยังไม่พบประวัติการใช้คอร์ส</p>'}
-        </div>
-    `;
-}
+                return;
+            }
 
-   else if (tabName === 'receipts') {
-    const customerIdStr = String(customerId || '').trim();
-    const customerHN = String(c.hn || '').trim();
+            const usageMap = {};
+            (usageRows || []).forEach(u => {
+                const saleItemId = String(u.sale_item_id || '').trim();
+                if (!saleItemId) return;
+                usageMap[saleItemId] = (usageMap[saleItemId] || 0) + (Number(u.used_qty || 0) || 0);
+            });
 
-    const { data: receipts, error: receiptsError } = await window.supabaseClient
-        .from('sales_header')
-        .select('*')
-        .or(`customer_id.eq.${customerIdStr},hn.eq.${customerHN}`)
-        .eq('type', 'รายรับ')
-        .order('bill_date', { ascending: false });
+            const grouped = {};
 
-    if (receiptsError) {
-        console.error('receiptsError:', receiptsError);
-        container.innerHTML = `<p class="col-span-2 py-20 text-center text-red-300 italic font-bold relative z-10">โหลดใบเสร็จไม่สำเร็จ</p>`;
-        return;
-    }
+            courseRows.forEach(item => {
+                const key = String(
+                    item.course_id ||
+                    item.old_course_code ||
+                    item.item_name ||
+                    item.id
+                ).trim();
 
-    container.innerHTML = `
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
-            ${receipts && receipts.length > 0 ? receipts.map(item => `
-                <div class="p-8 bg-white rounded-[2.5rem] border-2 border-slate-100 flex justify-between items-center shadow-xl hover:border-[#D48197] transition-all group">
-                    <div class="text-left">
-                        <p class="text-[10px] text-slate-400 font-black uppercase mb-1">RECEIPT DATE: ${formatThaiDate(item.bill_date)}</p>
-                        <p class="font-black text-slate-900 text-2xl italic">฿${parseFloat(item.net_total ?? item.total ?? 0).toLocaleString()}</p>
-                        <p class="text-[10px] text-[#D48197] font-black uppercase mt-1 italic tracking-widest">💳 ${item.payment || '-'}</p>
-                        <p class="text-[10px] text-slate-300 font-black uppercase mt-1 italic tracking-widest">${item.bill_no || '-'}</p>
-                    </div>
-                    <button onclick="window.printReceipt('${item.id}', '${item.hn || c.hn || ''}', 'A5')" 
-                        class="w-14 h-14 rounded-2xl bg-[#D48197] text-white flex items-center justify-center shadow-lg hover:bg-pink-600 transition-all scale-100 hover:scale-110 border-b-4 border-pink-800/30">
-                        🖨️
-                    </button>
+                if (!grouped[key]) {
+                    grouped[key] = {
+                        name: item.item_name || '-',
+                        unit: item.unit || 'ครั้ง',
+                        date: item.created_at || '',
+                        totalQty: 0,
+                        usedQty: 0
+                    };
+                }
+
+                grouped[key].totalQty += Number(item.qty || 0) || 0;
+                grouped[key].usedQty += Number(usageMap[String(item.id || '').trim()] || 0) || 0;
+
+                if (String(item.created_at || '') > String(grouped[key].date || '')) {
+                    grouped[key].date = item.created_at || '';
+                }
+            });
+
+            const courses = Object.values(grouped).map(item => ({
+                ...item,
+                remainQty: Math.max(0, (Number(item.totalQty || 0) || 0) - (Number(item.usedQty || 0) || 0))
+            }));
+
+            container.innerHTML = `
+                <div class="border-2 border-slate-100 bg-slate-50/50 rounded-[2.5rem] p-8 shadow-inner overflow-hidden mb-6 relative z-10">
+                    <table class="w-full text-left font-bold border-separate" style="border-spacing: 0 12px;">
+                        <thead class="text-[11px] text-slate-400 uppercase font-black italic tracking-widest pb-4">
+                            <tr>
+                                <th class="px-6 pb-2 w-1/2">ชื่อรายการคอร์ส</th>
+                                <th class="px-6 pb-2 text-center">วันที่ซื้อ</th>
+                                <th class="px-6 pb-2 text-right">คงเหลือ</th>
+                                <th class="px-6 pb-2 text-center">หน่วย</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-[13px] text-slate-700 bg-white rounded-3xl">
+                            ${courses.length > 0 ? courses.map(item => `
+                                <tr class="shadow-sm hover:shadow-md hover:border-pink-300 transition-all group">
+                                    <td class="px-6 py-5 rounded-l-3xl border-y-2 border-l-2 border-slate-100 group-hover:border-pink-200">
+                                        <p class="font-black text-slate-900 text-base italic">${item.name}</p>
+                                        <p class="text-[10px] text-slate-300 font-bold mt-1">ใช้ไป ${item.usedQty}/${item.totalQty}</p>
+                                    </td>
+                                    <td class="px-6 py-5 border-y-2 border-slate-100 group-hover:border-pink-200 text-center text-slate-500 font-medium">
+                                        ${formatThaiDate(item.date)}
+                                    </td>
+                                    <td class="px-6 py-5 border-y-2 border-slate-100 group-hover:border-pink-200 text-right">
+                                        <p class="text-3xl font-black text-[#D48197] leading-none drop-shadow-sm">${item.remainQty}</p>
+                                    </td>
+                                    <td class="px-6 py-5 rounded-r-3xl border-y-2 border-r-2 border-slate-100 group-hover:border-pink-200 text-center text-slate-400 font-black uppercase italic">
+                                        ${item.unit || 'ครั้ง'}
+                                    </td>
+                                </tr>
+                            `).join('') : `
+                                <tr>
+                                    <td colspan="4" class="p-16 text-center text-slate-300 italic font-bold rounded-3xl border-2 border-slate-100 bg-white">
+                                        📭 ไม่พบรายการคอร์สสะสมในฐานข้อมูลค่ะ
+                                    </td>
+                                </tr>
+                            `}
+                        </tbody>
+                    </table>
                 </div>
-            `).join('') : '<p class="col-span-2 py-20 text-center text-slate-300 italic font-bold relative z-10">ไม่พบประวัติใบเสร็จ</p>'}
-        </div>
-    `;
-}
+            `;
+        }
 
-    else if (tabName === 'appoints') {
-        const { data: appoints } = await window.supabaseClient.from('appointments').select('*').eq('customer_id', customerId).order('date', { ascending: false });
-        container.innerHTML = `
-            <div class="space-y-4 relative z-10">
-                ${appoints && appoints.length > 0 ? appoints.map(item => `
-                    <div class="p-8 border-2 border-slate-100 rounded-[3rem] flex justify-between items-center shadow-md ${item.status === 'ยกเลิก' ? 'opacity-40 grayscale bg-slate-200' : 'bg-white hover:border-blue-400'} transition-all">
-                        <div class="text-left">
-                            <p class="text-[12px] text-blue-500 font-black uppercase mb-1 italic underline underline-offset-4 decoration-2">นัดหมาย: ${formatThaiDate(item.date)} (${item.time || '-'} น.)</p>
-                            <p class="font-black text-slate-800 text-lg italic">${item.course}</p>
+        else if (tabName === 'usage') {
+            const { data: usageRows, error: usageError } = await window.supabaseClient
+                .from('course_usage')
+                .select('*')
+                .eq('customer_id', customerIdStr)
+                .order('used_date', { ascending: false })
+                .order('created_at', { ascending: false });
+
+            if (usageError) {
+                console.error('usageError:', usageError);
+                container.innerHTML = `<p class="py-20 text-center text-red-300 italic font-bold relative z-10">โหลดประวัติใช้คอร์สไม่สำเร็จ</p>`;
+                return;
+            }
+
+            const saleItemIds = [...new Set((usageRows || []).map(x => x.sale_item_id).filter(Boolean))];
+
+            let saleItemsMap = {};
+            if (saleItemIds.length > 0) {
+                const { data: linkedSaleItems, error: linkedSaleItemsError } = await window.supabaseClient
+                    .from('sales_items')
+                    .select('*')
+                    .in('id', saleItemIds);
+
+                if (!linkedSaleItemsError && Array.isArray(linkedSaleItems)) {
+                    linkedSaleItems.forEach(item => {
+                        saleItemsMap[String(item.id)] = item;
+                    });
+                }
+            }
+
+            container.innerHTML = `
+                <div class="space-y-4 relative z-10">
+                    ${usageRows && usageRows.length > 0 ? usageRows.map(item => {
+                        const saleItem = saleItemsMap[String(item.sale_item_id || '')] || null;
+                        const courseName =
+                            saleItem?.item_name ||
+                            item.note ||
+                            item.old_course_code ||
+                            item.course_id ||
+                            '-';
+
+                        return `
+                            <div class="p-6 bg-slate-50 rounded-[2.5rem] border-2 border-white shadow-sm flex justify-between items-center hover:bg-white hover:shadow-md transition-all">
+                                <div class="text-left">
+                                    <p class="text-[10px] text-[#D48197] font-black uppercase mb-1">📅 ${formatThaiDate(item.used_date || item.created_at)}</p>
+                                    <p class="font-black text-slate-800 text-base italic">${courseName}</p>
+                                    <p class="text-[10px] text-slate-400 mt-2 font-bold italic">ใช้ไป ${Number(item.used_qty || 0)} ครั้ง</p>
+                                </div>
+                                <div class="text-right">
+                                    <span class="bg-emerald-500 text-white px-5 py-2 rounded-full text-[10px] font-black uppercase shadow-lg border-b-2 border-emerald-700">USED</span>
+                                    <p class="text-[10px] text-slate-400 mt-2 font-bold italic">${item.note || '-'}</p>
+                                </div>
+                            </div>
+                        `;
+                    }).join('') : '<p class="py-20 text-center text-slate-300 italic font-bold relative z-10">ยังไม่พบประวัติการใช้คอร์ส</p>'}
+                </div>
+            `;
+        }
+
+        else if (tabName === 'receipts') {
+            const { data: receipts, error: receiptsError } = await window.supabaseClient
+                .from('sales_header')
+                .select('*')
+                .or(`customer_id.eq.${customerIdStr},hn.eq.${customerHN}`)
+                .eq('type', 'รายรับ')
+                .order('bill_date', { ascending: false });
+
+            if (receiptsError) {
+                console.error('receiptsError:', receiptsError);
+                container.innerHTML = `<p class="col-span-2 py-20 text-center text-red-300 italic font-bold relative z-10">โหลดใบเสร็จไม่สำเร็จ</p>`;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
+                    ${receipts && receipts.length > 0 ? receipts.map(item => `
+                        <div class="p-8 bg-white rounded-[2.5rem] border-2 border-slate-100 flex justify-between items-center shadow-xl hover:border-[#D48197] transition-all group">
+                            <div class="text-left">
+                                <p class="text-[10px] text-slate-400 font-black uppercase mb-1">RECEIPT DATE: ${formatThaiDate(item.bill_date)}</p>
+                                <p class="font-black text-slate-900 text-2xl italic">฿${parseFloat(item.net_total ?? item.total ?? 0).toLocaleString()}</p>
+                                <p class="text-[10px] text-[#D48197] font-black uppercase mt-1 italic tracking-widest">💳 ${item.payment || '-'}</p>
+                                <p class="text-[10px] text-slate-300 font-black uppercase mt-1 italic tracking-widest">${item.bill_no || '-'}</p>
+                            </div>
+                            <button onclick="window.printReceipt('${item.id}', '${item.hn || c.hn || ''}', 'A5')" 
+                                class="w-14 h-14 rounded-2xl bg-[#D48197] text-white flex items-center justify-center shadow-lg hover:bg-pink-600 transition-all scale-100 hover:scale-110 border-b-4 border-pink-800/30">
+                                🖨️
+                            </button>
                         </div>
-                        <div class="text-right">
-                            <p class="text-[10px] font-black italic uppercase py-2.5 px-6 rounded-full border-2 ${item.status === 'เสร็จสิ้น' ? 'text-emerald-500 border-emerald-500' : item.status === 'รอดำเนินการ' ? 'text-blue-500 border-blue-500' : 'text-rose-500 border-rose-500'}">
-                                ${item.status}
-                            </p>
+                    `).join('') : '<p class="col-span-2 py-20 text-center text-slate-300 italic font-bold relative z-10">ไม่พบประวัติใบเสร็จ</p>'}
+                </div>
+            `;
+        }
+
+        else if (tabName === 'appoints') {
+            const { data: appoints, error: appointsError } = await window.supabaseClient
+                .from('appointments')
+                .select('*')
+                .or(`customer_id.eq.${customerIdStr},customerHn.eq.${customerHN},customer_name.eq.${customerFullname},customerName.eq.${customerFullname}`)
+                .order('date', { ascending: false });
+
+            if (appointsError) {
+                console.error('appointsError:', appointsError);
+                container.innerHTML = `<p class="py-20 text-center text-red-300 italic font-bold relative z-10">โหลดรายการนัดหมายไม่สำเร็จ</p>`;
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="space-y-4 relative z-10">
+                    ${appoints && appoints.length > 0 ? appoints.map(item => `
+                        <div class="p-8 border-2 border-slate-100 rounded-[3rem] flex justify-between items-center shadow-md ${item.status === 'ยกเลิก' ? 'opacity-40 grayscale bg-slate-200' : 'bg-white hover:border-blue-400'} transition-all">
+                            <div class="text-left">
+                                <p class="text-[12px] text-blue-500 font-black uppercase mb-1 italic underline underline-offset-4 decoration-2">
+                                    นัดหมาย: ${formatThaiDate(item.date)} (${item.time || '-'} น.)
+                                </p>
+                                <p class="font-black text-slate-800 text-lg italic">${item.course || item.courseName || '-'}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-[10px] font-black italic uppercase py-2.5 px-6 rounded-full border-2 ${
+                                    item.status === 'เสร็จสิ้น'
+                                        ? 'text-emerald-500 border-emerald-500'
+                                        : item.status === 'รอดำเนินการ'
+                                        ? 'text-blue-500 border-blue-500'
+                                        : 'text-rose-500 border-rose-500'
+                                }">
+                                    ${item.status || '-'}
+                                </p>
+                            </div>
                         </div>
-                    </div>
-                `).join('') : '<p class="py-20 text-center text-slate-300 italic font-bold relative z-10">ไม่มีรายการนัดหมาย</p>'}
-            </div>
-        `;
+                    `).join('') : '<p class="py-20 text-center text-slate-300 italic font-bold relative z-10">ไม่มีรายการนัดหมาย</p>'}
+                </div>
+            `;
+        }
+
+        else {
+            container.innerHTML = `<p class="py-20 text-center text-slate-300 italic font-bold relative z-10">ไม่พบแท็บที่ต้องการ</p>`;
+        }
+
+        if (window.lucide) lucide.createIcons();
+
+    } catch (e) {
+        console.error('switchCustomerTab error:', e);
+        container.innerHTML = `<p class="py-20 text-center text-red-300 italic font-bold relative z-10">เกิดข้อผิดพลาดในการโหลดข้อมูล</p>`;
     }
-    
-    // สั่งสร้างไอคอน Lucide ใหม่ในเนื้อหา Tab
-    if (window.lucide) lucide.createIcons();
 };
-
-
 
 /* =======================================================
     💰 ZONE 5.5: BILLING & EXPENSE (ส่วนของรายจ่าย OUTGOING)

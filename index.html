@@ -2158,6 +2158,23 @@ window.loadDashboardSummaryData = async function(period = 'day', selectedBranch 
         customerMap
     };
 };
+// --- ฟังก์ชันสำหรับปุ่มกดสลับ รายวัน/รายเดือน/รายปี ---
+window.changePeriod = function(period, btnElement) {
+    // 1. จัดการ UI: ลบ class active ออกจากทุกปุ่มในโซนนั้น
+    const parent = btnElement.closest('#dynamicPeriodZone');
+    if (parent) {
+        parent.querySelectorAll('.btn-period').forEach(btn => btn.classList.remove('active'));
+    }
+    
+    // 2. เติม class active ให้ปุ่มที่ถูกกด
+    btnElement.classList.add('active');
+
+    // 3. สั่งรันการคำนวณ Dashboard ใหม่ตามช่วงเวลาที่เลือก
+    const target = document.getElementById('dynamicContent');
+    if (typeof window.renderDashboard === 'function') {
+        window.renderDashboard(target, period);
+    }
+};
 
 window.renderDashboard = async function(target, period = 'day') {
     if (!target) return;
@@ -3039,120 +3056,166 @@ window.backToCustomerProfile = function() {
     }
 };
 
-// --- ฟังก์ชันแสดงหน้าพิมพ์ OPD (ใช้ ID ในการดึงข้อมูลคนไข้) ---
+// --- ฟังก์ชันแสดงหน้าพิมพ์ OPD (เวอร์ชันอัปเกรดความเร็ว + ดึงข้อมูลเฉพาะคน) ---
 window.printOPD = async function(customerId) {
-    const customerDB = await window.getCustomersFromSupabase();
-    const c = customerDB.find(item => String(item.id) === String(customerId));
-    if (!c) return;
+    // 1. ⚡ แสดงสถานะกำลังโหลดทันที (Perceived Speed)
+    Swal.fire({
+        title: 'กำลังเตรียมข้อมูล...',
+        text: 'กรุณารอสักครู่นะคะ',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+    });
 
-    const target = document.getElementById('dynamicContent');
-    
-    // ฟังก์ชัน autoFillCourse (ปรับปรุงให้ใช้ภายใน Scope)
-    window.autoFillCourse = function(courseName, amount, totalPrice) {
-        const typeSelect = document.getElementById('opdTypeSelector');
-        if (typeSelect && typeSelect.value !== 'skin_injection') {
-            alert('กรุณาเลือกประเภท OPD เป็น "คอร์สฉีดผิว" ก่อนนะคะ');
-            return;
+    try {
+        // 2. ⚡ ดึงเฉพาะข้อมูลคนไข้คนนี้คนเดียวจาก Supabase (ไม่ต้องโหลดทั้ง DB)
+        const { data: c, error: custError } = await window.supabaseClient
+            .from('customers')
+            .select('*')
+            .eq('id', customerId)
+            .single();
+
+        if (custError || !c) {
+            throw new Error('ไม่พบข้อมูลคนไข้ในระบบค่ะ');
         }
-        const tables = document.querySelectorAll('#opd-dynamic-layout table');
-        let allCells = []; 
-        tables.forEach(table => {
-            const rows = table.querySelectorAll('tbody tr');
-            rows.forEach(row => { if(row.cells[2]) allCells.push(row.cells[2]); });
-        });
+
+        // 3. ⚡ ดึงข้อมูลสาขาที่คนไข้สังกัด (ดึงเฉพาะแถวที่ต้องการ)
+        const targetName = String(c.branch || '').replace('สาขา', '').trim();
+        const { data: bData } = await window.supabaseClient
+            .from('clinic_branches')
+            .select('*')
+            .eq('branch_name', targetName)
+            .maybeSingle();
+
+        let branchInfo = bData || {
+            clinic_name: "เอซ คลินิกเวชกรรม",
+            address: "--- กรุณาตั้งค่าที่อยู่สาขาในหน้าจัดการ ---",
+            license_no: "-",
+            phone: "-",
+            line_id: ""
+        };
+
+        // 4. เมื่อได้ข้อมูลครบแล้ว ปิด Loading สวยๆ
+        Swal.close();
+
+        const target = document.getElementById('dynamicContent');
         
-        let startIndex = allCells.findIndex(cell => cell.innerText.trim() === "");
-        if (startIndex === -1) return;
-        
-        for (let i = 0; i < amount; i++) {
-            if (allCells[startIndex + i]) {
-                allCells[startIndex + i].innerText = `${courseName} ${i+1}/${amount}`;
+        // Helper: คำนวณอายุ
+        const getAge = (dateString) => {
+            if (!dateString) return "-";
+            const today = new Date();
+            const birth = new Date(dateString);
+            let age = today.getFullYear() - birth.getFullYear();
+            if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age--;
+            return age;
+        };
+
+        // Helper: จัดรูปแบบวันที่
+        const formatDate = (dateStr) => {
+            if (!dateStr) return "-";
+            const [y, m, d] = dateStr.split("-");
+            return `${d}/${m}/${parseInt(y) + 543}`;
+        };
+
+        // 🎯 5. ฟังก์ชันสำหรับวาดตารางแบบ Dynamic (คงเดิมแต่ปรับความลื่นไหล)
+        window.renderOPDByType = function(type) {
+            const printableArea = document.getElementById('opd-dynamic-layout');
+            if (!printableArea) return;
+
+            let layoutHtml = '';
+            if (type === 'skin_injection') {
+                const row = (i) => `
+                    <tr class="border-b border-slate-300 h-7">
+                        <td class="p-1 text-center border-r font-bold bg-slate-50 text-[10px]">${i}</td>
+                        <td class="p-1 border-r w-20"></td>
+                        <td class="p-1 border-r font-normal text-[9px] text-slate-700 text-left pl-2"></td>
+                        <td class="p-1 w-24"></td>
+                    </tr>`;
+
+                layoutHtml = `
+                    <div class="mt-4 animate-in fade-in duration-300">
+                        <div class="text-center mb-1">
+                            <p class="text-[11px] font-bold text-pink-500 uppercase tracking-widest underline">ประวัติการรักษา (คอร์สฉีดผิว)</p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <table class="w-full border border-slate-400 text-center border-collapse">
+                                <thead class="bg-slate-100 text-[9px]">
+                                    <tr class="border-b border-slate-400"><th class="p-1 border-r w-8 font-bold">ครั้งที่</th><th class="p-1 border-r font-bold w-20">วันที่</th><th class="p-1 border-r font-bold">รายการคอร์ส</th><th class="p-1 font-bold w-24">ผู้ทำ / เซ็น</th></tr>
+                                </thead>
+                                <tbody>${[1,2,3,4,5,6,7].map(i => row(i)).join('')}</tbody>
+                            </table>
+                            <table class="w-full border border-slate-400 text-center border-collapse">
+                                <thead class="bg-slate-100 text-[9px]">
+                                    <tr class="border-b border-slate-400"><th class="p-1 border-r w-8 font-bold">ครั้งที่</th><th class="p-1 border-r font-bold w-20">วันที่</th><th class="p-1 border-r font-bold">รายการคอร์ส</th><th class="p-1 font-bold w-24">ผู้ทำ / เซ็น</th></tr>
+                                </thead>
+                                <tbody>${[8,9,10,11,12,13,14].map(i => row(i)).join('')}</tbody>
+                            </table>
+                        </div>
+                    </div>`;
+            } else {
+                layoutHtml = `
+                    <div class="mt-2 border border-slate-300 h-[380px] bg-slate-50/10 p-4 animate-in fade-in duration-300 text-left">
+                        <p class="text-[11px] font-bold text-pink-500 text-center mb-2 uppercase tracking-widest underline">ประวัติการรักษาทั่วไป</p>
+                        <textarea id="treatmentNotesGeneral" class="w-full h-72 bg-transparent border-none outline-none no-print text-sm" placeholder="พิมพ์ประวัติการรักษาที่นี่..."></textarea>
+                        <div class="hidden print:block whitespace-pre-line text-sm" id="printNotesGeneral"></div>
+                    </div>`;
             }
-        }
-    };
+            printableArea.innerHTML = layoutHtml;
+            const tx = document.getElementById('treatmentNotesGeneral');
+            const pr = document.getElementById('printNotesGeneral');
+            if (tx && pr) { tx.addEventListener('input', (e) => { pr.innerText = e.target.value; }); }
+        };
 
-    // คำนวณอายุคนไข้
-    const getAge = (dateString) => {
-        if (!dateString) return "-";
-        const today = new Date();
-        const birth = new Date(dateString);
-        let age = today.getFullYear() - birth.getFullYear();
-        if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age--;
-        return age;
-    };
-
-    window.renderOPDByType = function(type) {
-        const printableArea = document.getElementById('opd-dynamic-layout');
-        let layoutHtml = '';
-
-        if (type === 'skin_injection') {
-            const row = (i) => `<tr class="border-b border-slate-300 h-7">
-                <td class="p-1 text-center border-r font-bold bg-slate-50">${i}</td>
-                <td class="p-1 border-r w-20"></td>
-                <td class="p-1 border-r font-normal text-[9px] text-slate-700 text-left pl-2"></td>
-                <td class="p-1 w-24"></td>
-            </tr>`;
-            layoutHtml = `
-                <div class="mt-[1cm] animate-in fade-in">
-                    <div class="text-center mb-1"><p class="text-[11px] font-bold ace-pink uppercase tracking-widest underline">ประวัติการรักษา (คอร์สฉีดผิว)</p></div>
-                    <div class="grid grid-cols-2 gap-2">
-                        <table class="w-full border border-slate-400 text-center">
-                            <thead class="bg-slate-100 text-[9px]"><tr><th class="p-1 border-r w-8 font-bold">ครั้งที่</th><th class="p-1 border-r font-bold w-20">วันที่</th><th class="p-1 border-r font-bold">รายการคอร์ส</th><th class="p-1 font-bold w-24">ผู้ทำ / เซ็น</th></tr></thead>
-                            <tbody>${[1,2,3,4,5,6,7].map(i => row(i)).join('')}</tbody>
-                        </table>
-                        <table class="w-full border border-slate-400 text-center">
-                            <thead class="bg-slate-100 text-[9px]"><tr><th class="p-1 border-r w-8 font-bold">ครั้งที่</th><th class="p-1 border-r font-bold w-20">วันที่</th><th class="p-1 border-r font-bold">รายการคอร์ส</th><th class="p-1 font-bold w-24">ผู้ทำ / เซ็น</th></tr></thead>
-                            <tbody>${[8,9,10,11,12,13,14].map(i => row(i)).join('')}</tbody>
-                        </table>
-                    </div>
-                </div>`;
-        } else {
-            layoutHtml = `
-                <div class="mt-4 border border-slate-300 h-[440px] bg-slate-50/10 p-4 animate-in fade-in text-left">
-                    <p class="text-[11px] font-bold ace-pink text-center mb-4 uppercase tracking-widest underline">ประวัติการรักษาทั่วไป</p>
-                    <textarea id="treatmentNotesGeneral" class="w-full h-80 bg-transparent border-none outline-none no-print text-sm" placeholder="พิมพ์ประวัติการรักษาที่นี่..."></textarea>
-                    <div class="hidden print:block whitespace-pre-line text-sm" id="printNotesGeneral"></div>
-                </div>`;
-        }
-        printableArea.innerHTML = layoutHtml;
-setTimeout(() => {
-    if (typeof window.loadClinicConfigFromDB === 'function') {
-        window.loadClinicConfigFromDB();
-    }
-}, 100);
-
-    };
-
-    target.innerHTML = `
-        <div class="max-w-4xl mx-auto p-4 font-normal text-slate-800 bg-slate-100 min-h-screen">
-            <div id="opd-card-printable" class="bg-white p-6 shadow-sm border border-slate-200 mx-auto" style="width: 21cm; height: 14.8cm; line-height: 1.1; overflow: hidden;">
-                <div class="flex justify-between items-start mb-2 text-left">
-                    <div class="flex gap-2">
-                        <img src="ace-logo.jpg" class="w-12 h-12 object-contain">
-                        <div class="text-[10px]">
-                            <h2 class="text-sm font-bold text-slate-900">เอซ คลินิกเวชกรรม</h2>
-                            <p>เลขที่ใบอนุญาต : ๑๑๑๐๑๐๐๕๑๖๖</p>
+        // 6. วาดโครงหน้าหลัก
+        target.innerHTML = `
+            <div class="max-w-4xl mx-auto p-4 font-normal text-slate-800 bg-slate-100 min-h-screen">
+                <div id="opd-card-printable" class="bg-white p-6 shadow-sm border border-slate-200 mx-auto" style="width: 21cm; height: 14.8cm; line-height: 1.2; overflow: hidden;">
+                    <div class="flex justify-between items-start mb-2 text-left">
+                        <div class="flex gap-3">
+                            <img src="${branchInfo.logo_url || 'ace-logo.jpg'}" class="w-14 h-14 object-contain" onerror="this.src='ace-logo.jpg'">
+                            <div class="text-[9px]">
+                                <h2 class="text-sm font-bold text-slate-900 uppercase">${branchInfo.clinic_name || 'เอซ คลินิกเวชกรรม'} (สาขา${branchInfo.branch_name || c.branch})</h2>
+                                <p class="text-slate-800 font-medium leading-tight mb-0.5" style="width: 380px;">${branchInfo.address || '--- กรุณาตั้งค่าที่อยู่ ---'}</p>
+                                <p class="font-bold text-slate-800">
+                                    เลขที่ใบอนุญาต : <span class="text-pink-600 mr-4">${branchInfo.license_no || '-'}</span>
+                                    ติดต่อ : <span class="text-slate-800">${branchInfo.phone || '-'}</span> 
+                                    ${branchInfo.line_id ? ' | Line: ' + branchInfo.line_id : ''}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="text-right text-[10px]">
+                            <p class="text-sm font-bold">HN : <span class="ace-pink">${c.hn || '-'}</span></p>
+                            <p class="text-red-600 font-bold uppercase">แพ้ยา : <span>${c.allergy || 'ไม่มี'}</span></p>
                         </div>
                     </div>
-                    <div class="text-right text-[10px]">
-                        <p class="text-sm font-bold">HN : <span class="ace-pink">${c.hn || '-'}</span></p>
-                        <p class="text-red-600 font-bold uppercase">แพ้ยา : <span>${c.allergy || 'ไม่มี'}</span></p>
+                    <div class="grid grid-cols-4 gap-y-1 text-[10px] mb-2 pb-2 border-y border-slate-200 pt-2 text-left">
+                        <div class="col-span-2"><b>ชื่อ-นามสกุล :</b> ${c.fullname} (ชื่อเล่น: ${c.nickname || '-'})</div>
+                        <div class="col-span-2"><b>เลขบัตรประชาชน :</b> ${c.id_card || c.idCard || '-'}</div>
+                        <div><b>วันเกิด :</b> ${formatDate(c.birth_date)}</div>
+                        <div><b>อายุ :</b> ${getAge(c.birth_date)} ปี</div>
+                        <div><b>เบอร์โทร :</b> ${c.phone}</div>
+                        <div><b>สาขา :</b> <span class="text-pink-500 font-bold">${c.branch || '-'}</span></div>
+                        <div class="col-span-4 leading-tight"><b>ที่อยู่คนไข้ :</b> ${c.address || '-'}</div>
                     </div>
+                    <div id="opd-dynamic-layout"></div>
                 </div>
-                <div class="grid grid-cols-4 gap-y-0.5 text-[10px] mb-2 pb-2 border-y border-slate-200 pt-1 text-left">
-                    <div class="col-span-2"><b>ชื่อ-นามสกุล :</b> ${c.fullname}</div>
-                    <div><b>อายุ :</b> ${getAge(c.birth_date)} ปี</div>
-                    <div class="col-span-3"><b>เบอร์โทร :</b> ${c.phone}</div>
+                <div class="no-print mt-4 flex justify-center gap-4">
+                    <select id="opdTypeSelector" onchange="renderOPDByType(this.value)" class="p-2 rounded-xl border border-pink-200 text-xs outline-none cursor-pointer hover:bg-pink-50 transition-colors">
+                        <option value="general">OPD ประวัติทั่วไป</option>
+                        <option value="skin_injection">OPD คอร์สฉีดผิว</option>
+                    </select>
                 </div>
-                <div id="opd-dynamic-layout"></div>
+                <div class="flex justify-between items-center no-print mt-6 px-4">
+                    <button onclick="backToCustomerProfile()" class="text-slate-400 font-bold text-xs uppercase hover:text-pink-500">🔙 กลับ</button>
+                    <button onclick="window.print()" class="bg-[#D4AF37] text-white px-10 py-3 rounded-2xl font-bold text-xs shadow-xl hover:bg-black transition-all">🖨️ พิมพ์เอกสาร</button>
+                </div>
             </div>
-            <div class="flex justify-between items-center no-print mt-6 px-4">
-                <button onclick="backToCustomerProfile()" class="text-slate-400 font-bold text-xs uppercase">🔙 กลับ</button>
-                <button onclick="window.print()" class="bg-[#D4AF37] text-white px-10 py-3 rounded-2xl font-bold text-xs shadow-xl">🖨️ พิมพ์เอกสาร</button>
-            </div>
-        </div>
-    `;
-    window.renderOPDByType('general');
+        `;
+        window.renderOPDByType('general');
+
+    } catch (e) {
+        Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: e.message });
+        console.error('printOPD error:', e);
+    }
 };
 
 // --- ฟังก์ชันบันทึกประวัติการรักษาลง Database (ใช้ customer_id) ---

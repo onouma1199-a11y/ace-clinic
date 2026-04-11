@@ -298,14 +298,15 @@ tbody tr:hover{background:#FAFAFF!important;}
        <div class="bg-white p-6 flex justify-between items-center border-b-2 border-pink-100 relative z-[9999] shrink-0 pointer-events-auto">
             <h2 id="modalTitle" class="text-2xl font-bold text-slate-600 uppercase tracking-tight">เพิ่มลูกค้าใหม่</h2>
 
-           <div class="relative z-[9999] flex gap-2 pointer-events-auto">
-                <button
-                    type="button"
-                    onclick="alert('อ่านข้อมูลบัตร...')"
-                    class="bg-[#D48197] text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:brightness-110 transition-all uppercase shadow-md"
-                >
-                    อ่านข้อมูลบัตร
-                </button>
+          <div class="relative z-[9999] flex gap-2 pointer-events-auto">
+    <button
+        type="button"
+        onclick="window.readIDCard()" 
+        class="bg-[#D48197] text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:brightness-110 transition-all uppercase shadow-md"
+    >
+        อ่านข้อมูลบัตร
+    </button>
+
 
                 <button
     type="button"
@@ -987,6 +988,64 @@ window.getCustomers = function() {
         return [];
     }
 };
+
+window.readIDCard = async function() {
+    // 1. แสดง Loading แจ้งเตือนพนักงาน
+    Swal.fire({
+        title: 'กำลังรอข้อมูลจากบัตร...',
+        text: 'กรุณาเสียบบัตรประชาชนที่เครื่องอ่าน ZOWEETEK',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+    });
+
+    try {
+        // 2. เรียกไปยังโปรแกรม Agent (ในที่นี้ใช้พอร์ตมาตรฐานของโปรแกรมอ่านบัตรไทยส่วนใหญ่คือ 8181)
+        // หมายเหตุ: ต้องเปิดโปรแกรม Agent ในเครื่อง Windows ไว้ด้วยนะครับ
+        const response = await fetch('http://localhost:8181/read'); 
+        const data = await response.json();
+
+        if (data.status === 'success' || data.idCardNo) {
+            // 3. หยอดข้อมูลลงในช่อง Input ต่างๆ ใน Modal
+            // ** สำคัญ: เช็ค ID ของช่อง Input ใน HTML ของคุณให้ตรงกับที่ระบุด้านล่างนี้ **
+            
+            setInputValue('customer_hn', data.idCardNo);        // เลขบัตรประชาชน
+            setInputValue('customer_firstname', data.firstNameTH); // ชื่อจริง
+            setInputValue('customer_lastname', data.lastNameTH);  // นามสกุล
+            setInputValue('customer_nickname', data.nicknameTH);   // ชื่อเล่น (ถ้ามี)
+            setInputValue('customer_birthdate', data.birthDateISO); // วันเกิด (รูปแบบ YYYY-MM-DD)
+            setInputValue('customer_address', data.address);       // ที่อยู่เต็ม
+
+            Swal.fire({
+                icon: 'success',
+                title: 'อ่านข้อมูลสำเร็จ',
+                text: `ยินดีต้อนรับคุณ ${data.firstNameTH}`,
+                timer: 2000,
+                showConfirmButton: false
+            });
+        } else {
+            Swal.fire('แจ้งเตือน', 'ไม่พบข้อมูลบัตร กรุณาเสียบบัตรใหม่อีกครั้ง', 'warning');
+        }
+    } catch (error) {
+        console.error('ID Card Error:', error);
+        // แสดง error กรณีไม่ได้เปิดโปรแกรม Agent
+        Swal.fire({
+            icon: 'error',
+            title: 'การเชื่อมต่อผิดพลาด',
+            text: 'กรุณาตรวจสอบว่าได้เปิดโปรแกรม "Thai ID Card Agent" ใน Windows แล้วหรือยัง?',
+            confirmButtonText: 'รับทราบ'
+        });
+    }
+};
+
+// ฟังก์ชันเสริมสำหรับหยอดค่าลง Input ป้องกัน Error กรณีหา ID ไม่เจอ
+function setInputValue(id, value) {
+    const el = document.getElementById(id);
+    if (el && value) {
+        el.value = value;
+        // ปรับให้ Tailwind/CSS รู้ว่ามีการเปลี่ยนแปลงค่า (ถ้ามี label ลอย)
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+}
 
 /* =======================================================
    🚀 ZONE 2: CORE SYSTEM (ระบบล็อกอิน & สลับหน้าเมนู)

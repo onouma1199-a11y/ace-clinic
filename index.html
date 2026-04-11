@@ -3116,54 +3116,73 @@ window.printOPD = async function(customerId) {
             return `${d}/${m}/${parseInt(y) + 543}`;
         };
 
-        // 🎯 5. ฟังก์ชันสำหรับวาดตารางแบบ Dynamic (คงเดิมแต่ปรับความลื่นไหล)
-        window.renderOPDByType = function(type) {
-            const printableArea = document.getElementById('opd-dynamic-layout');
-            if (!printableArea) return;
+        // 🎯 5. ฟังก์ชันสำหรับวาดตารางแบบ Dynamic (ขยาย 20 ครั้ง + พิมพ์ในตารางได้)
+window.renderOPDByType = function(type) {
+    const printableArea = document.getElementById('opd-dynamic-layout');
+    if (!printableArea) return;
 
-            let layoutHtml = '';
-            if (type === 'skin_injection') {
-                const row = (i) => `
-                    <tr class="border-b border-slate-300 h-7">
-                        <td class="p-1 text-center border-r font-bold bg-slate-50 text-[10px]">${i}</td>
-                        <td class="p-1 border-r w-20"></td>
-                        <td class="p-1 border-r font-normal text-[9px] text-slate-700 text-left pl-2"></td>
-                        <td class="p-1 w-24"></td>
-                    </tr>`;
+    let layoutHtml = '';
+    if (type === 'skin_injection') {
+        // สร้าง Template แถวตาราง (เพิ่ม contenteditable เพื่อให้คลิกพิมพ์ได้)
+        const row = (i) => `
+            <tr class="border-b border-slate-400 h-7">
+                <td class="p-1 text-center border-r font-bold bg-slate-50 text-[10px]">${i}</td>
+                <td class="p-1 border-r w-20 outline-none focus:bg-pink-50" contenteditable="true"></td>
+                <td class="p-1 border-r font-normal text-[9px] text-slate-700 text-left pl-2 outline-none focus:bg-pink-50" contenteditable="true"></td>
+                <td class="p-1 w-24 outline-none focus:bg-pink-50" contenteditable="true"></td>
+            </tr>`;
 
-                layoutHtml = `
-                    <div class="mt-4 animate-in fade-in duration-300">
-                        <div class="text-center mb-1">
-                            <p class="text-[11px] font-bold text-pink-500 uppercase tracking-widest underline">ประวัติการรักษา (คอร์สฉีดผิว)</p>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2">
-                            <table class="w-full border border-slate-400 text-center border-collapse">
-                                <thead class="bg-slate-100 text-[9px]">
-                                    <tr class="border-b border-slate-400"><th class="p-1 border-r w-8 font-bold">ครั้งที่</th><th class="p-1 border-r font-bold w-20">วันที่</th><th class="p-1 border-r font-bold">รายการคอร์ส</th><th class="p-1 font-bold w-24">ผู้ทำ / เซ็น</th></tr>
-                                </thead>
-                                <tbody>${[1,2,3,4,5,6,7].map(i => row(i)).join('')}</tbody>
-                            </table>
-                            <table class="w-full border border-slate-400 text-center border-collapse">
-                                <thead class="bg-slate-100 text-[9px]">
-                                    <tr class="border-b border-slate-400"><th class="p-1 border-r w-8 font-bold">ครั้งที่</th><th class="p-1 border-r font-bold w-20">วันที่</th><th class="p-1 border-r font-bold">รายการคอร์ส</th><th class="p-1 font-bold w-24">ผู้ทำ / เซ็น</th></tr>
-                                </thead>
-                                <tbody>${[8,9,10,11,12,13,14].map(i => row(i)).join('')}</tbody>
-                            </table>
-                        </div>
-                    </div>`;
-            } else {
-                layoutHtml = `
-                    <div class="mt-2 border border-slate-300 h-[380px] bg-slate-50/10 p-4 animate-in fade-in duration-300 text-left">
-                        <p class="text-[11px] font-bold text-pink-500 text-center mb-2 uppercase tracking-widest underline">ประวัติการรักษาทั่วไป</p>
-                        <textarea id="treatmentNotesGeneral" class="w-full h-72 bg-transparent border-none outline-none no-print text-sm" placeholder="พิมพ์ประวัติการรักษาที่นี่..."></textarea>
-                        <div class="hidden print:block whitespace-pre-line text-sm" id="printNotesGeneral"></div>
-                    </div>`;
-            }
-            printableArea.innerHTML = layoutHtml;
-            const tx = document.getElementById('treatmentNotesGeneral');
-            const pr = document.getElementById('printNotesGeneral');
-            if (tx && pr) { tx.addEventListener('input', (e) => { pr.innerText = e.target.value; }); }
-        };
+        layoutHtml = `
+            <div class="mt-4 animate-in fade-in duration-400">
+                <div class="text-center mb-1">
+                    <p class="text-[11px] font-bold text-pink-500 uppercase tracking-widest underline">ประวัติการรักษา</p>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <table class="w-full border border-slate-400 text-center border-collapse">
+                        <thead class="bg-slate-100 text-[9px]">
+                            <tr class="border-b border-slate-400">
+                                <th class="p-1 border-r w-8 font-bold">ครั้งที่</th>
+                                <th class="p-1 border-r font-bold w-20">วันที่</th>
+                                <th class="p-1 border-r font-bold">รายการคอร์ส</th>
+                                <th class="p-1 font-bold w-24">ผู้ทำ / เซ็น</th>
+                            </tr>
+                        </thead>
+                        <tbody>${[1,2,3,4,5,6,7,8,9,10].map(i => row(i)).join('')}</tbody>
+                    </table>
+                    <table class="w-full border border-slate-300 text-center border-collapse">
+                        <thead class="bg-slate-100 text-[9px]">
+                            <tr class="border-b border-slate-400">
+                                <th class="p-1 border-r w-8 font-bold">ครั้งที่</th>
+                                <th class="p-1 border-r font-bold w-20">วันที่</th>
+                                <th class="p-1 border-r font-bold">รายการคอร์ส</th>
+                                <th class="p-1 font-bold w-24">ผู้ทำ / เซ็น</th>
+                            </tr>
+                        </thead>
+                        <tbody>${[11,12,13,14,15,16,17,18,19,20].map(i => row(i)).join('')}</tbody>
+                    </table>
+                </div>
+                
+            </div>`;
+    } else {
+        layoutHtml = `
+            <div class="mt-2 border border-slate-300 h-[380px] bg-slate-50/10 p-4 animate-in fade-in duration-300 text-left">
+                <p class="text-[11px] font-bold text-pink-500 text-center mb-2 uppercase tracking-widest underline">ประวัติการรักษาทั่วไป</p>
+                <textarea id="treatmentNotesGeneral" class="w-full h-72 bg-transparent border-none outline-none no-print text-sm" placeholder=""></textarea>
+                <div class="hidden print:block whitespace-pre-line text-sm" id="printNotesGeneral"></div>
+            </div>`;
+    }
+    
+    printableArea.innerHTML = layoutHtml;
+
+    // ส่วนของ Textarea สำหรับประวัติทั่วไป
+    const tx = document.getElementById('treatmentNotesGeneral');
+    const pr = document.getElementById('printNotesGeneral');
+    if (tx && pr) { 
+        tx.addEventListener('input', (e) => { 
+            pr.innerText = e.target.value; 
+        }); 
+    }
+};
 
         // 6. วาดโครงหน้าหลัก
         target.innerHTML = `
@@ -3174,26 +3193,26 @@ window.printOPD = async function(customerId) {
                             <img src="${branchInfo.logo_url || 'ace-logo.jpg'}" class="w-14 h-14 object-contain" onerror="this.src='ace-logo.jpg'">
                             <div class="text-[9px]">
                                 <h2 class="text-sm font-bold text-slate-900 uppercase">${branchInfo.clinic_name || 'เอซ คลินิกเวชกรรม'} (สาขา${branchInfo.branch_name || c.branch})</h2>
-                                <p class="text-slate-800 font-medium leading-tight mb-0.5" style="width: 380px;">${branchInfo.address || '--- กรุณาตั้งค่าที่อยู่ ---'}</p>
-                                <p class="font-bold text-slate-800">
-                                    เลขที่ใบอนุญาต : <span class="text-pink-600 mr-4">${branchInfo.license_no || '-'}</span>
-                                    ติดต่อ : <span class="text-slate-800">${branchInfo.phone || '-'}</span> 
+                                <p class="text-slate-900 font-medium leading-tight mb-1" style="width: 380px;">${branchInfo.address || '--- กรุณาตั้งค่าที่อยู่ ---'}</p>
+                                <p class="font-bold text-slate-650">
+                                    เลขที่ใบอนุญาต : <span class="text-slate-650 mr-4">${branchInfo.license_no || '-'}</span>
+                                    ติดต่อ : <span class="text-slate-650">${branchInfo.phone || '-'}</span> 
                                     ${branchInfo.line_id ? ' | Line: ' + branchInfo.line_id : ''}
                                 </p>
                             </div>
                         </div>
                         <div class="text-right text-[10px]">
-                            <p class="text-sm font-bold">HN : <span class="ace-pink">${c.hn || '-'}</span></p>
+                            <p class="text-sm font-bold"> <span class="ace-pink">${c.hn || '-'}</span></p>
                             <p class="text-red-600 font-bold uppercase">แพ้ยา : <span>${c.allergy || 'ไม่มี'}</span></p>
                         </div>
                     </div>
                     <div class="grid grid-cols-4 gap-y-1 text-[10px] mb-2 pb-2 border-y border-slate-200 pt-2 text-left">
                         <div class="col-span-2"><b>ชื่อ-นามสกุล :</b> ${c.fullname} (ชื่อเล่น: ${c.nickname || '-'})</div>
-                        <div class="col-span-2"><b>เลขบัตรประชาชน :</b> ${c.id_card || c.idCard || '-'}</div>
+                        <div class="col-span-2"><b>เลขบัตรประชาชน :</b> ${c.citizen_id || c.id_card || '-'}</div>
                         <div><b>วันเกิด :</b> ${formatDate(c.birth_date)}</div>
                         <div><b>อายุ :</b> ${getAge(c.birth_date)} ปี</div>
                         <div><b>เบอร์โทร :</b> ${c.phone}</div>
-                        <div><b>สาขา :</b> <span class="text-pink-500 font-bold">${c.branch || '-'}</span></div>
+                        <div><b>สาขา :</b> <span class="text-slate-500 font-bold">${c.branch || '-'}</span></div>
                         <div class="col-span-4 leading-tight"><b>ที่อยู่คนไข้ :</b> ${c.address || '-'}</div>
                     </div>
                     <div id="opd-dynamic-layout"></div>
@@ -3201,7 +3220,7 @@ window.printOPD = async function(customerId) {
                 <div class="no-print mt-4 flex justify-center gap-4">
                     <select id="opdTypeSelector" onchange="renderOPDByType(this.value)" class="p-2 rounded-xl border border-pink-200 text-xs outline-none cursor-pointer hover:bg-pink-50 transition-colors">
                         <option value="general">OPD ประวัติทั่วไป</option>
-                        <option value="skin_injection">OPD คอร์สฉีดผิว</option>
+                        <option value="skin_injection">OPD คอร์สสกิน</option>
                     </select>
                 </div>
                 <div class="flex justify-between items-center no-print mt-6 px-4">
@@ -14172,254 +14191,130 @@ window.printSlip = async function(payload, staff, previewWindow = null) {
             <title>Payroll Slip - ${staffName}</title>
             <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
             <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
-            <style>
-                * { box-sizing: border-box; }
+          <style>
+    * { box-sizing: border-box; }
 
-                body {
-                    font-family: 'Sarabun', sans-serif;
-                    background: #f5f5f5;
-                    margin: 0;
-                    padding: 20px;
-                    color: #222;
-                }
+    body {
+        font-family: 'Sarabun', sans-serif;
+        background: #f5f5f5;
+        margin: 0;
+        padding: 0; /* ⚡ เคลียร์ Padding ออกเพื่อให้ชิดขอบจอ */
+        color: #222;
+    }
 
-                .toolbar {
-                    text-align: right;
-                    margin-bottom: 12px;
-                    display: flex;
-                    justify-content: flex-end;
-                    gap: 10px;
-                    flex-wrap: wrap;
-                }
+    .toolbar {
+        text-align: right;
+        padding: 15px; /* เพิ่ม padding ให้ toolbar แทนเพราะบอดี้ไม่มีแล้ว */
+        margin-bottom: 0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        flex-wrap: wrap;
+        background: #eee; /* ให้เห็นขอบเขต toolbar ชัดเจน */
+    }
 
-                .btn {
-                    padding: 9px 14px;
-                    border-radius: 10px;
-                    border: none;
-                    font-weight: 700;
-                    cursor: pointer;
-                    font-size: 13px;
-                }
+    .btn {
+        padding: 9px 14px;
+        border-radius: 10px;
+        border: none;
+        font-weight: 700;
+        cursor: pointer;
+        font-size: 13px;
+    }
 
-                .btn-print { background:#D48197; color:#fff; }
-                .btn-pdf { background:#111827; color:#fff; }
-                .btn-img { background:#C5A059; color:#fff; }
-                .btn-close { background:#E5E7EB; color:#374151; }
+    .btn-print { background:#D48197; color:#fff; }
+    .btn-pdf { background:#111827; color:#fff; }
+    .btn-img { background:#C5A059; color:#fff; }
+    .btn-close { background:#E5E7EB; color:#374151; }
 
-                .page {
-                    width: 210mm;
-                    min-height: 297mm;
-                    background: #fff;
-                    margin: auto;
-                    box-shadow: 0 8px 30px rgba(0,0,0,0.08);
-                    padding: 0;
-                }
+    /* 📄 ปรับหน้ากระดาษให้ชิดขอบ */
+    .page {
+        width: 210mm;
+        min-height: 297mm;
+        background: #fff;
+        margin: 0 auto; /* จัดกลางหน้าจอ แต่ตอนพิมพ์จะถูกสั่งชิดขอบ */
+        box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+        padding: 0; /* ⚡ มั่นใจว่าไม่มีช่องว่างขอบ */
+    }
 
-                .slip {
-                    height: 148.5mm;
-                    padding: 8mm;
-                    box-sizing: border-box;
-                    border-bottom: 1px dashed #d1d5db;
-                }
+    /* 🏷️ ส่วนของสลิปครึ่งหน้า */
+    .slip {
+        width: 100%;
+        height: 148.5mm;
+        padding: 5mm; /* ลด padding ขอบสลิปลงเพื่อให้เนื้อหาดูใหญ่ขึ้น */
+        box-sizing: border-box;
+        border-bottom: 1px dashed #d1d5db; 
+        position: relative;
+        overflow: hidden;
+    }
 
-                .card {
-                    border: 1px solid #eee;
-                    border-radius: 12px;
-                    padding: 7mm;
-                    height: 100%;
-                    overflow: hidden;
-                }
+    .card {
+        border: 1px solid #eee;
+        border-radius: 12px;
+        padding: 6mm;
+        height: 100%;
+        width: 100%; /* บังคับเต็มความกว้าง */
+    }
 
-                .head {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: flex-start;
-                    border-bottom: 1px solid #eee;
-                    padding-bottom: 5px;
-                    margin-bottom: 6px;
-                }
+    /* สไตล์ภายใน (คงเดิม) */
+    .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-bottom: 6px; }
+    .head-left { display: flex; gap: 10px; align-items: flex-start; }
+    .logo-box { width: 52px; height: 52px; border-radius: 12px; overflow: hidden; border: 1px solid #f1d5dc; background: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .logo-box img { width: 100%; height: 100%; object-fit: contain; }
+    .title { font-weight: 800; color: #D48197; font-size: 17px; line-height: 1.1; margin-bottom: 2px; }
+    .small { font-size: 9px; color: #666; line-height: 1.25; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .box { border: 1px solid #eee; border-radius: 8px; padding: 5px 6px; background: #fafafa; }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 7px; }
+    .box-title { font-size: 9px; font-weight: 800; margin-bottom: 4px; color: #111827; }
+    .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 9px; padding: 2px 0; border-bottom: 1px solid #f1f1f1; }
+    .row:last-child { border-bottom: none; }
+    .label { color: #555; }
+    .value { font-weight: 700; color: #111827; text-align: right; white-space: nowrap; }
+    .net { margin-top: 7px; text-align: center; border: 1px solid #f3d6de; background: #fff5f7; border-radius: 10px; padding: 6px; }
+    .net h1 { margin: 2px 0 0; font-size: 22px; line-height: 1.05; }
+    .extra-bottom { display: grid; grid-template-columns: 1fr 110px 140px; gap: 10px; align-items: end; margin-top: 8px; }
+    .qr-box, .sign-box { border: 1px solid #eee; border-radius: 8px; background: #fafafa; padding: 6px; text-align: center; min-height: 88px; }
+    .qr-box img, .sign-box img { max-width: 100%; max-height: 60px; object-fit: contain; }
+    .sign-name { font-size: 8px; font-weight: 700; color: #333; margin-top: 3px; line-height: 1.2; }
+    .footer { margin-top: 5px; text-align: center; font-size: 8px; color: #999; }
 
-                .head-left {
-                    display: flex;
-                    gap: 10px;
-                    align-items: flex-start;
-                }
+    /* 🖨️ การตั้งค่าพิมพ์แบบ Borderless (ชิดขอบที่สุด) */
+    @media print {
+        @page {
+            size: A4 portrait;
+            margin: 0; /* ⚡ สำคัญมาก: ตัดขอบขาวของเครื่องพิมพ์/Browser ออก */
+        }
+        
+        body {
+            background: white;
+            padding: 0;
+            margin: 0;
+        }
 
-                .logo-box {
-                    width: 52px;
-                    height: 52px;
-                    border-radius: 12px;
-                    overflow: hidden;
-                    border: 1px solid #f1d5dc;
-                    background: #fff;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    flex-shrink: 0;
-                }
+        .toolbar {
+            display: none !important;
+        }
 
-                .logo-box img {
-                    width: 100%;
-                    height: 100%;
-                    object-fit: contain;
-                }
+        .page {
+            width: 210mm !important;
+            height: 297mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            display: block !important;
+        }
 
-                .branch-meta {
-                    margin-top: 3px;
-                }
+        .slip {
+            height: 148.5mm !important;
+            padding: 10mm; /* เว้นขอบเผื่อเครื่องพิมพ์กินกระดาษนิดหน่อย */
+            border-bottom: none !important;
+        }
+    }
 
-                .title {
-                    font-weight: 800;
-                    color: #D48197;
-                    font-size: 17px;
-                    line-height: 1.1;
-                    margin-bottom: 2px;
-                }
-
-                .small {
-                    font-size: 9px;
-                    color: #666;
-                    line-height: 1.25;
-                }
-
-                .grid2 {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 7px;
-                }
-
-                .box {
-                    border: 1px solid #eee;
-                    border-radius: 8px;
-                    padding: 5px 6px;
-                    background: #fafafa;
-                }
-
-                .split {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 7px;
-                    margin-top: 7px;
-                }
-
-                .box-title {
-                    font-size: 9px;
-                    font-weight: 800;
-                    margin-bottom: 4px;
-                    color: #111827;
-                }
-
-                .row {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    gap: 8px;
-                    font-size: 9px;
-                    padding: 2px 0;
-                    border-bottom: 1px solid #f1f1f1;
-                }
-
-                .row:last-child {
-                    border-bottom: none;
-                }
-
-                .label {
-                    color: #555;
-                }
-
-                .value {
-                    font-weight: 700;
-                    color: #111827;
-                    text-align: right;
-                    white-space: nowrap;
-                }
-
-                .net {
-                    margin-top: 7px;
-                    text-align: center;
-                    border: 1px solid #f3d6de;
-                    background: #fff5f7;
-                    border-radius: 10px;
-                    padding: 6px;
-                }
-
-                .net .small {
-                    font-size: 8px;
-                }
-
-                .net h1 {
-                    margin: 2px 0 0;
-                    font-size: 22px;
-                    line-height: 1.05;
-                }
-
-                .extra-bottom {
-                    display: grid;
-                    grid-template-columns: 1fr 110px 140px;
-                    gap: 10px;
-                    align-items: end;
-                    margin-top: 8px;
-                }
-
-                .qr-box,
-                .sign-box {
-                    border: 1px solid #eee;
-                    border-radius: 8px;
-                    background: #fafafa;
-                    padding: 6px;
-                    text-align: center;
-                    min-height: 88px;
-                }
-
-                .qr-box img,
-                .sign-box img {
-                    max-width: 100%;
-                    max-height: 60px;
-                    object-fit: contain;
-                }
-
-                .sign-name {
-                    font-size: 8px;
-                    font-weight: 700;
-                    color: #333;
-                    margin-top: 3px;
-                    line-height: 1.2;
-                }
-
-                .sign-pos {
-                    font-size: 7px;
-                    color: #777;
-                    line-height: 1.2;
-                }
-
-                .footer {
-                    margin-top: 5px;
-                    text-align: center;
-                    font-size: 8px;
-                    color: #999;
-                }
-
-                @media print {
-                    body {
-                        background: white;
-                        padding: 0;
-                    }
-
-                    .toolbar {
-                        display: none !important;
-                    }
-
-                    .page {
-                        margin: 0;
-                        box-shadow: none;
-                    }
-
-                    @page {
-                        size: A4;
-                        margin: 0;
-                    }
-                }
-            </style>
+</style>
         </head>
 
         <body>

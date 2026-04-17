@@ -1097,12 +1097,9 @@ window.normalizeBranch = function(branch = '') {
     const raw = String(branch || '').trim();
 
     if (!raw) return 'สาขาบางพลี';
-
-    // ค่าพิเศษ
     if (raw === 'ทุกสาขา') return 'ทุกสาขา';
     if (raw === 'ส่วนกลาง') return 'ส่วนกลาง';
 
-    // mapping จริง
     const map = {
         'บางพลี': 'สาขาบางพลี',
         'สาขาบางพลี': 'สาขาบางพลี',
@@ -1113,11 +1110,8 @@ window.normalizeBranch = function(branch = '') {
     };
 
     if (map[raw]) return map[raw];
-
-    // ถ้าเป็นรูปแบบ "สาขา..." อยู่แล้ว
     if (raw.startsWith('สาขา')) return raw;
 
-    // ❗ fallback ปลอดภัย
     console.warn('Unknown branch:', raw);
     return 'สาขาบางพลี';
 };
@@ -5190,10 +5184,108 @@ if (typeof window.applyCustomerFilter === 'function') {
 
 window.currentAppPage = window.currentAppPage || 1;
 window.selectedCoursesForApp = window.selectedCoursesForApp || [];
+window.appCourseNote = window.appCourseNote || '';
 
-/* =========================
-   Helper
-========================= */
+window.renderSelectedCourses = function() {
+    const summaryBox = document.getElementById('selectedCoursesSummary');
+    const appCourse = document.getElementById('appCourse');
+
+    if (!summaryBox) return;
+
+    const selected = Array.isArray(window.selectedCoursesForApp)
+        ? window.selectedCoursesForApp
+        : [];
+
+    if (!selected.length) {
+        summaryBox.innerHTML = `
+            <div class="text-[11px] text-slate-300 italic px-1">
+                ยังไม่ได้เลือกคอร์ส
+            </div>
+        `;
+        return;
+    }
+
+    summaryBox.innerHTML = `
+        <div class="flex flex-wrap gap-2">
+            ${selected.map((courseObj, index) => `
+                <div class="inline-flex items-start gap-2 px-3 py-2 rounded-2xl bg-pink-50 border border-pink-200 text-[#D48197] text-[11px] font-bold">
+                    <div class="leading-tight">
+                        <div>${window.escapeHtml(courseObj.name || '-')}</div>
+                        <div class="text-[10px] text-pink-400 mt-1">
+                            คงเหลือ ${Number(courseObj.remain || 0)}/${Number(courseObj.total || 0)} ${window.escapeHtml(courseObj.unit || 'ครั้ง')}
+                        </div>
+                    </div>
+
+                    <button type="button"
+                        onclick="window.removeCourseForApp(${index})"
+                        class="w-5 h-5 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-100 transition-all flex items-center justify-center text-[10px] leading-none shrink-0">
+                        ×
+                    </button>
+                </div>
+            `).join('')}
+        </div>
+    `;
+};
+
+window.selectCourseForApp = function(courseObj) {
+    if (!courseObj || !courseObj.name) return;
+
+    if (!Array.isArray(window.selectedCoursesForApp)) {
+        window.selectedCoursesForApp = [];
+    }
+
+    const exists = window.selectedCoursesForApp.some(item =>
+        String(item.name || '').trim().toLowerCase() === String(courseObj.name || '').trim().toLowerCase()
+    );
+
+    if (!exists) {
+        window.selectedCoursesForApp.push({
+            name: String(courseObj.name || '').trim(),
+            remain: Number(courseObj.remain || 0),
+            total: Number(courseObj.total || 0),
+            unit: courseObj.unit || 'ครั้ง'
+        });
+    }
+
+    window.renderSelectedCourses();
+
+    if (typeof window.searchCourseForApp === 'function') {
+        window.searchCourseForApp();
+    }
+};
+
+window.removeCourseForApp = function(index) {
+    if (!Array.isArray(window.selectedCoursesForApp)) {
+        window.selectedCoursesForApp = [];
+    }
+
+    window.selectedCoursesForApp.splice(index, 1);
+    window.renderSelectedCourses();
+
+    if (typeof window.searchCourseForApp === 'function') {
+        window.searchCourseForApp();
+    }
+};
+
+window.getAppointmentCourseText = function() {
+    const selected = Array.isArray(window.selectedCoursesForApp)
+        ? window.selectedCoursesForApp
+        : [];
+
+    const note = String(document.getElementById('appCourse')?.value || '').trim();
+
+    const selectedNames = selected.map(item => item.name).filter(Boolean);
+    const courseText = selectedNames.join(', ');
+
+    if (courseText && note) {
+        return `${courseText} | ${note}`;
+    }
+
+    if (courseText) return courseText;
+    if (note) return note;
+
+    return '';
+};
 
 window.normalizeCourseName = function(name = '') {
     return String(name).replace(/\s*\(\d+\/\d+\)\s*$/, '').trim();
@@ -5310,52 +5402,136 @@ window.getQueueDBByBranch = function() {
 };
 
 // 🎯 4. ตัวเลือกพนักงาน (อ้างอิงตาม ID สาขา)
-window.getBranchStaffOptions = function(allowedRoles = [], selectedValue = '') {
-    const staffDB = typeof window.getStaff === 'function' ? window.getStaff() : [];
-    const viewingBranch = typeof window.getCurrentViewingBranch === 'function'
-        ? window.getCurrentViewingBranch()
-        : 'ทุกสาขา';
+window.getBranchStaffOptions = async function(allowedRoles = [], selectedValue = '') {
+    try {
+        let staffDB = [];
 
-    let filtered = Array.isArray(staffDB) ? staffDB : [];
-
-    if (typeof window.canViewAllBranches === 'function' && typeof window.filterByBranch === 'function') {
-        if (!window.canViewAllBranches()) {
-            filtered = window.filterByBranch(filtered, item => item.branch);
+        if (typeof window.getStaff === 'function') {
+            try {
+                const temp = window.getStaff();
+                if (Array.isArray(temp)) staffDB = temp;
+            } catch (e) {
+                console.warn('getStaff error:', e);
+            }
         }
-    }
 
-    if (Array.isArray(allowedRoles) && allowedRoles.length > 0) {
-        filtered = filtered.filter(s => allowedRoles.includes(String(s.role || '').trim()));
-    }
+        if (!staffDB.length) {
+            try {
+                const localAccounts = JSON.parse(localStorage.getItem('accountDB') || '[]');
+                if (Array.isArray(localAccounts)) staffDB = localAccounts;
+            } catch (e) {
+                console.warn('accountDB parse error:', e);
+            }
+        }
 
-    if (filtered.length === 0) {
-        return `<option value="-">ไม่พบข้อมูลพนักงาน</option>`;
-    }
+        if (!staffDB.length && window.supabaseClient) {
+            const { data, error } = await window.supabaseClient
+                .from('accounts')
+                .select('*');
 
-    return filtered.map(s => {
-        const value = s.name || s.fullname || s.staffId || '-';
-        const selected = String(value) === String(selectedValue) ? 'selected' : '';
-        return `<option value="${value}" ${selected}>${value}</option>`;
-    }).join('');
-};
+            if (!error && Array.isArray(data)) {
+                staffDB = data;
+            }
+        }
 
-window.getDoctorOptionsForAppointment = function(selectedValue = '') {
-    const currentUser = window.getCurrentUserSafe();
-    const role = String(currentUser.role || '').trim();
-    const name = String(currentUser.name || '').trim();
+        const normalize = (v) => String(v || '').trim().toLowerCase();
+        const allowed = (allowedRoles || []).map(x => normalize(x));
 
-    if (['หมอ', 'แพทย์', 'doctor'].includes(role) && name) {
+        let filtered = Array.isArray(staffDB) ? staffDB : [];
+
+        if (allowed.length > 0) {
+            filtered = filtered.filter(item => {
+                const role = normalize(item.role || item.position || item.job_title);
+
+                return allowed.includes(role) ||
+                    (allowed.includes('พนักงานทรีตเม้นท์') && ['พนักงานทรีตเม้นท์', 'therapist', 'ผู้ช่วยแพทย์', 'พนักงานผู้ดูแล'].map(x => x.toLowerCase()).includes(role)) ||
+                    (allowed.includes('therapist') && ['พนักงานทรีตเม้นท์', 'therapist', 'ผู้ช่วยแพทย์', 'พนักงานผู้ดูแล'].map(x => x.toLowerCase()).includes(role)) ||
+                    (allowed.includes('ผู้ช่วยแพทย์') && ['พนักงานทรีตเม้นท์', 'therapist', 'ผู้ช่วยแพทย์', 'พนักงานผู้ดูแล'].map(x => x.toLowerCase()).includes(role)) ||
+                    (allowed.includes('พนักงานผู้ดูแล') && ['พนักงานทรีตเม้นท์', 'therapist', 'ผู้ช่วยแพทย์', 'พนักงานผู้ดูแล'].map(x => x.toLowerCase()).includes(role));
+            });
+        }
+
+        if (!filtered.length) {
+            return `<option value="">ไม่พบข้อมูลพนักงาน</option>`;
+        }
+
         return `
             <option value="">-- เลือก --</option>
-            <option value="${name}" selected>${name}</option>
+            ${filtered.map(s => {
+                const value = s.name || s.fullname || s.full_name || s.username || s.staffId || '-';
+                const selected = String(value) === String(selectedValue) ? 'selected' : '';
+                return `<option value="${value}" ${selected}>${value}</option>`;
+            }).join('')}
         `;
+    } catch (e) {
+        console.error('getBranchStaffOptions error:', e);
+        return `<option value="">ไม่พบข้อมูลพนักงาน</option>`;
     }
-
-    return window.getBranchStaffOptions(['หมอ', 'แพทย์', 'doctor'], selectedValue);
 };
 
-window.getDoctorOptionsForProcess = function(selectedValue = '') {
-    return window.getDoctorOptionsForAppointment(selectedValue);
+window.getDoctorOptionsForAppointment = async function(selectedValue = '') {
+    try {
+        let staffDB = [];
+
+        // 1) ดึงจาก helper ถ้ามี
+        if (typeof window.getStaff === 'function') {
+            try {
+                const temp = window.getStaff();
+                if (Array.isArray(temp)) staffDB = temp;
+            } catch (e) {
+                console.warn('getStaff error:', e);
+            }
+        }
+
+        // 2) fallback localStorage
+        if (!staffDB.length) {
+            try {
+                const localAccounts = JSON.parse(localStorage.getItem('accountDB') || '[]');
+                if (Array.isArray(localAccounts)) staffDB = localAccounts;
+            } catch (e) {
+                console.warn('accountDB parse error:', e);
+            }
+        }
+
+        // 3) fallback supabase
+        if (!staffDB.length && window.supabaseClient) {
+            const { data, error } = await window.supabaseClient
+                .from('accounts')
+                .select('*');
+
+            if (!error && Array.isArray(data)) {
+                staffDB = data;
+            }
+        }
+
+        const doctorRoles = ['หมอ', 'แพทย์', 'doctor', 'แพทย์ผู้ดูแล'];
+        const normalize = (v) => String(v || '').trim().toLowerCase();
+
+        let doctors = staffDB.filter(item => {
+            const role = normalize(item.role || item.position || item.job_title);
+            return doctorRoles.map(x => x.toLowerCase()).includes(role);
+        });
+
+        if (!doctors.length) {
+            return `<option value="">ไม่พบข้อมูลแพทย์</option>`;
+        }
+
+        return `
+            <option value="">-- เลือก --</option>
+            ${doctors.map(d => {
+                const value = d.name || d.fullname || d.full_name || d.username || '-';
+                const selected = String(value) === String(selectedValue) ? 'selected' : '';
+                return `<option value="${value}" ${selected}>${value}</option>`;
+            }).join('')}
+        `;
+    } catch (e) {
+        console.error('getDoctorOptionsForAppointment error:', e);
+        return `<option value="">ไม่พบข้อมูลแพทย์</option>`;
+    }
+};
+
+window.getDoctorOptionsForProcess = async function(selectedValue = '') {
+    return await window.getDoctorOptionsForAppointment(selectedValue);
 };
 
 /* =====================
@@ -5540,27 +5716,6 @@ window.getAppointmentCourseLabels = function(customerId, selectedCourses = []) {
     });
 };
 
-// ✅ 2. ฟังก์ชันวาดป้ายคอร์สที่เลือก (ใช้ ID อ้างอิง)
-window.renderSelectedCourses = function() {
-    const container = document.getElementById('selectedCoursesContainer');
-    const customerId = document.getElementById('appCustSearch')?.dataset?.customerId || '';
-
-    if (!container) return;
-
-    if (!Array.isArray(window.selectedCoursesForApp) || window.selectedCoursesForApp.length === 0) {
-        container.innerHTML = '';
-        return;
-    }
-
-    container.innerHTML = window.selectedCoursesForApp.map((courseName, i) => `
-        <div class="bg-pink-50 text-[#FF4B91] border border-pink-200 px-3 py-2 rounded-xl text-[10px] font-bold flex items-center gap-2">
-            <span>${courseName}</span>
-            <button type="button"
-                onclick="window.removeCourseFromApp(${i})"
-                class="hover:text-red-500 font-bold ml-1">✕</button>
-        </div>
-    `).join('');
-};
 
 // 3. ฟังก์ชันลบคอร์สที่เลือก (คงเดิม)
 window.removeCourseFromApp = function(index) {
@@ -5572,46 +5727,55 @@ window.removeCourseFromApp = function(index) {
     window.renderSelectedCourses();
 };
 
-// 4. ฟังก์ชันเลือกคอร์ส (คงเดิม)
-window.selectCourseForApp = function(courseName) {
-    if (!courseName) return;
 
-    if (!Array.isArray(window.selectedCoursesForApp)) {
-        window.selectedCoursesForApp = [];
-    }
-
-    if (!window.selectedCoursesForApp.includes(courseName)) {
-        window.selectedCoursesForApp.push(courseName);
-    }
-
-    window.renderSelectedCourses();
-
-    const input = document.getElementById('appCourse');
-    const resDiv = document.getElementById('appCourseResults');
-
-    if (input) input.value = '';
-    if (resDiv) resDiv.classList.add('hidden');
-};
 
 // ✅ 5. ค้นหาลูกค้าสำหรับนัดหมาย (ID BASED - ค้นได้ทุกสาขา)
-window.searchCustomerForApp = function(val) {
+window.searchCustomerForApp = async function(val) {
     const resDiv = document.getElementById('appCustResults');
     if (!resDiv) return;
 
-    if (!val || val.length < 1) {
+    const keyword = String(val || '').trim();
+
+    if (!keyword) {
+        resDiv.innerHTML = '';
         resDiv.classList.add('hidden');
         return;
     }
 
-    const db = window.getCustomers() || [];
-    const keyword = String(val || '').toLowerCase();
+    let matches = [];
 
-    const matches = db.filter(c => {
-        return (c.fullname && String(c.fullname).toLowerCase().includes(keyword)) ||
-               (c.id && String(c.id).toLowerCase().includes(keyword)) ||
-               (c.hn && String(c.hn).toLowerCase().includes(keyword)) ||
-               (c.phone && String(c.phone).includes(keyword));
-    });
+    // 1) ค้นจาก Supabase ก่อน
+    if (window.supabaseClient) {
+        try {
+            const { data, error } = await window.supabaseClient
+                .from('customers')
+                .select('id, hn, fullname, phone, branch')
+                .or(`fullname.ilike.%${keyword}%,hn.ilike.%${keyword}%,phone.ilike.%${keyword}%`)
+                .limit(20);
+
+            if (!error && Array.isArray(data)) {
+                matches = data;
+            }
+        } catch (e) {
+            console.warn('searchCustomerForApp supabase error:', e);
+        }
+    }
+
+    // 2) fallback จาก helper/local
+    if (!matches.length) {
+        const db = typeof window.getCustomers === 'function'
+            ? (window.getCustomers() || [])
+            : [];
+
+        const lower = keyword.toLowerCase();
+
+        matches = db.filter(c => {
+            return (c.fullname && String(c.fullname).toLowerCase().includes(lower)) ||
+                   (c.id && String(c.id).toLowerCase().includes(lower)) ||
+                   (c.hn && String(c.hn).toLowerCase().includes(lower)) ||
+                   (c.phone && String(c.phone).includes(keyword));
+        }).slice(0, 20);
+    }
 
     if (matches.length > 0) {
         resDiv.innerHTML = matches.map(c => `
@@ -5620,7 +5784,7 @@ window.searchCustomerForApp = function(val) {
                 '${String(c.id || '').replace(/'/g, "\\'")}',
                 '${String(c.hn || '').replace(/'/g, "\\'")}'
             )"
-                 class="p-4 hover:bg-pink-50 cursor-pointer border-b border-pink-100 flex justify-between font-normal bg-white transition-colors">
+                class="p-4 hover:bg-pink-50 cursor-pointer border-b border-pink-100 flex justify-between font-normal bg-white transition-colors">
                 <div class="text-left">
                     <span class="text-sm font-bold text-slate-500">${c.fullname || '-'}</span>
                     <p class="text-[9px] text-[#D48197] font-bold uppercase italic">📍 สาขาต้นสังกัด: ${c.branch || 'ไม่ระบุ'}</p>
@@ -5631,13 +5795,13 @@ window.searchCustomerForApp = function(val) {
 
         resDiv.classList.remove('hidden');
     } else {
-        resDiv.innerHTML = '<div class="p-4 text-center text-xs text-slate-300 italic">ไม่พบรายชื่อในระบบ...</div>';
+        resDiv.innerHTML = `<div class="p-4 text-center text-xs text-slate-300 italic">ไม่พบรายชื่อในระบบ...</div>`;
         resDiv.classList.remove('hidden');
     }
 };
 
 // ✅ 6. เลือกลูกค้าสำหรับนัดหมาย (ID BASED)
-window.selectCustForApp = function(fullname, customerId, hn = '') {
+window.selectCustForApp = async function(fullname, customerId, hn = '') {
     const input = document.getElementById('appCustSearch');
     const resDiv = document.getElementById('appCustResults');
 
@@ -5649,22 +5813,36 @@ window.selectCustForApp = function(fullname, customerId, hn = '') {
 
     if (resDiv) resDiv.classList.add('hidden');
 
-    // เปลี่ยนลูกค้า = reset คอร์ส
     window.selectedCoursesForApp = [];
+    window.appCourseNote = '';
     window.renderSelectedCourses();
+
+    const courseRes = document.getElementById('appCourseResults');
+    if (courseRes) {
+        courseRes.innerHTML = `<div class="p-4 text-center text-xs text-slate-300 italic">กำลังโหลดคอร์ส...</div>`;
+        courseRes.classList.remove('hidden');
+    }
+
+    if (typeof window.searchCourseForApp === 'function') {
+        await window.searchCourseForApp();
+    }
 };
 
 // ✅ 7. ค้นหาคอร์สของลูกค้าที่เลือก (ID BASED)
 window.searchCourseForApp = function() {
     const resDiv = document.getElementById('appCourseResults');
     const customerId = document.getElementById('appCustSearch')?.dataset?.customerId || '';
+    const appCourse = document.getElementById('appCourse');
 
-    if (!resDiv) return;
+    if (!resDiv || !appCourse) return;
 
     if (!customerId) {
-        Swal.fire('เตือน', 'กรุณาเลือกลูกค้าก่อนค่ะ', 'warning');
+        resDiv.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs font-normal">กรุณาเลือกลูกค้าก่อน</div>`;
+        resDiv.classList.remove('hidden');
         return;
     }
+
+    const keyword = String(appCourse.value || '').toLowerCase().trim();
 
     const db = window.getCustomers() || [];
     const customer = db.find(c => String(c.id) === String(customerId));
@@ -5685,19 +5863,66 @@ window.searchCourseForApp = function() {
         return;
     }
 
-    resDiv.innerHTML = courseList.map(c => {
-        const courseName = c.name || c.courseName || '-';
+    const selectedSet = new Set(
+        (window.selectedCoursesForApp || []).map(x => String(x.name || '').trim().toLowerCase())
+    );
+
+    const filteredCourses = courseList.filter(c => {
+        const courseName = String(c.name || c.courseName || '').trim();
         const remain = Number(c.remain ?? c.amount ?? 0);
-        const total = Number(c.totalAmount ?? c.amount ?? remain ?? 1);
+        const total = Number(c.totalAmount ?? c.total_qty ?? c.amount ?? remain ?? 1);
+
+        if (!courseName) return false;
+        if (remain <= 0) return false;
+
+        if (!keyword) return true;
+        return courseName.toLowerCase().includes(keyword);
+    });
+
+    if (filteredCourses.length === 0) {
+        resDiv.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs font-normal">ไม่พบคอร์สที่ค้นหา</div>`;
+        resDiv.classList.remove('hidden');
+        return;
+    }
+
+    resDiv.innerHTML = filteredCourses.map(c => {
+        const courseName = String(c.name || c.courseName || '-').trim();
+        const remain = Number(c.remain ?? c.amount ?? 0);
+        const total = Number(c.totalAmount ?? c.total_qty ?? c.amount ?? remain ?? 1);
         const unit = c.unit || 'ครั้ง';
+        const isSelected = selectedSet.has(courseName.toLowerCase());
 
         return `
-            <div onclick="window.selectCourseForApp('${String(courseName).replace(/'/g, "\\'")}')"
-                 class="p-4 hover:bg-pink-50 cursor-pointer border-b border-pink-50 flex justify-between font-normal">
-                <span class="text-sm font-bold">${courseName}</span>
-                <span class="text-[10px] text-pink-400 font-bold">
-                    คงเหลือ ${remain} / ${total} ${unit}
-                </span>
+            <div class="p-3 border-b border-pink-50 bg-white hover:bg-pink-50/40 transition-all">
+                <div class="flex items-center justify-between gap-3">
+                    <div class="text-left">
+                        <div class="text-sm font-bold text-slate-700">${window.escapeHtml(courseName)}</div>
+                        <div class="text-[10px] text-pink-400 font-bold mt-1">
+                            คงเหลือ ${remain}/${total} ${window.escapeHtml(unit)}
+                        </div>
+                    </div>
+
+                    ${
+                        isSelected
+                        ? `
+                        <span class="px-3 py-2 rounded-xl bg-slate-100 text-slate-400 text-[10px] font-bold border border-slate-200">
+                            เลือกแล้ว
+                        </span>
+                        `
+                        : `
+                        <button type="button"
+                            onclick='window.selectCourseForApp(${JSON.stringify({
+                                name: courseName,
+                                remain: remain,
+                                total: total,
+                                unit: unit
+                            })})'
+                            class="px-3 py-2 rounded-xl bg-pink-50 text-[#D48197] text-[10px] font-bold border border-pink-100 hover:bg-pink-100 transition-all">
+                            + เลือก
+                        </button>
+                        `
+                    }
+                </div>
             </div>
         `;
     }).join('');
@@ -5779,15 +6004,12 @@ window.editAppointmentById = async function(appId) {
     }
 
     // 3. เก็บ ID ที่กำลังแก้ไขไว้ใน Global State เพื่อใช้ตอนบันทึก (Update)
-    window.editingAppId = appId; 
+    window.editingAppId = appId || editData?.id || '';
     
     // 4. ส่ง Index ใน Array ปัจจุบันไปให้ Modal วาดข้อมูล
     window.openAppointmentModal(realIndex);
 };
 
-/* =========================
-   Appointment Page (ฉบับแก้ไขระบบ ID และล็อกสาขาสมบูรณ์)
-========================= */
 window.renderAppointmentPage = function() {
     const target = document.getElementById('dynamicContent');
     if (!target) return;
@@ -6073,21 +6295,20 @@ window.openAppointmentModal = async function(appId = null) {
         }
 
         window.editingAppId = appId;
-        window.selectedCoursesForApp = editData
-            ? String(editData.course || '').split(',').map(x => x.trim()).filter(Boolean)
-            : [];
+       window.selectedCoursesForApp = [];
+	window.appCourseNote = '';
 
         // ปรับการดึง Options ให้แน่นอนขึ้น
         const docVal = editData ? (editData.doctor || editData.doctor_name) : '';
         const staffVal = editData ? (editData.staff || editData.staff_name) : '';
         
         const doctorOptions = typeof window.getDoctorOptionsForAppointment === 'function'
-            ? window.getDoctorOptionsForAppointment(docVal)
-            : `<option value="${docVal}">${docVal || 'ไม่พบข้อมูลแพทย์'}</option>`;
+    ? await window.getDoctorOptionsForAppointment(docVal)
+    : `<option value="${docVal}">${docVal || 'ไม่พบข้อมูลแพทย์'}</option>`;
 
-        const staffOptions = typeof window.getBranchStaffOptions === 'function'
-            ? window.getBranchStaffOptions(['พนักงานทรีตเม้นท์', 'ผู้ช่วยแพทย์', 'therapist'], staffVal)
-            : `<option value="${staffVal}">${staffVal || 'ไม่พบข้อมูลพนักงาน'}</option>`;
+const staffOptions = typeof window.getBranchStaffOptions === 'function'
+    ? await window.getBranchStaffOptions(['พนักงานทรีตเม้นท์', 'ผู้ช่วยแพทย์', 'therapist', 'พนักงานผู้ดูแล'], staffVal)
+    : `<option value="${staffVal}">${staffVal || 'ไม่พบข้อมูลพนักงาน'}</option>`;
 
         const commonFieldClass = "w-full border border-pink-200 px-4 py-2 rounded-xl outline-none text-[13px] bg-white font-normal h-[42px] shadow-sm focus:border-pink-400 transition-all text-slate-600 appearance-none";
 
@@ -6109,8 +6330,10 @@ window.openAppointmentModal = async function(appId = null) {
                     <div class="relative">
                         <label class="text-[11px] text-[#FF4B91] ml-2 block font-bold mb-1 uppercase tracking-wider">ค้นหาชื่อลูกค้า / HN</label>
                         <input type="text" id="appCustSearch" 
-                            value="${editData ? (editData.customer_name || editData.customerName || '') : ''}"
-                            placeholder="พิมพ์ชื่อหรือเลข ID..." class="${commonFieldClass}">
+    value="${editData ? (editData.customer_name || editData.customerName || '') : ''}"
+    data-customer-id="${editData ? (editData.customer_id || '') : ''}"
+    data-hn="${editData ? (editData.customerHn || editData.hn || '') : ''}"
+    placeholder="พิมพ์ชื่อหรือเลข ID..." class="${commonFieldClass}">
                         <div id="appCustResults" class="absolute left-0 right-0 bg-white shadow-2xl rounded-2xl mt-1 hidden border border-pink-100 max-h-48 overflow-y-auto z-[10001]"></div>
                     </div>
 
@@ -6144,16 +6367,22 @@ window.openAppointmentModal = async function(appId = null) {
                     </div>
 
                     <div>
-                        <label class="text-[11px] text-[#FF4B91] ml-2 block font-bold mb-1 uppercase tracking-wider">รายการคอร์ส</label>
-                        <div class="relative bg-slate-50 border-2 border-dashed border-pink-100 rounded-2xl p-2">
-                            <textarea id="appCourse" rows="3" 
-                                placeholder="พิมพ์ชื่อคอร์สที่นี่... (เช่น Pico, Laser, Fillers)"
-                                class="w-full bg-transparent border-none outline-none text-sm p-2 resize-none text-slate-700 min-h-[80px]"></textarea>
-                            <div id="appCourseResults" class="absolute left-0 right-0 top-full bg-white shadow-2xl rounded-2xl hidden border border-pink-100 max-h-40 overflow-y-auto z-[10001]"></div>
-                        </div>
-                    </div>
+    <label class="text-[11px] text-[#FF4B91] ml-2 block font-bold mb-1 uppercase tracking-wider">รายการคอร์ส</label>
 
-                    <div>
+    <div class="bg-slate-50 border-2 border-dashed border-pink-100 rounded-2xl p-3">
+        <div id="selectedCoursesSummary" class="mb-3"></div>
+
+        <div class="relative">
+            <textarea id="appCourse" rows="3"
+                placeholder="เลือกรายการคอร์ส...."
+                class="w-full bg-white border border-pink-100 rounded-xl outline-none text-sm p-3 resize-none text-slate-700 min-h-[90px]"></textarea>
+
+            <div id="appCourseResults"
+                class="absolute left-0 right-0 top-full mt-2 bg-white shadow-2xl rounded-2xl hidden border border-pink-100 max-h-56 overflow-y-auto z-[10001]"></div>
+        </div>
+    </div>
+</div>
+
                         <label class="text-[11px] text-[#FF4B91] ml-2 block font-bold mb-1 uppercase tracking-wider">ลูกค้าเซ็นชื่อยืนยันใช้บริการ</label>
                         <div class="relative bg-slate-50 border-2 border-dashed border-pink-100 rounded-2xl overflow-hidden">
                             <canvas id="signature-pad" class="w-full h-32 touch-none cursor-crosshair"></canvas>
@@ -6178,6 +6407,7 @@ window.openAppointmentModal = async function(appId = null) {
         `;
 
         document.body.appendChild(modalWrap);
+	window.renderSelectedCourses();
 
         // --- ระบบลายเซ็น ---
         const canvas = document.getElementById('signature-pad');
@@ -6207,20 +6437,80 @@ window.openAppointmentModal = async function(appId = null) {
         canvas.addEventListener('touchend', () => drawing = false);
         setTimeout(resize, 200);
 
-        // --- แก้ช่องค้าง: ใช้ Timeout ป้องกันการ Search ถี่เกินไป ---
-        let searchTimeout;
-        const appCourse = document.getElementById('appCourse');
-        appCourse.addEventListener('input', () => {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                if (typeof window.searchCourseForApp === 'function') window.searchCourseForApp();
-            }, 300); // หน่วงเวลา 0.3 วินาที เพื่อไม่ให้เครื่องค้าง
-        });
+       // --- แก้ช่องค้าง: ใช้ Timeout ป้องกันการ Search ถี่เกินไป ---
+let searchTimeout;
+const appCourse = document.getElementById('appCourse');
 
-        // ค้นหาลูกค้า
-        document.getElementById('appCustSearch').addEventListener('input', function() {
-            if (typeof window.searchCustomerForApp === 'function') window.searchCustomerForApp(this.value);
-        });
+if (appCourse) {
+    appCourse.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+
+        searchTimeout = setTimeout(() => {
+            if (typeof window.searchCourseForApp === 'function') {
+                window.searchCourseForApp();
+            }
+        }, 300);
+    });
+
+    appCourse.addEventListener('focus', () => {
+        if (typeof window.searchCourseForApp === 'function') {
+            window.searchCourseForApp();
+        }
+    });
+}
+
+// ค้นหาลูกค้า
+const appCustSearch = document.getElementById('appCustSearch');
+
+if (appCustSearch) {
+    let custTimer;
+
+    appCustSearch.addEventListener('input', function() {
+        clearTimeout(custTimer);
+        const value = this.value;
+
+        custTimer = setTimeout(async () => {
+            if (typeof window.searchCustomerForApp === 'function') {
+                await window.searchCustomerForApp(value);
+            }
+        }, 250);
+    });
+
+    appCustSearch.addEventListener('focus', async function() {
+        if (this.value.trim() && typeof window.searchCustomerForApp === 'function') {
+            await window.searchCustomerForApp(this.value);
+        }
+    });
+}
+
+// ปิด dropdown เมื่ิอกดข้างนอก
+if (!window.__appModalOutsideClickBound) {
+    window.__appModalOutsideClickBound = true;
+
+    document.addEventListener('click', function(e) {
+        const resultBox = document.getElementById('appCustResults');
+        const input = document.getElementById('appCustSearch');
+        const courseBox = document.getElementById('appCourseResults');
+        const courseInput = document.getElementById('appCourse');
+
+        if (resultBox && input && !resultBox.contains(e.target) && e.target !== input) {
+            resultBox.classList.add('hidden');
+        }
+
+        if (courseBox && courseInput && !courseBox.contains(e.target) && e.target !== courseInput) {
+            courseBox.classList.add('hidden');
+        }
+    });
+}
+
+// set เวลาเดิมตอนแก้ไข
+if (editData?.time) {
+    const [h = '00', m = '00'] = String(editData.time).split(':');
+    const appHour = document.getElementById('appHour');
+    const appMin = document.getElementById('appMin');
+    if (appHour) appHour.value = h.padStart(2, '0');
+    if (appMin) appMin.value = m.padStart(2, '0');
+}
 
     } catch (e) {
         console.error("Modal Error:", e);
@@ -6262,13 +6552,14 @@ window.saveNewAppointment = async function(appId = '') {
         const date = document.getElementById('appDate')?.value || '';
         const hour = document.getElementById('appHour')?.value || '00';
         const min = document.getElementById('appMin')?.value || '00';
+
         const doctor = document.getElementById('appDoc')?.value || '-';
         const staff = document.getElementById('appStaff')?.value || '-';
-        const status = document.getElementById('appStatus')?.value || 'รอดำเนินการ';
-        const note = document.getElementById('appNote')?.value || '';
-        const course = Array.isArray(window.selectedCoursesForApp)
-            ? window.selectedCoursesForApp.join(', ')
-            : '';
+        const note = document.getElementById('appNote')?.value?.trim() || '';
+        const status = 'รอดำเนินการ';
+
+        const courseText = document.getElementById('appCourse')?.value?.trim() || '';
+        const selectedCourses = Array.isArray(window.selectedCoursesForApp) ? window.selectedCoursesForApp : [];
 
         if (!customerName || !customerId) {
             Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกลูกค้าจากรายการก่อนค่ะ', 'warning');
@@ -6280,52 +6571,55 @@ window.saveNewAppointment = async function(appId = '') {
             return;
         }
 
-        if (!course) {
-            Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกรายการคอร์สอย่างน้อย 1 รายการค่ะ', 'warning');
+        if (!courseText) {
+            Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกรายการคอร์สหรือพิมพ์รายการคอร์สค่ะ', 'warning');
             return;
-        }
-
-        let db = [];
-        try {
-            db = JSON.parse(localStorage.getItem('appointmentDB')) || [];
-        } catch (e) {
-            db = [];
         }
 
         const payload = {
             id: appId || crypto.randomUUID(),
-            appointmentId: appId || crypto.randomUUID(),
-            customer_id: customerId,
-            customerHn: customerHn,
+            appointment_id: appId || crypto.randomUUID(),
+            customer_id: String(customerId),
+            customer_hn: String(customerHn || ''),
             customer_name: customerName,
-            customerName: customerName,
+            customername: customerName,
+            hn: String(customerHn || ''),
             date: date,
             time: `${hour}:${min}`,
             doctor: doctor,
+            doctor_name: doctor,
             staff: staff,
-            course: course,
+            staff_name: staff,
+            course: courseText,
+            course_labels: selectedCourses,
             note: note,
             status: status,
             branch: typeof window.getCurrentViewingBranch === 'function'
                 ? window.getCurrentViewingBranch()
-                : 'บางพลี',
-            createdAt: appId ? undefined : Date.now(),
-            updatedAt: Date.now()
+                : 'สาขาบางพลี',
+            updated_at: new Date().toISOString(),
+            updatedat: Date.now()
         };
 
-        const existingIndex = db.findIndex(a =>
-            String(a.id) === String(appId) ||
-            String(a.appointmentId) === String(appId) ||
-            String(a.createdAt) === String(appId)
-        );
-
-        if (existingIndex !== -1) {
-            db[existingIndex] = { ...db[existingIndex], ...payload };
-        } else {
-            db.unshift(payload);
+        if (!appId) {
+            payload.created_at = new Date().toISOString();
+            payload.createdat = Date.now();
         }
 
-        localStorage.setItem('appointmentDB', JSON.stringify(db));
+        if (!window.supabaseClient) {
+            Swal.fire('ผิดพลาด', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+            return;
+        }
+
+        const { error } = await window.supabaseClient
+            .from('appointments')
+            .upsert(payload, { onConflict: 'id' });
+
+        if (error) {
+            console.error('save appointment error:', error);
+            Swal.fire('บันทึกไม่สำเร็จ', error.message || 'ไม่สามารถบันทึกนัดหมายได้', 'error');
+            return;
+        }
 
         Swal.fire({
             icon: 'success',
@@ -6337,8 +6631,9 @@ window.saveNewAppointment = async function(appId = '') {
         window.closeAppModal();
 
         if (typeof window.renderAppointmentPage === 'function') {
-            window.renderAppointmentPage();
+            await window.renderAppointmentPage();
         }
+
     } catch (e) {
         console.error('saveNewAppointment error:', e);
         Swal.fire('เกิดข้อผิดพลาด', e.message || 'บันทึกนัดหมายไม่สำเร็จ', 'error');
@@ -7386,6 +7681,63 @@ window.openProcessServiceModal = async function(qId) {
     `;
 
     document.body.appendChild(modalWrap);
+window.appCourseNote = '';
+
+if (editData) {
+    const rawCourse = String(editData.course || '').trim();
+    const parts = rawCourse.split('| หมายเหตุ:');
+    const selectedPart = String(parts[0] || '').trim();
+    const notePart = String(parts[1] || '').trim();
+
+    window.selectedCoursesForApp = selectedPart
+        ? selectedPart.split(',').map(x => x.trim()).filter(Boolean)
+        : [];
+
+    window.appCourseNote = notePart || '';
+} else {
+    window.selectedCoursesForApp = [];
+    window.appCourseNote = '';
+}
+
+window.renderSelectedCourses();
+
+const appCourse = document.getElementById('appCourse');
+const appCourseResults = document.getElementById('appCourseResults');
+
+let searchTimeout;
+
+if (appCourse) {
+    appCourse.addEventListener('focus', () => {
+        if (typeof window.searchCourseForApp === 'function') {
+            window.searchCourseForApp();
+        }
+    });
+
+    appCourse.addEventListener('input', () => {
+        
+
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            if (typeof window.searchCourseForApp === 'function') {
+                window.searchCourseForApp();
+            }
+        }, 200);
+    });
+}
+
+document.addEventListener('click', function closeCourseDropdown(e) {
+    const wrap = document.getElementById('appModal');
+    if (!wrap) return;
+
+    if (
+        appCourse &&
+        appCourseResults &&
+        !appCourse.contains(e.target) &&
+        !appCourseResults.contains(e.target)
+    ) {
+        appCourseResults.classList.add('hidden');
+    }
+}, { once: true });
 
     // ✅ Event Listeners สำหรับการเลือกคอร์สแบบ Multi-select
     document.querySelectorAll('.process-course-check').forEach(chk => {
@@ -9548,6 +9900,9 @@ window.refreshActiveCustomerDetailRealtime = async function(customerId) {
 
         window.activeCustomer = freshCustomer;
 
+	window.clearCustomerDetailCache(currentId);
+	await window.initCustomerDetailCache(currentId, freshCustomer);
+
         const activeTabBtn = document.querySelector('.cust-tab.active');
         const activeTab = activeTabBtn?.dataset?.tab || 'info';
 
@@ -9562,6 +9917,103 @@ window.addEventListener('beforeunload', function() {
         window.stopCustomerDetailRealtime();
     }
 });
+
+window.customerDetailCache = window.customerDetailCache || {};
+
+window.getCustomerDetailCache = function(customerId) {
+    const customerIdStr = String(customerId || '').trim();
+    return window.customerDetailCache[customerIdStr] || null;
+};
+
+window.clearCustomerDetailCache = function(customerId) {
+    const customerIdStr = String(customerId || '').trim();
+    if (!customerIdStr) return;
+    delete window.customerDetailCache[customerIdStr];
+};
+
+window.initCustomerDetailCache = async function(customerId, customerObj = null) {
+    try {
+        if (!window.supabaseClient || !customerId) return null;
+
+        const customerIdStr = String(customerId).trim();
+        const c = customerObj || window.activeCustomer;
+        if (!c) return null;
+
+        const customerHN = String(c.hn || '').trim();
+        const customerOldHN = String(c.old_hn || '').trim();
+        const customerFullname = String(
+            c.fullname || [c.first_name, c.last_name].filter(Boolean).join(' ')
+        ).trim();
+
+        const [
+            remainingRes,
+            usageRes,
+            receiptsRes,
+            appointsRes
+        ] = await Promise.all([
+            window.supabaseClient
+                .from('customer_course_balance_view')
+                .select('*')
+                .or([
+                    `customer_id.eq.${customerIdStr}`,
+                    customerHN ? `hn.eq.${customerHN}` : null,
+                    customerOldHN ? `hn.eq.${customerOldHN}` : null
+                ].filter(Boolean).join(',')),
+
+            window.supabaseClient
+                .from('customer_usage_history_view')
+                .select('*')
+                .or([
+                    `customer_id.eq.${customerIdStr}`,
+                    customerHN ? `hn.eq.${customerHN}` : null,
+                    customerOldHN ? `hn.eq.${customerOldHN}` : null
+                ].filter(Boolean).join(',')),
+
+            window.supabaseClient
+                .from('customer_receipts_view')
+                .select('*')
+                .or([
+                    `customer_id.eq.${customerIdStr}`,
+                    customerHN ? `hn.eq.${customerHN}` : null,
+                    customerOldHN ? `hn.eq.${customerOldHN}` : null
+                ].filter(Boolean).join(',')),
+
+            window.supabaseClient
+                .from('appointments')
+                .select('*')
+                .or([
+                    `customer_id.eq.${customerIdStr}`,
+                    customerHN ? `customerHn.eq.${customerHN}` : null,
+                    customerFullname ? `customer_name.eq.${customerFullname}` : null,
+                    customerFullname ? `customerName.eq.${customerFullname}` : null
+                ].filter(Boolean).join(','))
+        ]);
+
+        window.customerDetailCache[customerIdStr] = {
+            remaining: remainingRes?.data || [],
+            usage: usageRes?.data || [],
+            receipts: receiptsRes?.data || [],
+            appoints: appointsRes?.data || [],
+            loadedAt: Date.now()
+        };
+
+        return window.customerDetailCache[customerIdStr];
+    } catch (e) {
+        console.error('initCustomerDetailCache error:', e);
+        return null;
+    }
+};
+window.getCustomerDetailCache = function(customerId) {
+    const customerIdStr = String(customerId || '').trim();
+    return window.customerDetailCache[customerIdStr] || null;
+};
+
+window.clearCustomerDetailCache = function(customerId) {
+    const customerIdStr = String(customerId || '').trim();
+    if (customerIdStr && window.customerDetailCache[customerIdStr]) {
+        delete window.customerDetailCache[customerIdStr];
+    }
+};
 
 window.viewCustomerDetailById = async function(customerId) {
     try {
@@ -9580,8 +10032,14 @@ window.viewCustomerDetailById = async function(customerId) {
         }
 
         window.activeCustomer = c;
-        const target = document.getElementById('dynamicContent');
-        if (!target) return;
+
+// โหลด cache ล่วงหน้า
+window.initCustomerDetailCache(c.id, c).catch(err => {
+    console.error('preload customer cache error:', err);
+});
+
+const target = document.getElementById('dynamicContent');
+if (!target) return;
 
         // 2. วาดโครงสร้างใหม่ เน้นความคมชัดและปุ่มทรงมนขนาดเล็ก
         target.innerHTML = `
@@ -10153,23 +10611,29 @@ window.openEditCourseRemainingModal = async function(customerId, encodedRow) {
             return;
         }
 
-        await Swal.fire('บันทึกสำเร็จ', `คงเหลือใหม่ ${newRemaining} ${row.unit || 'ครั้ง'}`, 'success');
+       await Swal.fire('บันทึกสำเร็จ', `คงเหลือใหม่ ${newRemaining} ${row.unit || 'ครั้ง'}`, 'success');
 
-        try {
-            if (window.courseRowState) {
-                window.courseRowState.expandedKey = null;
-            }
+try {
+    if (window.courseRowState) {
+        window.courseRowState.expandedKey = null;
+    }
 
-            // รีเฟรชแท็บคอร์สคงเหลือใหม่จาก view ล่าสุด
-            await window.switchCustomerTab('remaining', customerIdStr);
+    if (typeof window.clearCustomerDetailCache === 'function') {
+        window.clearCustomerDetailCache(customerIdStr);
+    }
 
-            // รีดึง active customer อีกรอบให้ state หน้าอัปเดตครบ
-            if (typeof window.refreshActiveCustomerDetailRealtime === 'function') {
-                await window.refreshActiveCustomerDetailRealtime(customerIdStr);
-            }
-        } catch (refreshErr) {
-            console.error('refresh after save error:', refreshErr);
-        }
+    if (typeof window.initCustomerDetailCache === 'function') {
+        await window.initCustomerDetailCache(customerIdStr, window.activeCustomer);
+    }
+
+    await window.switchCustomerTab('remaining', customerIdStr);
+
+    if (typeof window.refreshActiveCustomerDetailRealtime === 'function') {
+        await window.refreshActiveCustomerDetailRealtime(customerIdStr);
+    }
+} catch (refreshErr) {
+    console.error('refresh after save error:', refreshErr);
+}
 
     } catch (e) {
         console.error('openEditCourseRemainingModal error:', e);
@@ -10329,7 +10793,7 @@ window.switchCustomerTab = async function(tabName, customerId) {
         activeBtn.classList.remove('text-slate-500');
     }
 
-    container.innerHTML = `<div class="flex justify-center py-20"><span class="animate-spin text-3xl">⌛</span></div>`;
+    container.innerHTML = `<div class="py-12 text-center text-slate-300 font-bold italic">กำลังโหลดข้อมูล...</div>`;
 
     const customerIdStr = String(customerId || '').trim();
 
@@ -10466,6 +10930,7 @@ window.switchCustomerTab = async function(tabName, customerId) {
 
   else if (tabName === 'remaining') {
     let rows = [];
+    const cached = window.getCustomerDetailCache(customerIdStr);
 
     const pushUnique = (arr) => {
         (arr || []).forEach(item => {
@@ -10500,34 +10965,40 @@ window.switchCustomerTab = async function(tabName, customerId) {
         });
     };
 
-    const q1 = await window.supabaseClient
-        .from('customer_course_balance_view')
-        .select('*')
-        .eq('customer_id', customerIdStr)
-        .order('bill_date', { ascending: false });
-
-    if (!q1.error) pushUnique(q1.data);
-
-    if (customerHN) {
-        const q2 = await window.supabaseClient
+    if (cached && Array.isArray(cached.remaining) && cached.remaining.length > 0) {
+        pushUnique(cached.remaining);
+    } else {
+        const q1 = await window.supabaseClient
             .from('customer_course_balance_view')
             .select('*')
-            .eq('hn', customerHN)
+            .eq('customer_id', customerIdStr)
             .order('bill_date', { ascending: false });
 
-        if (!q2.error) pushUnique(q2.data);
+        if (!q1.error) pushUnique(q1.data);
+
+        if (customerHN) {
+            const q2 = await window.supabaseClient
+                .from('customer_course_balance_view')
+                .select('*')
+                .eq('hn', customerHN)
+                .order('bill_date', { ascending: false });
+
+            if (!q2.error) pushUnique(q2.data);
+        }
+
+        if (customerOldHN) {
+            const q3 = await window.supabaseClient
+                .from('customer_course_balance_view')
+                .select('*')
+                .eq('hn', customerOldHN)
+                .order('bill_date', { ascending: false });
+
+            if (!q3.error) pushUnique(q3.data);
+        }
+
+        window.customerDetailCache[customerIdStr] = window.customerDetailCache[customerIdStr] || {};
+        window.customerDetailCache[customerIdStr].remaining = rows;
     }
-
-    if (customerOldHN) {
-        const q3 = await window.supabaseClient
-            .from('customer_course_balance_view')
-            .select('*')
-            .eq('hn', customerOldHN)
-            .order('bill_date', { ascending: false });
-
-        if (!q3.error) pushUnique(q3.data);
-    }
-
     if (customerBranch) {
         const sameBranchRows = rows.filter(x =>
             !normalizeText(x.branch_name) || normalizeText(x.branch_name) === customerBranch
@@ -10629,8 +11100,9 @@ window.switchCustomerTab = async function(tabName, customerId) {
     `;
 }
 
-      else if (tabName === 'usage') {
+     else if (tabName === 'usage') {
     let usageRows = [];
+    const cached = window.getCustomerDetailCache(customerIdStr);
 
     const pushUnique = (arr) => {
         (arr || []).forEach(item => {
@@ -10667,37 +11139,43 @@ window.switchCustomerTab = async function(tabName, customerId) {
         });
     };
 
-    const q1 = await window.supabaseClient
-        .from('customer_usage_history_view')
-        .select('*')
-        .eq('customer_id', customerIdStr)
-        .order('used_date', { ascending: false })
-        .order('created_at', { ascending: false });
-
-    if (!q1.error) pushUnique(q1.data);
-
-    if (customerHN) {
-        const q2 = await window.supabaseClient
+    if (cached && Array.isArray(cached.usage) && cached.usage.length > 0) {
+        pushUnique(cached.usage);
+    } else {
+        const q1 = await window.supabaseClient
             .from('customer_usage_history_view')
             .select('*')
-            .eq('hn', customerHN)
+            .eq('customer_id', customerIdStr)
             .order('used_date', { ascending: false })
             .order('created_at', { ascending: false });
 
-        if (!q2.error) pushUnique(q2.data);
+        if (!q1.error) pushUnique(q1.data);
+
+        if (customerHN) {
+            const q2 = await window.supabaseClient
+                .from('customer_usage_history_view')
+                .select('*')
+                .eq('hn', customerHN)
+                .order('used_date', { ascending: false })
+                .order('created_at', { ascending: false });
+
+            if (!q2.error) pushUnique(q2.data);
+        }
+
+        if (customerOldHN) {
+            const q3 = await window.supabaseClient
+                .from('customer_usage_history_view')
+                .select('*')
+                .eq('hn', customerOldHN)
+                .order('used_date', { ascending: false })
+                .order('created_at', { ascending: false });
+
+            if (!q3.error) pushUnique(q3.data);
+        }
+
+        window.customerDetailCache[customerIdStr] = window.customerDetailCache[customerIdStr] || {};
+        window.customerDetailCache[customerIdStr].usage = usageRows;
     }
-
-    if (customerOldHN) {
-        const q3 = await window.supabaseClient
-            .from('customer_usage_history_view')
-            .select('*')
-            .eq('hn', customerOldHN)
-            .order('used_date', { ascending: false })
-            .order('created_at', { ascending: false });
-
-        if (!q3.error) pushUnique(q3.data);
-    }
-
     if (customerBranch) {
         const sameBranchRows = usageRows.filter(x =>
             !normalizeText(x.branch_name) || normalizeText(x.branch_name) === customerBranch
@@ -10941,8 +11419,9 @@ window.switchCustomerTab = async function(tabName, customerId) {
     `;
 }
 
-        else if (tabName === 'receipts') {
+       else if (tabName === 'receipts') {
     let receipts = [];
+    const cached = window.getCustomerDetailCache(customerIdStr);
 
     const pushUnique = (arr) => {
         (arr || []).forEach(item => {
@@ -10970,36 +11449,43 @@ window.switchCustomerTab = async function(tabName, customerId) {
         });
     };
 
-    const q1 = await window.supabaseClient
-        .from('customer_receipts_view')
-        .select('*')
-        .eq('customer_id', customerIdStr)
-        .order('bill_date', { ascending: false });
-
-    if (q1.error) {
-        console.error('receiptsError:', q1.error);
+    if (cached && Array.isArray(cached.receipts) && cached.receipts.length > 0) {
+        pushUnique(cached.receipts);
     } else {
-        pushUnique(q1.data);
-    }
-
-    if (customerHN) {
-        const q2 = await window.supabaseClient
+        const q1 = await window.supabaseClient
             .from('customer_receipts_view')
             .select('*')
-            .eq('hn', customerHN)
+            .eq('customer_id', customerIdStr)
             .order('bill_date', { ascending: false });
 
-        if (!q2.error) pushUnique(q2.data);
-    }
+        if (q1.error) {
+            console.error('receiptsError:', q1.error);
+        } else {
+            pushUnique(q1.data);
+        }
 
-    if (customerOldHN) {
-        const q3 = await window.supabaseClient
-            .from('customer_receipts_view')
-            .select('*')
-            .eq('hn', customerOldHN)
-            .order('bill_date', { ascending: false });
+        if (customerHN) {
+            const q2 = await window.supabaseClient
+                .from('customer_receipts_view')
+                .select('*')
+                .eq('hn', customerHN)
+                .order('bill_date', { ascending: false });
 
-        if (!q3.error) pushUnique(q3.data);
+            if (!q2.error) pushUnique(q2.data);
+        }
+
+        if (customerOldHN) {
+            const q3 = await window.supabaseClient
+                .from('customer_receipts_view')
+                .select('*')
+                .eq('hn', customerOldHN)
+                .order('bill_date', { ascending: false });
+
+            if (!q3.error) pushUnique(q3.data);
+        }
+
+        window.customerDetailCache[customerIdStr] = window.customerDetailCache[customerIdStr] || {};
+        window.customerDetailCache[customerIdStr].receipts = receipts;
     }
 
     if (customerBranch) {
@@ -11037,17 +11523,28 @@ window.switchCustomerTab = async function(tabName, customerId) {
 }
 
         else if (tabName === 'appoints') {
-            const { data: appoints, error: appointsError } = await window.supabaseClient
-                .from('appointments')
-                .select('*')
-                .or(`customer_id.eq.${customerIdStr},customerHn.eq.${customerHN},customer_name.eq.${customerFullname},customerName.eq.${customerFullname}`)
-                .order('date', { ascending: false });
+    let appoints = [];
+    const cached = window.getCustomerDetailCache(customerIdStr);
 
-            if (appointsError) {
-                console.error('appointsError:', appointsError);
-                container.innerHTML = `<p class="py-20 text-center text-red-300 italic font-bold relative z-10">โหลดรายการนัดหมายไม่สำเร็จ</p>`;
-                return;
-            }
+    if (cached && Array.isArray(cached.appoints)) {
+        appoints = cached.appoints;
+    } else {
+        const { data, error: appointsError } = await window.supabaseClient
+            .from('appointments')
+            .select('*')
+            .or(`customer_id.eq.${customerIdStr},customerHn.eq.${customerHN},customer_name.eq.${customerFullname},customerName.eq.${customerFullname}`)
+            .order('date', { ascending: false });
+
+        if (appointsError) {
+            console.error('appointsError:', appointsError);
+            container.innerHTML = `<p class="py-20 text-center text-red-300 italic font-bold relative z-10">โหลดรายการนัดหมายไม่สำเร็จ</p>`;
+            return;
+        }
+
+        appoints = data || [];
+        window.customerDetailCache[customerIdStr] = window.customerDetailCache[customerIdStr] || {};
+        window.customerDetailCache[customerIdStr].appoints = appoints;
+    }
 
             container.innerHTML = `
                 <div class="space-y-4 relative z-10">

@@ -5188,8 +5188,6 @@ window.appCourseNote = window.appCourseNote || '';
 
 window.renderSelectedCourses = function() {
     const summaryBox = document.getElementById('selectedCoursesSummary');
-    const appCourse = document.getElementById('appCourse');
-
     if (!summaryBox) return;
 
     const selected = Array.isArray(window.selectedCoursesForApp)
@@ -5197,11 +5195,7 @@ window.renderSelectedCourses = function() {
         : [];
 
     if (!selected.length) {
-        summaryBox.innerHTML = `
-            <div class="text-[11px] text-slate-300 italic px-1">
-                ยังไม่ได้เลือกคอร์ส
-            </div>
-        `;
+        summaryBox.innerHTML = '';
         return;
     }
 
@@ -5247,7 +5241,14 @@ window.selectCourseForApp = function(courseObj) {
         });
     }
 
-    window.renderSelectedCourses();
+    if (typeof window.renderSelectedCourses === 'function') {
+        window.renderSelectedCourses();
+    }
+
+    const resDiv = document.getElementById('appCourseResults');
+    if (resDiv) {
+        resDiv.classList.remove('hidden');
+    }
 
     if (typeof window.searchCourseForApp === 'function') {
         window.searchCourseForApp();
@@ -5260,7 +5261,10 @@ window.removeCourseForApp = function(index) {
     }
 
     window.selectedCoursesForApp.splice(index, 1);
-    window.renderSelectedCourses();
+
+    if (typeof window.renderSelectedCourses === 'function') {
+        window.renderSelectedCourses();
+    }
 
     if (typeof window.searchCourseForApp === 'function') {
         window.searchCourseForApp();
@@ -5272,19 +5276,17 @@ window.getAppointmentCourseText = function() {
         ? window.selectedCoursesForApp
         : [];
 
-    const note = String(document.getElementById('appCourse')?.value || '').trim();
+    const note = String(window.appCourseNote || '').trim();
 
-    const selectedNames = selected.map(item => item.name).filter(Boolean);
-    const courseText = selectedNames.join(', ');
-
-    if (courseText && note) {
-        return `${courseText} | ${note}`;
+    if (selected.length > 0 && note) {
+        return `${selected.join(', ')} | หมายเหตุ: ${note}`;
     }
 
-    if (courseText) return courseText;
-    if (note) return note;
+    if (selected.length > 0) {
+        return selected.join(', ');
+    }
 
-    return '';
+    return note;
 };
 
 window.normalizeCourseName = function(name = '') {
@@ -5370,12 +5372,31 @@ window.getCustomerSharedDB = function() {
 };
 
 // 🎯 2. ตัวล็อกนัดหมาย (Appointment Lock) -> ใช้ ID อ้างอิงสาขา
-window.getAppointmentDBByBranch = function() {
+window.getAppointmentDBByBranch = async function() {
     let db = [];
-    try {
-        db = JSON.parse(localStorage.getItem('appointmentDB')) || [];
-    } catch (e) {
-        db = [];
+
+    if (window.supabaseClient) {
+        try {
+            const { data, error } = await window.supabaseClient
+                .from('appointments')
+                .select('*')
+                .order('date', { ascending: false })
+                .order('time', { ascending: true });
+
+            if (!error && Array.isArray(data)) {
+                db = data;
+            }
+        } catch (e) {
+            console.warn('getAppointmentDBByBranch supabase error:', e);
+        }
+    }
+
+    if (!db.length) {
+        try {
+            db = JSON.parse(localStorage.getItem('appointmentDB')) || [];
+        } catch (e) {
+            db = [];
+        }
     }
 
     if (window.canViewAllBranches()) {
@@ -5829,105 +5850,146 @@ window.selectCustForApp = async function(fullname, customerId, hn = '') {
 };
 
 // ✅ 7. ค้นหาคอร์สของลูกค้าที่เลือก (ID BASED)
-window.searchCourseForApp = function() {
+window.searchCourseForApp = async function() {
     const resDiv = document.getElementById('appCourseResults');
-    const customerId = document.getElementById('appCustSearch')?.dataset?.customerId || '';
+    const customerInput = document.getElementById('appCustSearch');
     const appCourse = document.getElementById('appCourse');
 
-    if (!resDiv || !appCourse) return;
+    if (!resDiv || !customerInput || !appCourse) return;
 
-    if (!customerId) {
+    const customerId = String(customerInput.dataset.customerId || '').trim();
+    const customerHn = String(customerInput.dataset.hn || '').trim();
+    const keyword = String(appCourse.value || '').trim().toLowerCase();
+
+    if (!customerId && !customerHn) {
         resDiv.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs font-normal">กรุณาเลือกลูกค้าก่อน</div>`;
         resDiv.classList.remove('hidden');
         return;
     }
 
-    const keyword = String(appCourse.value || '').toLowerCase().trim();
-
-    const db = window.getCustomers() || [];
-    const customer = db.find(c => String(c.id) === String(customerId));
-
-    if (!customer) {
-        resDiv.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs font-normal">ไม่พบข้อมูลลูกค้า</div>`;
+    if (!window.supabaseClient) {
+        resDiv.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs font-normal">ยังไม่พบการเชื่อมต่อฐานข้อมูล</div>`;
         resDiv.classList.remove('hidden');
         return;
     }
 
-    const courseList = Array.isArray(customer.courses)
-        ? customer.courses
-        : (Array.isArray(customer.courseRemain) ? customer.courseRemain : []);
+    let rows = [];
 
-    if (courseList.length === 0) {
-        resDiv.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs font-normal">ไม่มีคอร์สสะสม</div>`;
-        resDiv.classList.remove('hidden');
-        return;
-    }
+    try {
+        if (customerId) {
+            const { data, error } = await window.supabaseClient
+                .from('customer_course_balance_view')
+                .select('*')
+                .eq('customer_id', customerId)
+                .gt('remaining_qty', 0)
+                .order('bill_date', { ascending: false });
 
-    const selectedSet = new Set(
-        (window.selectedCoursesForApp || []).map(x => String(x.name || '').trim().toLowerCase())
-    );
+            if (!error && Array.isArray(data)) rows = data;
+        }
 
-    const filteredCourses = courseList.filter(c => {
-        const courseName = String(c.name || c.courseName || '').trim();
-        const remain = Number(c.remain ?? c.amount ?? 0);
-        const total = Number(c.totalAmount ?? c.total_qty ?? c.amount ?? remain ?? 1);
+        if ((!rows || rows.length === 0) && customerHn) {
+            const { data, error } = await window.supabaseClient
+                .from('customer_course_balance_view')
+                .select('*')
+                .eq('hn', customerHn)
+                .gt('remaining_qty', 0)
+                .order('bill_date', { ascending: false });
 
-        if (!courseName) return false;
-        if (remain <= 0) return false;
+            if (!error && Array.isArray(data)) rows = data;
+        }
 
-        if (!keyword) return true;
-        return courseName.toLowerCase().includes(keyword);
-    });
+        if (!rows || rows.length === 0) {
+            resDiv.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs font-normal">ไม่มีคอร์สคงเหลือ</div>`;
+            resDiv.classList.remove('hidden');
+            return;
+        }
 
-    if (filteredCourses.length === 0) {
-        resDiv.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs font-normal">ไม่พบคอร์สที่ค้นหา</div>`;
-        resDiv.classList.remove('hidden');
-        return;
-    }
+        const groupedMap = new Map();
 
-    resDiv.innerHTML = filteredCourses.map(c => {
-        const courseName = String(c.name || c.courseName || '-').trim();
-        const remain = Number(c.remain ?? c.amount ?? 0);
-        const total = Number(c.totalAmount ?? c.total_qty ?? c.amount ?? remain ?? 1);
-        const unit = c.unit || 'ครั้ง';
-        const isSelected = selectedSet.has(courseName.toLowerCase());
+        rows.forEach(item => {
+            const courseName = String(item.item_name || '-').trim();
+            const remain = Number(item.remaining_qty || 0);
+            const total = Number(item.total_qty || item.purchased_qty || 0);
+            const unit = String(item.unit || 'ครั้ง').trim();
 
-        return `
-            <div class="p-3 border-b border-pink-50 bg-white hover:bg-pink-50/40 transition-all">
-                <div class="flex items-center justify-between gap-3">
-                    <div class="text-left">
-                        <div class="text-sm font-bold text-slate-700">${window.escapeHtml(courseName)}</div>
-                        <div class="text-[10px] text-pink-400 font-bold mt-1">
-                            คงเหลือ ${remain}/${total} ${window.escapeHtml(unit)}
+            if (!courseName || remain <= 0) return;
+
+            const key = courseName.toLowerCase();
+
+            if (!groupedMap.has(key)) {
+                groupedMap.set(key, {
+                    name: courseName,
+                    remain,
+                    total,
+                    unit
+                });
+            } else {
+                const old = groupedMap.get(key);
+                old.remain += remain;
+                old.total += total;
+            }
+        });
+
+        let courseList = Array.from(groupedMap.values());
+
+        if (keyword) {
+            courseList = courseList.filter(c =>
+                String(c.name || '').toLowerCase().includes(keyword)
+            );
+        }
+
+        const selectedSet = new Set(
+            (window.selectedCoursesForApp || []).map(x =>
+                String(x?.name || '').trim().toLowerCase()
+            )
+        );
+
+        if (courseList.length === 0) {
+            resDiv.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs font-normal">ไม่พบคอร์สที่ค้นหา</div>`;
+            resDiv.classList.remove('hidden');
+            return;
+        }
+
+        resDiv.innerHTML = courseList.map(c => {
+            const isSelected = selectedSet.has(String(c.name || '').toLowerCase());
+
+            return `
+                <div class="p-3 border-b border-pink-50 bg-white hover:bg-pink-50/40 transition-all">
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="text-left">
+                            <div class="text-sm font-bold text-slate-700">${window.escapeHtml(c.name)}</div>
+                            <div class="text-[10px] text-pink-400 font-bold mt-1">
+                                คงเหลือ ${Number(c.remain || 0)} / ${Number(c.total || 0)} ${window.escapeHtml(c.unit || 'ครั้ง')}
+                            </div>
                         </div>
+
+                        ${
+                            isSelected
+                            ? `
+                            <span class="px-3 py-2 rounded-xl bg-slate-100 text-slate-400 text-[10px] font-bold border border-slate-200">
+                                เลือกแล้ว
+                            </span>
+                            `
+                            : `
+                            <button type="button"
+                                onclick='window.selectCourseForApp(${JSON.stringify(c)})'
+                                class="px-3 py-2 rounded-xl bg-pink-50 text-[#D48197] text-[10px] font-bold border border-pink-100 hover:bg-pink-100 transition-all">
+                                + เลือก
+                            </button>
+                            `
+                        }
                     </div>
-
-                    ${
-                        isSelected
-                        ? `
-                        <span class="px-3 py-2 rounded-xl bg-slate-100 text-slate-400 text-[10px] font-bold border border-slate-200">
-                            เลือกแล้ว
-                        </span>
-                        `
-                        : `
-                        <button type="button"
-                            onclick='window.selectCourseForApp(${JSON.stringify({
-                                name: courseName,
-                                remain: remain,
-                                total: total,
-                                unit: unit
-                            })})'
-                            class="px-3 py-2 rounded-xl bg-pink-50 text-[#D48197] text-[10px] font-bold border border-pink-100 hover:bg-pink-100 transition-all">
-                            + เลือก
-                        </button>
-                        `
-                    }
                 </div>
-            </div>
-        `;
-    }).join('');
+            `;
+        }).join('');
 
-    resDiv.classList.remove('hidden');
+        resDiv.classList.remove('hidden');
+
+    } catch (e) {
+        console.error('searchCourseForApp error:', e);
+        resDiv.innerHTML = `<div class="p-4 text-center text-red-300 text-xs font-normal">โหลดคอร์สไม่สำเร็จ</div>`;
+        resDiv.classList.remove('hidden');
+    }
 };
 
 /* =======================================================
@@ -6010,7 +6072,10 @@ window.editAppointmentById = async function(appId) {
     window.openAppointmentModal(realIndex);
 };
 
-window.renderAppointmentPage = function() {
+/* =========================
+   Appointment Page (ฉบับแก้ไขระบบ ID และล็อกสาขาสมบูรณ์)
+========================= */
+window.renderAppointmentPage = async function() {
     const target = document.getElementById('dynamicContent');
     if (!target) return;
 
@@ -6020,7 +6085,7 @@ window.renderAppointmentPage = function() {
     const isAdmin = window.canViewAllBranches();
 
     // ✅ ดึงข้อมูลนัดหมายผ่านระบบกรองสาขา
-    const allAppointments = window.getAppointmentDBByBranch();
+    const allAppointments = await window.getAppointmentDBByBranch();
 
     const dateEl = document.getElementById('filterDate');
     const dateFilter = dateEl ? dateEl.value : "";
@@ -6043,9 +6108,9 @@ window.renderAppointmentPage = function() {
             (apBranch === viewingBranch);
 
         const matchSearch =
-            String(ap.customerName || '').toLowerCase().includes(currentSearch.toLowerCase()) ||
-            String(ap.customer_id || '').toLowerCase().includes(currentSearch.toLowerCase()) ||
-            String(ap.hn || '').toLowerCase().includes(currentSearch.toLowerCase());
+    String(ap.customer_name || ap.customerName || ap.customername || '').toLowerCase().includes(currentSearch.toLowerCase()) ||
+    String(ap.customer_id || '').toLowerCase().includes(currentSearch.toLowerCase()) ||
+    String(ap.hn || ap.customer_hn || '').toLowerCase().includes(currentSearch.toLowerCase());
 
         const matchStatus = statusFilter === "ทั้งหมด" || ap.status === statusFilter;
         const matchDate = !dateFilter || ap.date === dateFilter;
@@ -6152,114 +6217,119 @@ window.renderAppointmentPage = function() {
             </tr>
         </thead>
         <tbody id="appointmentTableBody" class="text-slate-500 font-extralight">
-            ${paginatedData.length > 0 ? paginatedData.map((ap, i) => {
-                const realId = ap.id || ap.createdAt;
-                const customers = window.getCustomers() || [];
-                const customerInfo = customers.find(c => String(c.id) === String(ap.customer_id));
+           ${paginatedData.length > 0 ? paginatedData.map((ap, i) => {
+    const realId = ap.id || ap.appointment_id || ap.created_at || ap.createdAt;
+    const customers = window.getCustomers() || [];
+    const customerInfo = customers.find(c => String(c.id) === String(ap.customer_id));
 
-                const safeHN = customerInfo?.hn || ap.hn || '-';
-                const safeNickname = customerInfo?.nickname || ap.nickname || '-';
-                const sellerName = customerInfo?.seller || customerInfo?.sellerName || ap.seller || '-';
+    const safeHN = customerInfo?.hn || ap.hn || ap.customer_hn || '-';
+    const safeNickname = customerInfo?.nickname || ap.nickname || '-';
+    const sellerName = customerInfo?.seller || customerInfo?.sellerName || ap.seller || '-';
 
-                const rawCourseNames = String(ap.course || '-')
-                    .split(',')
-                    .map(x => x.trim())
-                    .filter(Boolean);
+    const savedLabels = Array.isArray(ap.course_labels)
+        ? ap.course_labels
+        : (Array.isArray(ap.courseLabels) ? ap.courseLabels : []);
 
-                const savedLabels = Array.isArray(ap.courseLabels) ? ap.courseLabels : [];
+    const rawCourseNames = String(ap.course || '')
+        .split('+')
+        .map(x => x.trim())
+        .filter(Boolean);
 
-                const courseBadges = rawCourseNames.map((courseName, idx) => {
-                    const displayName =
-                        savedLabels[idx] ||
-                        window.getCustomerCourseDisplayLabel(ap.customer_id, courseName);
-                    return `<span class="inline-flex items-center px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-[10px] text-slate-600 mr-1 mb-1 font-bold">${displayName}</span>`;
-                }).join('');
+    const courseBadges = rawCourseNames.map((courseName, idx) => {
+        const cleanName = String(courseName || '').replace(/^หมายเหตุ:\s*/i, '').trim();
+        if (!cleanName) return '';
 
-                const statusClass =
-                    ap.status === 'เสร็จสิ้น' ? 'bg-green-50 text-green-600 border-green-200' :
-                    ap.status === 'รอดำเนินการ' ? 'bg-yellow-50 text-yellow-600 border-yellow-200 font-black' :
-                    ap.status === 'ยกเลิก' ? 'bg-red-50 text-red-600 border-red-200' :
-                    ap.status === 'ส่งเข้าคิวแล้ว' ? 'bg-blue-50 text-blue-600 border-blue-200' :
-                    'bg-slate-50 text-slate-500 border-slate-200';
+        const displayName =
+            savedLabels[idx] ||
+            window.getCustomerCourseDisplayLabel(ap.customer_id, cleanName) ||
+            cleanName;
 
-                return `
-                <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all font-extralight text-slate-600" style="height: 60px;">
-                    <td class="p-1 text-center">
-                        <button onclick="window.toggleConfirmAppById('${realId}')"
-                            class="w-4 h-4 rounded-full border flex items-center justify-center mx-auto ${ap.isConfirm ? 'bg-[#D48197] border-[#D48197] text-white' : 'border-slate-300 text-slate-300'}">
-                            <span style="font-size: 7px;">✓</span>
+        return `<span class="inline-flex items-center px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-[10px] text-slate-600 mr-1 mb-1 font-bold">${displayName}</span>`;
+    }).join('');
+
+    const statusClass =
+        ap.status === 'เสร็จสิ้น' ? 'bg-green-50 text-green-600 border-green-200' :
+        ap.status === 'รอดำเนินการ' ? 'bg-yellow-50 text-yellow-600 border-yellow-200 font-black' :
+        ap.status === 'ยกเลิก' ? 'bg-red-50 text-red-600 border-red-200' :
+        ap.status === 'ส่งเข้าคิวแล้ว' ? 'bg-blue-50 text-blue-600 border-blue-200' :
+        'bg-slate-50 text-slate-500 border-slate-200';
+
+    return `
+    <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all font-extralight text-slate-600" style="height: 60px;">
+        <td class="p-1 text-center">
+            <button onclick="window.toggleConfirmAppById('${realId}')"
+                class="w-4 h-4 rounded-full border flex items-center justify-center mx-auto ${ap.is_confirm || ap.isConfirm ? 'bg-[#D48197] border-[#D48197] text-white' : 'border-slate-300 text-slate-300'}">
+                <span style="font-size: 7px;">✓</span>
+            </button>
+        </td>
+
+        <td class="p-1 text-center">${startIndex + i + 1}</td>
+
+        <td class="p-1 text-[9px] leading-tight text-center">
+            ${formatDateTH(ap.date)}<br><span class="text-[#D48197]">${ap.time || '-'}</span>
+        </td>
+
+        <td class="p-1 font-bold text-center">${safeHN}</td>
+
+        <td class="p-1 text-left font-normal text-slate-700">${ap.customer_name || ap.customerName || ap.customername || '-'}</td>
+
+        <td class="p-1 text-center text-[#64748b] italic">${safeNickname}</td>
+
+        <td class="p-1 text-center text-[#D48197] italic font-medium">${sellerName}</td>
+
+        <td class="p-1 text-center truncate">${ap.doctor ? 'พญ.' + ap.doctor : '-'}</td>
+
+        <td class="p-1 text-center truncate">${ap.staff || '-'}</td>
+
+        <td class="p-1 text-left leading-tight max-w-[260px] break-words">${courseBadges || '-'}</td>
+
+        <td class="p-1 text-center">
+            <span class="inline-flex items-center justify-center min-w-[100px] px-3 py-2 rounded-xl border text-[10px] font-bold ${statusClass}">
+                ${ap.status || '-'}
+            </span>
+        </td>
+
+        <td class="p-1 text-center relative" style="overflow: visible !important;">
+            <div class="relative inline-flex items-center justify-center" style="overflow: visible !important;">
+                <div class="inline-flex items-center bg-[#D48197] text-white rounded-full shadow-sm scale-90 relative z-10">
+                    <button onclick="window.editAppointmentById('${realId}')" 
+                        class="pl-4 pr-3 py-2 border-r border-white/20 hover:bg-black/10 text-[12px] uppercase font-extralight">
+                        แก้ไข
+                    </button>
+
+                    <button onclick="event.preventDefault(); event.stopPropagation(); window.toggleAppActionMenu(event, '${realId}')" 
+                        class="px-2.5 py-2 hover:bg-black/10 flex items-center justify-center rounded-r-full">
+                        <span style="font-size: 9px;">▼</span>
+                    </button>
+                </div>
+
+                <div id="app-action-menu-${realId}" class="hidden absolute right-0 top-full mt-2 w-48 bg-white border border-pink-100 rounded-2xl shadow-2xl text-left text-slate-600 font-normal z-[99999] overflow-hidden">
+                    <div class="flex flex-col">
+                        <button onclick="window.sendToServiceQueueById('${realId}')" 
+                            class="w-full px-5 py-3 text-[11px] text-green-600 hover:bg-green-50 border-b border-gray-50 flex items-center gap-3 transition-colors font-normal">
+                            🔄 ส่งเข้าห้องจัดการคิว
                         </button>
-                  </td>
 
-    <td class="p-1 text-center">${startIndex + i + 1}</td>
+                        <button onclick="window.viewAllAppointmentsById('${ap.customer_id}')" 
+                            class="w-full px-5 py-3 text-[11px] text-gray-500 hover:bg-gray-50 border-b border-gray-50 flex items-center gap-3 transition-colors font-normal">
+                            🗓️ ดูวันนัดทั้งหมด
+                        </button>
 
-    <td class="p-1 text-[9px] leading-tight text-center">
-        ${formatDateTH(ap.date)}<br><span class="text-[#D48197]">${ap.time || '-'}</span>
-    </td>
+                        <button onclick="window.printAppointmentCardById('${realId}')" 
+                            class="w-full px-5 py-3 text-[11px] text-blue-500 hover:bg-blue-50 border-b border-gray-50 flex items-center gap-3 transition-colors font-normal">
+                            📄 พิมพ์บัตรนัด
+                        </button>
 
-    <td class="p-1 font-bold text-center">${safeHN}</td>
-
-    <td class="p-1 text-left font-normal text-slate-700">${ap.customerName || '-'}</td>
-
-    <td class="p-1 text-center text-[#64748b] italic">${safeNickname}</td>
-
-    <td class="p-1 text-center text-[#D48197] italic font-medium">${sellerName}</td>
-
-    <td class="p-1 text-center truncate">${ap.doctor ? 'พญ.' + ap.doctor : '-'}</td>
-
-    <td class="p-1 text-center truncate">${ap.staff || '-'}</td>
-
-    <td class="p-1 text-left leading-tight max-w-[260px] break-words">${courseBadges || '-'}</td>
-
-    <td class="p-1 text-center">
-        <span class="inline-flex items-center justify-center min-w-[100px] px-3 py-2 rounded-xl border text-[10px] font-bold ${statusClass}">
-            ${ap.status || '-'}
-        </span>
-    </td>
-
-    <td class="p-1 text-center relative" style="overflow: visible !important;">
-        <div class="relative inline-flex items-center justify-center" style="overflow: visible !important;">
-            
-            <div class="inline-flex items-center bg-[#D48197] text-white rounded-full shadow-sm scale-90 relative z-10">
-                
-                <button onclick="window.editAppointmentById('${realId}')" 
-                    class="pl-4 pr-3 py-2 border-r border-white/20 hover:bg-black/10 text-[12px] uppercase font-extralight">
-                    แก้ไข
-                </button>
-
-                <button onclick="event.preventDefault(); event.stopPropagation(); window.toggleAppActionMenu(event, '${realId}')" 
-                    class="px-2.5 py-2 hover:bg-black/10 flex items-center justify-center rounded-r-full">
-                    <span style="font-size: 9px;">▼</span>
-                </button>
-
+                        <button onclick="window.deleteAppointmentById('${realId}')" 
+                            class="w-full px-5 py-3 text-[11px] text-red-500 hover:bg-red-50 flex items-center gap-3 transition-colors font-normal">
+                            🗑️ ลบนัดหมาย
+                        </button>
+                    </div>
+                </div>
             </div>
-                                 <div id="app-action-menu-${realId}" class="hidden absolute right-0 top-full mt-2 w-48 bg-white border border-pink-100 rounded-2xl shadow-2xl text-left text-slate-600 font-normal z-[99999] overflow-hidden">
-        <div class="flex flex-col">
-            <button onclick="window.sendToServiceQueueById('${realId}')" 
-                class="w-full px-5 py-3 text-[11px] text-green-600 hover:bg-green-50 border-b border-gray-50 flex items-center gap-3 transition-colors font-normal">
-                🔄 ส่งเข้าห้องจัดการคิว
-            </button>
-
-            <button onclick="window.viewAllAppointmentsById('${ap.customer_id}')" 
-                class="w-full px-5 py-3 text-[11px] text-gray-500 hover:bg-gray-50 border-b border-gray-50 flex items-center gap-3 transition-colors font-normal">
-                🗓️ ดูวันนัดทั้งหมด
-            </button>
-
-            <button onclick="window.printAppointmentCardById('${realId}')" 
-                class="w-full px-5 py-3 text-[11px] text-blue-500 hover:bg-blue-50 border-b border-gray-50 flex items-center gap-3 transition-colors font-normal">
-                📄 พิมพ์บัตรนัด
-            </button>
-
-            <button onclick="window.deleteAppointmentById('${realId}')" 
-                class="w-full px-5 py-3 text-[11px] text-red-500 hover:bg-red-50 flex items-center gap-3 transition-colors font-normal">
-                🗑️ ลบนัดหมาย
-            </button>
-        </div>
-    </div>
-                            </div>
-                        </td>
-                    </tr>`;
-            }).join('') : `<tr><td colspan="12" class="p-20 text-center italic text-slate-300">ไม่พบข้อมูลนัดหมาย...</td></tr>`}
+        </td>
+    </tr>`;
+}).join('') : `<tr><td colspan="12" class="p-20 text-center italic text-slate-300">ไม่พบข้อมูลนัดหมาย...</td></tr>`}
         </tbody>
     </table>
 </div>
@@ -6285,34 +6355,47 @@ window.renderAppointmentPage = function() {
 window.openAppointmentModal = async function(appId = null) {
     try {
         let editData = null;
+
         if (appId && appId !== 'null' && window.supabaseClient) {
             const { data, error } = await window.supabaseClient
                 .from('appointments')
                 .select('*')
                 .eq('id', appId)
                 .single();
+
             if (!error && data) editData = data;
         }
 
-        window.editingAppId = appId;
-       window.selectedCoursesForApp = [];
-	window.appCourseNote = '';
+        window.editingAppId = appId || '';
 
-        // ปรับการดึง Options ให้แน่นอนขึ้น
-        const docVal = editData ? (editData.doctor || editData.doctor_name) : '';
-        const staffVal = editData ? (editData.staff || editData.staff_name) : '';
-        
+        // รีเซ็ตค่าทุกครั้งก่อน
+        window.selectedCoursesForApp = [];
+        window.appCourseNote = '';
+
+        // ถ้าเป็นโหมดแก้ไข ให้เก็บ note เดิมไว้
+        if (editData?.course) {
+            const rawCourseText = String(editData.course || '').trim();
+            const splitNote = rawCourseText.split('|');
+            window.appCourseNote = splitNote.length > 1
+                ? splitNote.slice(1).join('|').trim()
+                : '';
+        }
+
+        const docVal = editData ? (editData.doctor || editData.doctor_name || '') : '';
+        const staffVal = editData ? (editData.staff || editData.staff_name || '') : '';
+
         const doctorOptions = typeof window.getDoctorOptionsForAppointment === 'function'
-    ? await window.getDoctorOptionsForAppointment(docVal)
-    : `<option value="${docVal}">${docVal || 'ไม่พบข้อมูลแพทย์'}</option>`;
+            ? await window.getDoctorOptionsForAppointment(docVal)
+            : `<option value="${docVal}">${docVal || 'ไม่พบข้อมูลแพทย์'}</option>`;
 
-const staffOptions = typeof window.getBranchStaffOptions === 'function'
-    ? await window.getBranchStaffOptions(['พนักงานทรีตเม้นท์', 'ผู้ช่วยแพทย์', 'therapist', 'พนักงานผู้ดูแล'], staffVal)
-    : `<option value="${staffVal}">${staffVal || 'ไม่พบข้อมูลพนักงาน'}</option>`;
+        const staffOptions = typeof window.getBranchStaffOptions === 'function'
+            ? await window.getBranchStaffOptions(['พนักงานทรีตเม้นท์', 'ผู้ช่วยแพทย์', 'therapist', 'พนักงานผู้ดูแล'], staffVal)
+            : `<option value="${staffVal}">${staffVal || 'ไม่พบข้อมูลพนักงาน'}</option>`;
 
         const commonFieldClass = "w-full border border-pink-200 px-4 py-2 rounded-xl outline-none text-[13px] bg-white font-normal h-[42px] shadow-sm focus:border-pink-400 transition-all text-slate-600 appearance-none";
 
         document.getElementById('appModal')?.remove();
+
         const modalWrap = document.createElement('div');
         modalWrap.id = "appModal";
         modalWrap.className = "fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] animate-in fade-in duration-300 font-normal";
@@ -6323,17 +6406,21 @@ const staffOptions = typeof window.getBranchStaffOptions === 'function'
                     <h3 class="text-2xl font-black text-slate-800 uppercase italic">
                         ${editData ? '📝 แก้ไขนัดหมาย' : 'ลงนัดหมายลูกค้า'}
                     </h3>
-                    <button onclick="document.getElementById('appModal').remove()" class="text-slate-300 hover:text-pink-400 transition-all text-2xl">✕</button>
+                    <button type="button" onclick="document.getElementById('appModal').remove()" class="text-slate-300 hover:text-pink-400 transition-all text-2xl">✕</button>
                 </div>
 
                 <div class="space-y-4 text-left">
                     <div class="relative">
                         <label class="text-[11px] text-[#FF4B91] ml-2 block font-bold mb-1 uppercase tracking-wider">ค้นหาชื่อลูกค้า / HN</label>
-                        <input type="text" id="appCustSearch" 
-    value="${editData ? (editData.customer_name || editData.customerName || '') : ''}"
-    data-customer-id="${editData ? (editData.customer_id || '') : ''}"
-    data-hn="${editData ? (editData.customerHn || editData.hn || '') : ''}"
-    placeholder="พิมพ์ชื่อหรือเลข ID..." class="${commonFieldClass}">
+                        <input
+                            type="text"
+                            id="appCustSearch"
+                            value="${editData ? (editData.customer_name || editData.customerName || editData.customername || '') : ''}"
+                            data-customer-id="${editData ? (editData.customer_id || '') : ''}"
+                            data-hn="${editData ? (editData.customerHn || editData.hn || '') : ''}"
+                            placeholder="พิมพ์ชื่อหรือเลข ID..."
+                            class="${commonFieldClass}"
+                        >
                         <div id="appCustResults" class="absolute left-0 right-0 bg-white shadow-2xl rounded-2xl mt-1 hidden border border-pink-100 max-h-48 overflow-y-auto z-[10001]"></div>
                     </div>
 
@@ -6342,12 +6429,17 @@ const staffOptions = typeof window.getBranchStaffOptions === 'function'
                             <label class="text-[11px] text-[#FF4B91] ml-2 block font-bold mb-1 uppercase tracking-wider">วันที่นัดหมาย</label>
                             <input type="date" id="appDate" class="${commonFieldClass}" value="${editData ? (editData.date || '') : ''}">
                         </div>
+
                         <div>
                             <label class="text-[11px] text-[#FF4B91] ml-2 block font-bold mb-1 uppercase tracking-wider">เวลานัดหมาย</label>
                             <div class="grid grid-cols-2 gap-2">
                                 <select id="appHour" class="${commonFieldClass}">
-                                    ${Array.from({ length: 24 }, (_, i) => `<option value="${String(i).padStart(2,'0')}">${String(i).padStart(2,'0')}</option>`).join('')}
+                                    ${Array.from({ length: 24 }, (_, i) => {
+                                        const h = String(i).padStart(2, '0');
+                                        return `<option value="${h}">${h}</option>`;
+                                    }).join('')}
                                 </select>
+
                                 <select id="appMin" class="${commonFieldClass}">
                                     ${['00','10','20','30','40','50'].map(m => `<option value="${m}">${m}</option>`).join('')}
                                 </select>
@@ -6360,6 +6452,7 @@ const staffOptions = typeof window.getBranchStaffOptions === 'function'
                             <label class="text-[11px] text-[#FF4B91] ml-2 block font-bold mb-1 uppercase tracking-wider">แพทย์ผู้ดูแล</label>
                             <select id="appDoc" class="${commonFieldClass}">${doctorOptions}</select>
                         </div>
+
                         <div>
                             <label class="text-[11px] text-[#FF4B91] ml-2 block font-bold mb-1 uppercase tracking-wider">พนักงานผู้ดูแล</label>
                             <select id="appStaff" class="${commonFieldClass}">${staffOptions}</select>
@@ -6369,36 +6462,51 @@ const staffOptions = typeof window.getBranchStaffOptions === 'function'
                     <div>
     <label class="text-[11px] text-[#FF4B91] ml-2 block font-bold mb-1 uppercase tracking-wider">รายการคอร์ส</label>
 
-    <div class="bg-slate-50 border-2 border-dashed border-pink-100 rounded-2xl p-3">
-        <div id="selectedCoursesSummary" class="mb-3"></div>
+    <div id="selectedCoursesSummary" class="mb-2"></div>
 
-        <div class="relative">
-            <textarea id="appCourse" rows="3"
-                placeholder="เลือกรายการคอร์ส...."
-                class="w-full bg-white border border-pink-100 rounded-xl outline-none text-sm p-3 resize-none text-slate-700 min-h-[90px]"></textarea>
+    <div class="relative">
+        <textarea
+            id="appCourse"
+            rows="3"
+            placeholder="เลือกรายการคอร์ส และพิมพ์ข้อความต่อได้"
+            class="w-full bg-white border border-pink-100 rounded-2xl outline-none text-sm p-3 resize-none text-slate-700 min-h-[90px]"
+        >${window.escapeHtml(window.appCourseNote || '')}</textarea>
 
-            <div id="appCourseResults"
-                class="absolute left-0 right-0 top-full mt-2 bg-white shadow-2xl rounded-2xl hidden border border-pink-100 max-h-56 overflow-y-auto z-[10001]"></div>
-        </div>
+        <div
+            id="appCourseResults"
+            class="absolute left-0 right-0 top-full mt-2 bg-white shadow-2xl rounded-2xl hidden border border-pink-100 max-h-56 overflow-y-auto z-[10001]"
+        ></div>
     </div>
 </div>
 
+                    <div>
                         <label class="text-[11px] text-[#FF4B91] ml-2 block font-bold mb-1 uppercase tracking-wider">ลูกค้าเซ็นชื่อยืนยันใช้บริการ</label>
                         <div class="relative bg-slate-50 border-2 border-dashed border-pink-100 rounded-2xl overflow-hidden">
                             <canvas id="signature-pad" class="w-full h-32 touch-none cursor-crosshair"></canvas>
-                            <button type="button" onclick="window.clearAppSignature()" 
-                                class="absolute top-2 right-2 bg-white/80 text-slate-400 px-3 py-1 rounded-lg text-[10px] font-bold border border-pink-50">ล้างลายเซ็น</button>
+                            <button
+                                type="button"
+                                onclick="window.clearAppSignature()"
+                                class="absolute top-2 right-2 bg-white/80 text-slate-400 px-3 py-1 rounded-lg text-[10px] font-bold border border-pink-50"
+                            >
+                                ล้างลายเซ็น
+                            </button>
                         </div>
                     </div>
 
                     <div>
                         <label class="text-[11px] text-[#FF4B91] ml-2 block font-bold mb-1 uppercase tracking-wider">หมายเหตุ</label>
-                        <textarea id="appNote" class="w-full border border-pink-200 p-4 rounded-2xl text-[13px] h-20 resize-none bg-white shadow-sm outline-none focus:border-pink-400 text-slate-600">${editData?.note || ''}</textarea>
+                        <textarea
+                            id="appNote"
+                            class="w-full border border-pink-200 p-4 rounded-2xl text-[13px] h-20 resize-none bg-white shadow-sm outline-none focus:border-pink-400 text-slate-600"
+                        >${editData?.note || ''}</textarea>
                     </div>
 
                     <div class="flex justify-end mt-4">
-                        <button onclick="window.saveNewAppointment('${appId || ''}')"
-                            class="bg-black text-white px-10 py-4 rounded-[2rem] font-black shadow-xl hover:bg-[#D48197] hover:scale-[1.02] transition-all text-[12px] uppercase">
+                        <button
+                            type="button"
+                            onclick="window.saveNewAppointment('${appId || ''}')"
+                            class="bg-black text-white px-10 py-4 rounded-[2rem] font-black shadow-xl hover:bg-[#D48197] hover:scale-[1.02] transition-all text-[12px] uppercase"
+                        >
                             ยืนยันการนัดหมาย
                         </button>
                     </div>
@@ -6407,44 +6515,84 @@ const staffOptions = typeof window.getBranchStaffOptions === 'function'
         `;
 
         document.body.appendChild(modalWrap);
-	window.renderSelectedCourses();
 
-        // --- ระบบลายเซ็น ---
+        // render selected courses
+        if (typeof window.renderSelectedCourses === 'function') {
+            window.renderSelectedCourses();
+        }
+
+        // -------- set ค่าเวลาเดิมตอนแก้ไข --------
+        if (editData?.time) {
+            const [h = '00', m = '00'] = String(editData.time).split(':');
+            const appHour = document.getElementById('appHour');
+            const appMin = document.getElementById('appMin');
+            if (appHour) appHour.value = h.padStart(2, '0');
+            if (appMin) appMin.value = m.padStart(2, '0');
+        }
+
+        // -------- ระบบลายเซ็น --------
         const canvas = document.getElementById('signature-pad');
-        const ctx = canvas.getContext('2d');
-        let drawing = false;
-        const resize = () => {
-            const r = window.devicePixelRatio || 1;
-            canvas.width = canvas.offsetWidth * r;
-            canvas.height = canvas.offsetHeight * r;
-            ctx.scale(r, r);
-            ctx.strokeStyle = "#2D3748"; ctx.lineWidth = 2; ctx.lineCap = "round";
-        };
-        window.clearAppSignature = () => ctx.clearRect(0, 0, canvas.width, canvas.height);
-        canvas.addEventListener('mousedown', (e) => { drawing = true; ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY); });
-        canvas.addEventListener('mousemove', (e) => { if(drawing) { ctx.lineTo(e.offsetX, e.offsetY); ctx.stroke(); } });
-        canvas.addEventListener('mouseup', () => drawing = false);
-        // สัมผัส (Touch)
-        canvas.addEventListener('touchstart', (e) => {
-            const t = e.touches[0]; const rect = canvas.getBoundingClientRect();
-            drawing = true; ctx.beginPath(); ctx.moveTo(t.clientX - rect.left, t.clientY - rect.top);
-        });
-        canvas.addEventListener('touchmove', (e) => {
-            if(!drawing) return; e.preventDefault();
-            const t = e.touches[0]; const rect = canvas.getBoundingClientRect();
-            ctx.lineTo(t.clientX - rect.left, t.clientY - rect.top); ctx.stroke();
-        });
-        canvas.addEventListener('touchend', () => drawing = false);
-        setTimeout(resize, 200);
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            let drawing = false;
 
-       // --- แก้ช่องค้าง: ใช้ Timeout ป้องกันการ Search ถี่เกินไป ---
-let searchTimeout;
+            const resize = () => {
+                const ratio = window.devicePixelRatio || 1;
+                canvas.width = canvas.offsetWidth * ratio;
+                canvas.height = canvas.offsetHeight * ratio;
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.scale(ratio, ratio);
+                ctx.strokeStyle = "#2D3748";
+                ctx.lineWidth = 2;
+                ctx.lineCap = "round";
+            };
+
+            window.clearAppSignature = () => ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            canvas.addEventListener('mousedown', (e) => {
+                drawing = true;
+                ctx.beginPath();
+                ctx.moveTo(e.offsetX, e.offsetY);
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                if (!drawing) return;
+                ctx.lineTo(e.offsetX, e.offsetY);
+                ctx.stroke();
+            });
+
+            canvas.addEventListener('mouseup', () => drawing = false);
+            canvas.addEventListener('mouseleave', () => drawing = false);
+
+            canvas.addEventListener('touchstart', (e) => {
+                const t = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                drawing = true;
+                ctx.beginPath();
+                ctx.moveTo(t.clientX - rect.left, t.clientY - rect.top);
+            }, { passive: true });
+
+            canvas.addEventListener('touchmove', (e) => {
+                if (!drawing) return;
+                e.preventDefault();
+                const t = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                ctx.lineTo(t.clientX - rect.left, t.clientY - rect.top);
+                ctx.stroke();
+            }, { passive: false });
+
+            canvas.addEventListener('touchend', () => drawing = false);
+
+            setTimeout(resize, 200);
+        }
+
+        // -------- bind ค้นหาคอร์ส --------
+        let searchTimeout;
 const appCourse = document.getElementById('appCourse');
 
 if (appCourse) {
     appCourse.addEventListener('input', () => {
         clearTimeout(searchTimeout);
-
         searchTimeout = setTimeout(() => {
             if (typeof window.searchCourseForApp === 'function') {
                 window.searchCourseForApp();
@@ -6459,61 +6607,60 @@ if (appCourse) {
     });
 }
 
-// ค้นหาลูกค้า
-const appCustSearch = document.getElementById('appCustSearch');
+        // -------- bind ค้นหาลูกค้า --------
+        const appCustSearch = document.getElementById('appCustSearch');
 
-if (appCustSearch) {
-    let custTimer;
+        if (appCustSearch) {
+            let custTimer;
 
-    appCustSearch.addEventListener('input', function() {
-        clearTimeout(custTimer);
-        const value = this.value;
+            appCustSearch.addEventListener('input', function() {
+                clearTimeout(custTimer);
+                const value = this.value;
 
-        custTimer = setTimeout(async () => {
-            if (typeof window.searchCustomerForApp === 'function') {
-                await window.searchCustomerForApp(value);
+                custTimer = setTimeout(async () => {
+                    if (typeof window.searchCustomerForApp === 'function') {
+                        await window.searchCustomerForApp(value);
+                    }
+                }, 250);
+            });
+        }
+
+        // -------- ปิด dropdown เมื่อกดข้างนอก --------
+        if (!window.__appModalOutsideClickBound) {
+            window.__appModalOutsideClickBound = true;
+
+            document.addEventListener('click', function(e) {
+                const resultBox = document.getElementById('appCustResults');
+                const input = document.getElementById('appCustSearch');
+                const courseBox = document.getElementById('appCourseResults');
+                const courseInput = document.getElementById('appCourse');
+
+                if (resultBox && input && !resultBox.contains(e.target) && e.target !== input) {
+                    resultBox.classList.add('hidden');
+                }
+
+                if (courseBox && courseInput && !courseBox.contains(e.target) && e.target !== courseInput) {
+                    courseBox.classList.add('hidden');
+                }
+            });
+        }
+
+        // -------- ถ้าเป็นโหมดแก้ไขและมี customer id ให้โหลดคอร์สทันที --------
+        if (editData?.customer_id) {
+            const custInput = document.getElementById('appCustSearch');
+            if (custInput) {
+                custInput.dataset.customerId = editData.customer_id || '';
+                custInput.dataset.hn = editData.customerHn || editData.hn || '';
             }
-        }, 250);
-    });
 
-    appCustSearch.addEventListener('focus', async function() {
-        if (this.value.trim() && typeof window.searchCustomerForApp === 'function') {
-            await window.searchCustomerForApp(this.value);
+            if (typeof window.searchCourseForApp === 'function') {
+                await window.searchCourseForApp();
+            }
         }
-    });
-}
-
-// ปิด dropdown เมื่ิอกดข้างนอก
-if (!window.__appModalOutsideClickBound) {
-    window.__appModalOutsideClickBound = true;
-
-    document.addEventListener('click', function(e) {
-        const resultBox = document.getElementById('appCustResults');
-        const input = document.getElementById('appCustSearch');
-        const courseBox = document.getElementById('appCourseResults');
-        const courseInput = document.getElementById('appCourse');
-
-        if (resultBox && input && !resultBox.contains(e.target) && e.target !== input) {
-            resultBox.classList.add('hidden');
-        }
-
-        if (courseBox && courseInput && !courseBox.contains(e.target) && e.target !== courseInput) {
-            courseBox.classList.add('hidden');
-        }
-    });
-}
-
-// set เวลาเดิมตอนแก้ไข
-if (editData?.time) {
-    const [h = '00', m = '00'] = String(editData.time).split(':');
-    const appHour = document.getElementById('appHour');
-    const appMin = document.getElementById('appMin');
-    if (appHour) appHour.value = h.padStart(2, '0');
-    if (appMin) appMin.value = m.padStart(2, '0');
-}
 
     } catch (e) {
         console.error("Modal Error:", e);
+        Swal.fire('เกิดข้อผิดพลาด', e.message || 'เปิดหน้าต่างนัดหมายไม่สำเร็จ', 'error');
     }
 };
 
@@ -6541,7 +6688,7 @@ window.clearQueueDateFilter = function() {
     renderQueuePage(); 
 };
 
-// ✅ ฟังก์ชันบันทึกนัดหมาย (เชื่อมต่อ Supabase & UUID 100%)
+// ✅ ฟังก์ชันบันทึกนัดหมาย 
 window.saveNewAppointment = async function(appId = '') {
     try {
         const customerInput = document.getElementById('appCustSearch');
@@ -6553,13 +6700,29 @@ window.saveNewAppointment = async function(appId = '') {
         const hour = document.getElementById('appHour')?.value || '00';
         const min = document.getElementById('appMin')?.value || '00';
 
-        const doctor = document.getElementById('appDoc')?.value || '-';
-        const staff = document.getElementById('appStaff')?.value || '-';
+        const doctor = document.getElementById('appDoc')?.value || '';
+        const staff = document.getElementById('appStaff')?.value || '';
         const note = document.getElementById('appNote')?.value?.trim() || '';
         const status = 'รอดำเนินการ';
 
-        const courseText = document.getElementById('appCourse')?.value?.trim() || '';
-        const selectedCourses = Array.isArray(window.selectedCoursesForApp) ? window.selectedCoursesForApp : [];
+        const selectedCourses = Array.isArray(window.selectedCoursesForApp)
+            ? window.selectedCoursesForApp
+            : [];
+
+        const selectedCourseNames = selectedCourses
+            .map(item => String(item?.name || '').trim())
+            .filter(Boolean);
+
+        const typedNote = String(document.getElementById('appCourse')?.value || '').trim();
+
+        let courseText = '';
+        if (selectedCourseNames.length > 0 && typedNote) {
+            courseText = `${selectedCourseNames.join(' + ')} + ${typedNote}`;
+        } else if (selectedCourseNames.length > 0) {
+            courseText = selectedCourseNames.join(' + ');
+        } else if (typedNote) {
+            courseText = typedNote;
+        }
 
         if (!customerName || !customerId) {
             Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกลูกค้าจากรายการก่อนค่ะ', 'warning');
@@ -6572,43 +6735,42 @@ window.saveNewAppointment = async function(appId = '') {
         }
 
         if (!courseText) {
-            Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกรายการคอร์สหรือพิมพ์รายการคอร์สค่ะ', 'warning');
+            Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกรายการคอร์สหรือพิมพ์รายละเอียดเพิ่มเติมค่ะ', 'warning');
             return;
-        }
-
-        const payload = {
-            id: appId || crypto.randomUUID(),
-            appointment_id: appId || crypto.randomUUID(),
-            customer_id: String(customerId),
-            customer_hn: String(customerHn || ''),
-            customer_name: customerName,
-            customername: customerName,
-            hn: String(customerHn || ''),
-            date: date,
-            time: `${hour}:${min}`,
-            doctor: doctor,
-            doctor_name: doctor,
-            staff: staff,
-            staff_name: staff,
-            course: courseText,
-            course_labels: selectedCourses,
-            note: note,
-            status: status,
-            branch: typeof window.getCurrentViewingBranch === 'function'
-                ? window.getCurrentViewingBranch()
-                : 'สาขาบางพลี',
-            updated_at: new Date().toISOString(),
-            updatedat: Date.now()
-        };
-
-        if (!appId) {
-            payload.created_at = new Date().toISOString();
-            payload.createdat = Date.now();
         }
 
         if (!window.supabaseClient) {
             Swal.fire('ผิดพลาด', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
             return;
+        }
+
+        const safeId = appId || crypto.randomUUID();
+
+        const payload = {
+            id: safeId,
+            appointment_id: safeId,
+            customer_id: String(customerId),
+            customer_hn: String(customerHn || ''),
+            customer_name: customerName,
+            hn: String(customerHn || ''),
+            date: date,
+            time: `${hour}:${min}`,
+            doctor: doctor || '-',
+            doctor_name: doctor || '-',
+            staff: staff || '-',
+            staff_name: staff || '-',
+            course: courseText,
+            course_labels: selectedCourseNames,
+            note: note,
+            status: status,
+            branch: typeof window.getCurrentViewingBranch === 'function'
+                ? window.getCurrentViewingBranch()
+                : 'สาขาบางพลี',
+            updated_at: new Date().toISOString()
+        };
+
+        if (!appId) {
+            payload.created_at = new Date().toISOString();
         }
 
         const { error } = await window.supabaseClient
@@ -7714,7 +7876,7 @@ if (appCourse) {
     });
 
     appCourse.addEventListener('input', () => {
-        
+        window.appCourseNote = appCourse.value || '';
 
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(() => {
@@ -19141,14 +19303,6 @@ window.addEventListener('load', function() {
 /* =======================================================
    🔔 ระบบแจ้งเตือนนัดหมายและวันเกิด
    ======================================================= */
-window.getAppointments = function() {
-    try {
-        return JSON.parse(localStorage.getItem('appointmentDB')) || [];
-    } catch (e) {
-        return [];
-    }
-};
-
 window.getCustomers = function() {
     try {
         return JSON.parse(localStorage.getItem('customerDB')) || [];
@@ -19156,13 +19310,32 @@ window.getCustomers = function() {
         return [];
     }
 };
-window.updateNotificationBadges = function() {
+
+window.getCustomersFromSupabase = async function() {
+    try {
+        if (window.supabaseClient) {
+            const { data, error } = await window.supabaseClient
+                .from('customers')
+                .select('*');
+
+            if (!error && Array.isArray(data)) {
+                return data;
+            }
+        }
+        return [];
+    } catch (e) {
+        console.error('getCustomersFromSupabase error:', e);
+        return [];
+    }
+};
+
+window.updateNotificationBadges = async function() {
     const appointments = typeof window.getAppointments === 'function'
-        ? window.getAppointments()
+        ? await window.getAppointments()
         : [];
 
     const customers = typeof window.getCustomers === 'function'
-        ? window.getCustomers()
+        ? await window.getCustomers()
         : [];
 
     const today = new Date();
@@ -19172,7 +19345,11 @@ window.updateNotificationBadges = function() {
         month: 'numeric'
     });
 
-    const todayApps = appointments.filter(a => a.date === todayStr && a.status !== 'ยกเลิก');
+    const todayApps = appointments.filter(a =>
+        String(a.date || '') === todayStr &&
+        String(a.status || '') !== 'ยกเลิก'
+    );
+
     const notiEl = document.getElementById('notiCount');
     if (notiEl) {
         notiEl.innerText = todayApps.length;
@@ -19212,25 +19389,42 @@ window.updateNotificationBadges = function() {
 };
 
 // 2. ฟังก์ชันแสดงรายละเอียดนัดหมาย
-window.showAppointmentNotifications = function() {
-    const appointments = typeof window.getAppointments === 'function'
-        ? window.getAppointments()
-        : [];
+window.showAppointmentNotifications = async function() {
+    let appointments = [];
+
+    try {
+        appointments = typeof window.getAppointments === 'function'
+            ? await window.getAppointments()
+            : [];
+    } catch (e) {
+        console.error('showAppointmentNotifications error:', e);
+        appointments = [];
+    }
 
     const todayStr = new Date().toISOString().split('T')[0];
-    const list = appointments.filter(a => a.date === todayStr);
+    const list = appointments.filter(a =>
+        String(a.date || '') === todayStr &&
+        String(a.status || '') !== 'ยกเลิก'
+    );
 
-    let html = list.length > 0 
+    let html = list.length > 0
         ? list.map(a => `
             <div class="flex justify-between items-center p-3 border-b border-pink-50 hover:bg-pink-50/30 transition-all text-left">
                 <div>
-                    <p class="text-xs font-bold text-slate-500">${a.customerName || 'ไม่ระบุชื่อ'}</p>
-                    <p class="text-[10px] text-[#D48197] font-bold uppercase italic">${a.course || 'ไม่ระบุรายการ'}</p>
+                    <p class="text-xs font-bold text-slate-500">
+                        ${window.escapeHtml(a.customer_name || a.customerName || 'ไม่ระบุชื่อ')}
+                    </p>
+                    <p class="text-[10px] text-[#D48197] font-bold uppercase italic">
+                        ${window.escapeHtml(a.course || 'ไม่ระบุรายการ')}
+                    </p>
                 </div>
                 <div class="text-right">
-                    <p class="text-[11px] font-black text-slate-800">${a.time} น.</p>
+                    <p class="text-[11px] font-black text-slate-800">
+                        ${window.escapeHtml(a.time || '-')} น.
+                    </p>
                 </div>
-            </div>`).join('')
+            </div>
+        `).join('')
         : `<div class="py-10 text-center text-slate-300 italic">ไม่มีนัดหมายใหม่สำหรับวันนี้ค่ะ</div>`;
 
     Swal.fire({

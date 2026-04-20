@@ -166,61 +166,136 @@
     input[type=number]::-webkit-inner-spin-button, 
     input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
-   /* ========================================= */
-    /* 5. 🖨️ ตั้งค่าการพิมพ์ (Print Mode - A5 Portrait Optimized for Safari/Chrome) */
-    /* ========================================= */
-
-   /* 🖨️ ตั้งค่าการพิมพ์รายงาน และ OPD */
+  /* ========================================= */
+/* 5. 🖨️ ตั้งค่าการพิมพ์รายงาน / OPD */
+/* เสถียรขึ้นสำหรับ Windows / Chrome / Edge / Safari */
+/* ========================================= */
 @media print {
-    body * {
-        visibility: hidden;
+
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        background: #fff !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
     }
 
-    aside, header, button, select, input, .no-print {
+    /* ซ่อนทุกอย่างก่อน */
+    body * {
+        visibility: hidden !important;
+    }
+
+    /* ส่วนที่ไม่ต้องพิมพ์ */
+    aside,
+    header,
+    nav,
+    footer,
+    button,
+    .no-print,
+    .swal2-container,
+    .swal2-popup {
         display: none !important;
     }
 
+    /* แสดงเฉพาะพื้นที่พิมพ์ */
     #dynamicContent,
     #dynamicContent * {
-        visibility: visible;
+        visibility: visible !important;
     }
 
     #dynamicContent {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-        background: white;
-        padding: 20px;
+        position: fixed !important;
+        inset: 0 !important;
+        width: 100% !important;
+        min-height: 100% !important;
+        margin: 0 !important;
+        padding: 12mm !important;
+        background: #fff !important;
+        overflow: visible !important;
+        box-sizing: border-box !important;
+        z-index: 999999 !important;
     }
 
-    thead {
-        display: table-header-group;
+    /* กัน element ที่ใช้ scroll แล้วพิมพ์ขาด */
+    #dynamicContent .overflow-x-auto,
+    #dynamicContent .overflow-y-auto,
+    #dynamicContent .overflow-auto,
+    #dynamicContent [class*="overflow-"] {
+        overflow: visible !important;
+        max-height: none !important;
+        max-width: none !important;
     }
 
-    tr {
-        page-break-inside: avoid;
+    /* ตาราง */
+    #dynamicContent table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        table-layout: auto !important;
+        font-size: 11px !important;
+        page-break-inside: auto !important;
     }
 
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 12px;
+    #dynamicContent thead {
+        display: table-header-group !important;
     }
 
-    th, td {
-        border: 1px solid #ddd;
-        padding: 8px;
+    #dynamicContent tfoot {
+        display: table-footer-group !important;
+    }
+
+    #dynamicContent tr,
+    #dynamicContent td,
+    #dynamicContent th {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+
+    #dynamicContent th,
+    #dynamicContent td {
+        border: 1px solid #ddd !important;
+        padding: 6px 8px !important;
+        vertical-align: top !important;
+        word-break: break-word !important;
+        white-space: normal !important;
+    }
+
+    /* ถ้ามี card / shadow / radius เยอะเกินตอนพิมพ์ ให้เบาลง */
+    #dynamicContent .shadow,
+    #dynamicContent .shadow-sm,
+    #dynamicContent .shadow-md,
+    #dynamicContent .shadow-lg,
+    #dynamicContent .shadow-xl,
+    #dynamicContent .shadow-2xl {
+        box-shadow: none !important;
+    }
+
+    /* ลิงก์ / ปุ่ม / form บางตัวไม่ควรเด้ง layout */
+    #dynamicContent input,
+    #dynamicContent select,
+    #dynamicContent textarea {
+        border: 1px solid #ddd !important;
+        background: #fff !important;
+        color: #000 !important;
+    }
+
+    /* กัน sticky/fixed ทำให้พิมพ์ซ้อน */
+    #dynamicContent [style*="position: sticky"],
+    #dynamicContent .sticky {
+        position: static !important;
+    }
+
+    #dynamicContent [style*="position: fixed"] {
+        position: static !important;
     }
 
     @page {
         size: A4 landscape;
-        margin: 1cm;
+        margin: 8mm;
     }
 }
-
 </style>
-
 <style id="ace-simple-theme">
 
 :root{
@@ -5463,46 +5538,45 @@ window.searchCourseForApp = async function() {
     const customerHn = String(customerInput.dataset.hn || '').trim();
 
     if (!customerId && !customerHn) {
-        wrapper.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs font-normal">กรุณาเลือกลูกค้าก่อน</div>`;
+        wrapper.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs">กรุณาเลือกลูกค้าก่อน</div>`;
         return;
     }
 
     if (!window.supabaseClient) {
-        wrapper.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs font-normal">ยังไม่พบการเชื่อมต่อฐานข้อมูล</div>`;
+        wrapper.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs">ยังไม่พบการเชื่อมต่อฐานข้อมูล</div>`;
         return;
     }
 
     let rows = [];
 
     try {
+        // 🔥 ใช้ view ใหม่ (แต่ยัง safe ถ้า field ไม่มี)
+        const TABLE_NAME = 'customer_course_balance_view_ui';
+
         if (customerId) {
             const { data, error } = await window.supabaseClient
-                .from('customer_course_balance_view')
+                .from(TABLE_NAME)
                 .select('*')
                 .eq('customer_id', customerId)
-                .gt('remaining_qty', 0)
-                .order('bill_date', { ascending: false });
+                .gt('remaining_qty', 0);
 
-            if (!error && Array.isArray(data)) {
-                rows = data;
-            }
+            if (error) console.error(error);
+            if (Array.isArray(data)) rows = data;
         }
 
         if ((!rows || rows.length === 0) && customerHn) {
             const { data, error } = await window.supabaseClient
-                .from('customer_course_balance_view')
+                .from(TABLE_NAME)
                 .select('*')
                 .eq('hn', customerHn)
-                .gt('remaining_qty', 0)
-                .order('bill_date', { ascending: false });
+                .gt('remaining_qty', 0);
 
-            if (!error && Array.isArray(data)) {
-                rows = data;
-            }
+            if (error) console.error(error);
+            if (Array.isArray(data)) rows = data;
         }
 
         if (!rows || rows.length === 0) {
-            wrapper.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs font-normal">ไม่มีคอร์สคงเหลือ</div>`;
+            wrapper.innerHTML = `<div class="p-4 text-center text-slate-300 text-xs">ไม่มีคอร์สคงเหลือ</div>`;
             return;
         }
 
@@ -5518,34 +5592,67 @@ window.searchCourseForApp = async function() {
 
             const key = courseName.toLowerCase();
 
+            const expiryDate = item.display_expiry_date || null;
+            const expiryStatus = item.expiry_status || 'normal';
+
             if (!groupedMap.has(key)) {
                 groupedMap.set(key, {
                     courseName,
                     remain,
                     total,
-                    unit
+                    unit,
+                    expiryDate,
+                    expiryStatus
                 });
             } else {
                 const old = groupedMap.get(key);
                 old.remain += remain;
                 old.total += total;
+
+                // 🔥 เลือกวันหมดอายุที่ใกล้ที่สุด
+                if (expiryDate) {
+                    if (!old.expiryDate || expiryDate < old.expiryDate) {
+                        old.expiryDate = expiryDate;
+                        old.expiryStatus = expiryStatus;
+                    }
+                }
             }
         });
 
         const courseList = Array.from(groupedMap.values());
 
-        wrapper.innerHTML = courseList.map(c => `
-            <div class="p-3 border-b border-pink-50 bg-white">
-                <div class="text-sm font-bold text-slate-700">${window.escapeHtml(c.courseName)}</div>
-                <div class="text-[10px] text-pink-400 font-bold mt-1">
-                    คงเหลือ ${Number(c.remain || 0)}/${Number(c.total || 0)} ${window.escapeHtml(c.unit || 'ครั้ง')}
+        wrapper.innerHTML = courseList.map(c => {
+
+            let expiryClass = 'text-slate-400';
+
+            if (c.expiryStatus === 'expired') {
+                expiryClass = 'text-red-600 font-semibold';
+            } else if (c.expiryStatus === 'warning') {
+                expiryClass = 'text-orange-500 font-semibold';
+            }
+
+            return `
+                <div class="p-3 border-b border-pink-50 bg-white">
+                    
+                    <div class="text-sm font-bold text-slate-700">
+                        ${window.escapeHtml(c.courseName)}
+                    </div>
+
+                    <div class="text-[10px] text-pink-400 font-bold mt-1">
+                        คงเหลือ ${Number(c.remain || 0)}/${Number(c.total || 0)} ${window.escapeHtml(c.unit)}
+                    </div>
+
+                    <div class="text-[10px] mt-1 ${expiryClass}">
+                        หมดอายุ: ${c.expiryDate ? window.escapeHtml(c.expiryDate) : '-'}
+                    </div>
+
                 </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
 
     } catch (e) {
         console.error('searchCourseForApp error:', e);
-        wrapper.innerHTML = `<div class="p-4 text-center text-red-300 text-xs font-normal">โหลดคอร์สไม่สำเร็จ</div>`;
+        wrapper.innerHTML = `<div class="p-4 text-center text-red-300 text-xs">โหลดคอร์สไม่สำเร็จ</div>`;
     }
 };
 
@@ -5649,178 +5756,84 @@ window.getCustomerSharedDB = function() {
     return [];
 };
 
-// 🎯 2. ตัวล็อกนัดหมาย (Appointment Lock) -> ใช้ ID อ้างอิงสาขา
+// ✅ ดึงนัดหมายจาก Supabase แบบล็อกตามสาขา
 window.getAppointmentDBByBranch = async function() {
-    let db = [];
-
-    if (window.supabaseClient) {
-        try {
-            const { data, error } = await window.supabaseClient
-                .from('appointments')
-                .select('*')
-                .order('date', { ascending: false })
-                .order('time', { ascending: true });
-
-            if (!error && Array.isArray(data)) {
-                db = data;
-            }
-        } catch (e) {
-            console.warn('getAppointmentDBByBranch supabase error:', e);
-        }
-    }
-
-    if (!db.length) {
-        try {
-            db = JSON.parse(localStorage.getItem('appointmentDB')) || [];
-        } catch (e) {
-            db = [];
-        }
-    }
-
-    if (window.canViewAllBranches()) {
-        return db;
-    }
-
-    return window.filterByBranch(db, a => a.branch);
-};
-
-// 🎯 3. ตัวล็อกคิว (Queue Lock) -> ใช้ ID อ้างอิงสาขา
-window.getQueueDBByBranch = function() {
-    let db = [];
     try {
-        db = JSON.parse(localStorage.getItem('todayQueueDB')) || [];
-    } catch (e) {
-        db = [];
-    }
-
-    if (window.canViewAllBranches()) {
-        return db;
-    }
-
-    return window.filterByBranch(db, q => q.branch);
-};
-
-// ✅ ดึงรายชื่อพนักงานจาก staff_profiles
-window.getBranchStaffOptions = async function(allowedRoles = [], selectedValue = '') {
-    try {
-        if (!window.supabaseClient) {
-            return `<option value="">ไม่พบข้อมูลพนักงาน</option>`;
-        }
+        if (!window.supabaseClient) return [];
 
         const viewingBranch = typeof window.getCurrentViewingBranch === 'function'
             ? window.getCurrentViewingBranch()
             : 'ทุกสาขา';
 
         let query = window.supabaseClient
-            .from('staff_profiles')
-            .select('id, full_name, nickname, role, branch, is_active, employment_status')
-            .eq('is_active', true)
-            .order('full_name', { ascending: true });
+            .from('appointments')
+            .select('*')
+            .order('date', { ascending: false })
+            .order('time', { ascending: true });
 
-        // ✅ ล็อกตามสาขา
-        if (viewingBranch !== 'ทุกสาขา' && typeof window.canViewAllBranches === 'function' && !window.canViewAllBranches()) {
+        // ✅ ถ้าไม่ใช่สิทธิ์ดูทุกสาขา ให้กรองจาก query เลย
+        if (
+            viewingBranch !== 'ทุกสาขา' &&
+            typeof window.canViewAllBranches === 'function' &&
+            !window.canViewAllBranches()
+        ) {
             query = query.eq('branch', viewingBranch);
         }
 
         const { data, error } = await query;
 
         if (error) {
-            console.error('getBranchStaffOptions error:', error);
-            return `<option value="">ไม่พบข้อมูลพนักงาน</option>`;
+            console.error('getAppointmentDBByBranch error:', error);
+            return [];
         }
 
-        let staffList = data || [];
-
-        const normalize = (v) => String(v || '').trim().toLowerCase();
-        const allowed = (allowedRoles || []).map(normalize);
-
-        if (allowed.length > 0) {
-            staffList = staffList.filter(item => {
-                const role = normalize(item.role);
-
-                const groupTherapist = [
-                    'พนักงานทรีตเม้นท์',
-                    'ผู้ช่วยแพทย์',
-                    'therapist',
-                    'พนักงานผู้ดูแล'
-                ].map(x => x.toLowerCase());
-
-                return allowed.includes(role) ||
-                    (allowed.includes('พนักงานทรีตเม้นท์') && groupTherapist.includes(role)) ||
-                    (allowed.includes('ผู้ช่วยแพทย์') && groupTherapist.includes(role)) ||
-                    (allowed.includes('therapist') && groupTherapist.includes(role)) ||
-                    (allowed.includes('พนักงานผู้ดูแล') && groupTherapist.includes(role));
-            });
-        }
-
-        if (!staffList.length) {
-            return `<option value="">ไม่พบข้อมูลพนักงาน</option>`;
-        }
-
-        return `
-            <option value="">-- เลือกพนักงาน --</option>
-            ${staffList.map(s => {
-                const value = s.full_name || '-';
-                const selected = String(value) === String(selectedValue) ? 'selected' : '';
-                return `<option value="${value}" ${selected}>${value}</option>`;
-            }).join('')}
-        `;
+        return Array.isArray(data) ? data : [];
     } catch (e) {
-        console.error('getBranchStaffOptions catch:', e);
-        return `<option value="">ไม่พบข้อมูลพนักงาน</option>`;
+        console.error('getAppointmentDBByBranch catch:', e);
+        return [];
     }
 };
 
-// ✅ ดึงรายชื่อแพทย์จาก staff_profiles
-window.getDoctorOptionsForAppointment = async function(selectedValue = '') {
+// ✅ ดึงข้อมูลคิวจาก Supabase แบบล็อกตามสาขา
+window.getQueueDBByBranch = async function() {
+    let db = [];
+
     try {
-        if (!window.supabaseClient) {
-            return `<option value="">ไม่พบข้อมูลแพทย์</option>`;
-        }
+        if (!window.supabaseClient) return [];
 
         const viewingBranch = typeof window.getCurrentViewingBranch === 'function'
             ? window.getCurrentViewingBranch()
             : 'ทุกสาขา';
 
         let query = window.supabaseClient
-            .from('staff_profiles')
-            .select('id, full_name, nickname, role, branch, is_active, employment_status')
-            .eq('is_active', true)
-            .order('full_name', { ascending: true });
+            .from('queues')
+            .select('*')
+            .order('date', { ascending: true })
+            .order('time', { ascending: true })
+            .order('created_at', { ascending: true });
 
-        // ✅ ล็อกตามสาขา ยกเว้นคนที่ดูได้ทุกสาขา
-        if (viewingBranch !== 'ทุกสาขา' && typeof window.canViewAllBranches === 'function' && !window.canViewAllBranches()) {
+        // ✅ ถ้าไม่ใช่คนที่ดูทุกสาขา ให้ล็อกตามสาขาที่กำลังดู
+        if (
+            viewingBranch !== 'ทุกสาขา' &&
+            typeof window.canViewAllBranches === 'function' &&
+            !window.canViewAllBranches()
+        ) {
             query = query.eq('branch', viewingBranch);
         }
 
         const { data, error } = await query;
 
         if (error) {
-            console.error('getDoctorOptionsForAppointment error:', error);
-            return `<option value="">ไม่พบข้อมูลแพทย์</option>`;
+            console.error('getQueueDBByBranch error:', error);
+            return [];
         }
 
-        const doctorRoles = ['หมอ', 'แพทย์', 'doctor', 'แพทย์ผู้ดูแล'];
-        const doctors = (data || []).filter(item => {
-            const role = String(item.role || '').trim().toLowerCase();
-            return doctorRoles.map(x => x.toLowerCase()).includes(role);
-        });
+        db = Array.isArray(data) ? data : [];
 
-        if (!doctors.length) {
-            return `<option value="">ไม่พบข้อมูลแพทย์</option>`;
-        }
-
-        return `
-            <option value="">-- เลือกแพทย์ --</option>
-            ${doctors.map(d => {
-                const value = d.full_name || '-';
-                const selected = String(value) === String(selectedValue) ? 'selected' : '';
-                return `<option value="${value}" ${selected}>${value}</option>`;
-            }).join('')}
-        `;
+        return db;
     } catch (e) {
-        console.error('getDoctorOptionsForAppointment catch:', e);
-        return `<option value="">ไม่พบข้อมูลแพทย์</option>`;
+        console.error('getQueueDBByBranch catch:', e);
+        return [];
     }
 };
 
@@ -6373,17 +6386,6 @@ if (editData?.course) {
         const docVal = editData ? (editData.doctor || editData.doctor_name || '') : '';
         const staffVal = editData ? (editData.staff || editData.staff_name || '') : '';
 
-       const doctorOptions = typeof window.getDoctorOptionsForAppointment === 'function'
-    ? await window.getDoctorOptionsForAppointment(docVal)
-    : `<option value="${docVal}">${docVal || 'ไม่พบข้อมูลแพทย์'}</option>`;
-
-const staffOptions = typeof window.getBranchStaffOptions === 'function'
-    ? await window.getBranchStaffOptions(
-        ['พนักงานทรีตเม้นท์', 'ผู้ช่วยแพทย์', 'therapist', 'พนักงานผู้ดูแล'],
-        staffVal
-      )
-    : `<option value="${staffVal}">${staffVal || 'ไม่พบข้อมูลพนักงาน'}</option>`;
-
         const commonFieldClass = "w-full border border-pink-200 px-4 py-2 rounded-xl outline-none text-[13px] bg-white font-normal h-[42px] shadow-sm focus:border-pink-400 transition-all text-slate-600 appearance-none";
 
         document.getElementById('appModal')?.remove();
@@ -6438,16 +6440,28 @@ const staffOptions = typeof window.getBranchStaffOptions === 'function'
                             </div>
                         </div>
                     </div>
-
-                    <div class="grid grid-cols-2 gap-4">
+    <div>
+       <div class="grid grid-cols-2 gap-4">
     <div>
         <label class="text-[11px] text-[#FF4B91] ml-2 block font-bold mb-1 uppercase tracking-wider">แพทย์ผู้ดูแล</label>
-        <select id="appDoc" class="${commonFieldClass}">${doctorOptions}</select>
+        <input
+            type="text"
+            id="appDoc"
+            value="${window.escapeHtml(docVal || '')}"
+            placeholder="พิมพ์ชื่อแพทย์"
+            class="${commonFieldClass}"
+        >
     </div>
 
     <div>
         <label class="text-[11px] text-[#FF4B91] ml-2 block font-bold mb-1 uppercase tracking-wider">พนักงานผู้ดูแล</label>
-        <select id="appStaff" class="${commonFieldClass}">${staffOptions}</select>
+        <input
+            type="text"
+            id="appStaff"
+            value="${window.escapeHtml(staffVal || '')}"
+            placeholder="พิมพ์ชื่อพนักงาน"
+            class="${commonFieldClass}"
+        >
     </div>
 </div>
 
@@ -6734,6 +6748,24 @@ if (appCourse) {
 /* =======================================================
    📅 ZONE 4.5: APPOINTMENT & QUEUE (ส่วนบันทึกและจัดการข้อมูล)
    ======================================================= */
+// ✅ แปลงข้อมูลนัดหมายให้เป็นรูปแบบเดียวกันทั้งระบบ
+window.normalizeAppointmentRow = function(ap = {}) {
+    return {
+        id: ap.id || '',
+        customer_name: ap.customer_name || ap.customerName || '',
+        customer_hn: ap.customer_hn || ap.hn || '',
+        doctor: ap.doctor || ap.doctor_name || '-',
+        staff: ap.staff || ap.staff_name || '-',
+        course: ap.course || '',
+        note: ap.note || '',
+        status: ap.status || 'รอดำเนินการ',
+        date: ap.date || '',
+        time: ap.time || '',
+        branch: ap.branch || 'สาขาบางพลี',
+        signature: ap.signature || '',
+        is_confirm: !!ap.is_confirm
+    };
+};
 
 // 1. ฟังก์ชันจัดการเมื่อเลือกวันที่ใหม่
 window.handleQueueDateChange = function(dateValue) {
@@ -6755,7 +6787,7 @@ window.clearQueueDateFilter = function() {
     renderQueuePage(); 
 };
 
-// ✅ เพิ่มฟังก์ชันแสดง “คอร์สคงเหลือ 
+// ✅ เพิ่มฟังก์ชันแสดง “คอร์สคงเหลือ”
 window.renderRemainingCoursesPreview = async function() {
     const previewBox = document.getElementById('remainingCoursesPreview');
     const customerInput = document.getElementById('appCustSearch');
@@ -6778,29 +6810,31 @@ window.renderRemainingCoursesPreview = async function() {
     let rows = [];
 
     try {
+        const TABLE_NAME = 'customer_course_balance_view_ui';
+
         if (customerId) {
             const { data, error } = await window.supabaseClient
-                .from('customer_course_balance_view')
+                .from(TABLE_NAME)
                 .select('*')
                 .eq('customer_id', customerId)
-                .gt('remaining_qty', 0)
-                .order('bill_date', { ascending: false });
+                .gt('remaining_qty', 0);
 
-            if (!error && Array.isArray(data)) rows = data;
+            if (error) console.error(error);
+            if (Array.isArray(data)) rows = data;
         }
 
         if ((!rows || rows.length === 0) && customerHn) {
             const { data, error } = await window.supabaseClient
-                .from('customer_course_balance_view')
+                .from(TABLE_NAME)
                 .select('*')
                 .eq('hn', customerHn)
-                .gt('remaining_qty', 0)
-                .order('bill_date', { ascending: false });
+                .gt('remaining_qty', 0);
 
-            if (!error && Array.isArray(data)) rows = data;
+            if (error) console.error(error);
+            if (Array.isArray(data)) rows = data;
         }
 
-        if (!rows.length) {
+        if (!rows || rows.length === 0) {
             previewBox.innerHTML = `<div class="text-slate-300 italic">ไม่พบคอร์สคงเหลือ</div>`;
             return;
         }
@@ -6808,7 +6842,7 @@ window.renderRemainingCoursesPreview = async function() {
         const groupedMap = new Map();
 
         rows.forEach(item => {
-            const courseName = String(item.item_name || '-').trim();
+            const courseName = String(item.item_name || item.course_name || '-').trim();
             const remain = Number(item.remaining_qty || 0);
             const total = Number(item.total_qty || item.purchased_qty || 0);
             const unit = String(item.unit || 'ครั้ง').trim();
@@ -6816,18 +6850,30 @@ window.renderRemainingCoursesPreview = async function() {
             if (!courseName || remain <= 0) return;
 
             const key = courseName.toLowerCase();
+            const expiryDate = item.display_expiry_date || null;
+            const expiryStatus = item.expiry_status || 'normal';
 
             if (!groupedMap.has(key)) {
                 groupedMap.set(key, {
                     courseName,
                     remain,
                     total,
-                    unit
+                    unit,
+                    expiryDate,
+                    expiryStatus
                 });
             } else {
                 const old = groupedMap.get(key);
                 old.remain += remain;
                 old.total += total;
+
+                // เอาวันหมดอายุที่ใกล้ที่สุดมาแสดง
+                if (expiryDate) {
+                    if (!old.expiryDate || expiryDate < old.expiryDate) {
+                        old.expiryDate = expiryDate;
+                        old.expiryStatus = expiryStatus;
+                    }
+                }
             }
         });
 
@@ -6835,14 +6881,29 @@ window.renderRemainingCoursesPreview = async function() {
 
         previewBox.innerHTML = `
             <div class="space-y-2">
-                ${courseList.map(c => `
-                    <div class="text-[13px] leading-relaxed">
-                        <span class="text-slate-700 font-semibold">${window.escapeHtml(c.courseName)}</span>
-                        <span class="text-pink-500 font-bold">
-                            คงเหลือ ${Number(c.remain)} / ${Number(c.total)} ${window.escapeHtml(c.unit)}
-                        </span>
-                    </div>
-                `).join('')}
+                ${courseList.map(c => {
+                    let expiryClass = 'text-slate-400';
+
+                    if (c.expiryStatus === 'expired') {
+                        expiryClass = 'text-red-600 font-semibold';
+                    } else if (c.expiryStatus === 'warning') {
+                        expiryClass = 'text-orange-500 font-semibold';
+                    }
+
+                    return `
+                        <div class="text-[13px] leading-relaxed">
+                            <div>
+                                <span class="text-slate-700 font-semibold">${window.escapeHtml(c.courseName)}</span>
+                                <span class="text-pink-500 font-bold">
+                                    คงเหลือ ${Number(c.remain || 0)} / ${Number(c.total || 0)} ${window.escapeHtml(c.unit || 'ครั้ง')}
+                                </span>
+                            </div>
+                            <div class="text-[11px] mt-1 ${expiryClass}">
+                                วันหมดอายุ: ${c.expiryDate ? window.escapeHtml(c.expiryDate) : '-'}
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
             </div>
         `;
     } catch (e) {
@@ -7044,70 +7105,6 @@ window.deleteAppointmentById = async function(appId) {
     }
 };
 
-// ✅ ฟังก์ชันสำรองสำหรับระบบเก่า (ถ้ายังมีจุดที่ส่ง index มา)
-window.deleteAppointment = function(index) {
-    try {
-        const db = JSON.parse(localStorage.getItem('appointmentDB')) || [];
-        const row = db[index];
-        if (!row) return;
-
-        window.deleteAppointmentById(row.id || row.createdAt);
-    } catch (e) {
-        console.error('deleteAppointment fallback error:', e);
-        Swal.fire('ผิดพลาด', 'ไม่พบข้อมูลนัดหมายที่ต้องการลบ', 'error');
-    }
-};
-
-// ✅ ฟังก์ชันพิมพ์บัตรนัด: ดึงข้อมูลผ่าน ID และแสดงผลตามดีไซน์ Luxury
-window.printAppointmentCardById = async function(appId) {
-    // 1. ดึงข้อมูลล่าสุดจาก Cloud เพื่อความแม่นยำก่อนพิมพ์
-    const { data: ap, error } = await window.supabaseClient
-        .from('appointments')
-        .select('*, customers(*)') // ดึงข้อมูลลูกค้า (Joined Table) มาพร้อมกัน
-        .eq('id', appId)
-        .single();
-
-    if (error || !ap) {
-        Swal.fire({ icon: 'error', title: 'ไม่พบข้อมูลนัดหมาย', confirmButtonColor: '#D48197' });
-        return;
-    }
-
-    // 2. เตรียมข้อมูลสำหรับแสดงผล
-    const customer = ap.customers || {};
-    const d = String(ap.date || '').split("-");
-    const formattedDate = d.length === 3 ? `${d[2]}/${d[1]}/${parseInt(d[0]) + 543}` : '-';
-
-    const p = window.open('', '_blank');
-    p.document.write(`
-        <html>
-            <head>
-                <title>Appointment Card - ACE Clinic</title>
-                <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;800&display=swap" rel="stylesheet">
-                <style>
-                    body { font-family: 'Sarabun', sans-serif; display: flex; justify-content: center; padding: 40px; background: #fff; }
-                    .card { border: 2px dashed #D48197; padding: 40px; border-radius: 40px; text-align: left; width: 350px; box-shadow: 0 10px 30px rgba(212,129,151,0.1); position: relative; }
-                    .header { color: #D48197; text-align: center; font-weight: 800; font-size: 24px; margin-bottom: 20px; text-transform: uppercase; }
-                    .info-row { margin-bottom: 12px; font-size: 15px; color: #444; border-bottom: 1px solid #fdf2f4; padding-bottom: 5px; }
-                    .label { color: #D48197; font-weight: 600; font-size: 11px; text-transform: uppercase; display: block; }
-                    .footer { text-align: center; font-size: 12px; color: #aaa; margin-top: 25px; font-style: italic; }
-                </style>
-            </head>
-            <body>
-                <div class="card">
-                    <div class="header">ACE CLINIC</div>
-                    <div class="info-row"><span class="label">ชื่อลูกค้า / CUSTOMER</span><b>${ap.customer_name || customer.fullname || '-'}</b></div>
-                    <div class="info-row"><span class="label">รหัส / HN</span><b>${customer.hn || '-'}</b></div>
-                    <div class="info-row"><span class="label">วันเวลานัด / DATE & TIME</span><b>${formattedDate} @ ${ap.time || '-'} น.</b></div>
-                    <div class="info-row"><span class="label">รายการ / TREATMENT</span><b>${ap.course || '-'}</b></div>
-                    <div class="footer">กรุณามาก่อนเวลานัด 10 นาที ขอบคุณค่ะ ❤️</div>
-                </div>
-                <script>window.onload = function() { window.print(); window.setTimeout(function(){ window.close(); }, 500); }<\/script>
-            </body>
-        </html>
-    `);
-    p.document.close();
-};
-
 // 🎯 ฟังก์ชันสำรอง (รองรับการเรียกพิมพ์ผ่าน Index)
 window.printAppointmentTicket = function(index) {
     let db = JSON.parse(localStorage.getItem('appointmentDB')) || [];
@@ -7283,164 +7280,705 @@ window.toggleConfirmAppById = async function(appId) {
     }
 };
 
-// 2. ฟังก์ชันส่งนัดหมายเข้าสู่ "ห้องจัดการคิว" (Queue Management)
+/* =======================================================
+   ✅ ชุดที่ 1 : ปุ่มในเมนูจัดการนัดหมาย
+   - ส่งเข้าห้องจัดการคิว
+   - ดูวันนัดทั้งหมด
+   - พิมพ์บัตรนัด
+======================================================= */
+
+window.getAppointmentById = async function(appId) {
+    try {
+        if (!window.supabaseClient) return null;
+
+        const { data, error } = await window.supabaseClient
+            .from('appointments')
+            .select('*')
+            .eq('id', appId)
+            .single();
+
+        if (error) {
+            console.error('getAppointmentById error:', error);
+            return null;
+        }
+
+        return data || null;
+    } catch (e) {
+        console.error('getAppointmentById catch:', e);
+        return null;
+    }
+};
+
+/* =======================================================
+   1) ส่งเข้าห้องจัดการคิว
+======================================================= */
 window.sendToServiceQueueById = async function(appId) {
-    // 🎯 ดึงข้อมูลนัดหมายล่าสุดจาก Supabase ผ่าน ID
-    const { data: appData, error: appError } = await window.supabaseClient
-        .from('appointments')
-        .select('*')
-        .eq('id', appId)
-        .single();
+    try {
+        if (!window.supabaseClient) {
+            Swal.fire('ผิดพลาด', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+            return;
+        }
 
-    if (appError || !appData) {
-        Swal.fire({ icon: 'error', title: 'ไม่พบข้อมูลนัดหมาย', confirmButtonColor: '#D48197' });
-        return;
-    }
+        const { data: ap, error: apError } = await window.supabaseClient
+            .from('appointments')
+            .select('*')
+            .eq('id', appId)
+            .single();
 
-    // 🛡️ ตรวจสอบว่าคนไข้คนนี้ถูกส่งเข้าคิวไปแล้วหรือยัง (ป้องกันคิวซ้ำ)
-    const { data: existingQueue } = await window.supabaseClient
-        .from('queues')
-        .select('id')
-        .eq('appointment_id', appId)
-        .not('status', 'in', '("เสร็จสิ้น","ยกเลิก")');
+        if (apError || !ap) {
+            console.error('load appointment error:', apError);
+            Swal.fire('ไม่พบข้อมูล', 'ไม่พบข้อมูลนัดหมาย', 'warning');
+            return;
+        }
 
-    if (existingQueue && existingQueue.length > 0) {
+        // ✅ กันส่งซ้ำ
+        const { data: existingQueue, error: queueCheckError } = await window.supabaseClient
+            .from('queues')
+            .select('id,status')
+            .eq('appointment_id', appId)
+            .in('status', ['รอรับบริการ', 'พนักงานรับคิวแล้ว']);
+
+        if (queueCheckError) {
+            console.error('queue check error:', queueCheckError);
+        }
+
+        if (existingQueue && existingQueue.length > 0) {
+            Swal.fire('แจ้งเตือน', 'นัดหมายนี้ถูกส่งเข้าห้องจัดการคิวแล้ว', 'warning');
+            return;
+        }
+
+        // ✅ ใช้วัน/เวลาจากนัดหมายโดยตรง
+        const payload = {
+            appointment_id: ap.id,
+            customer_id: ap.customer_id ? String(ap.customer_id) : null,
+            customer_name: ap.customer_name || ap.customerName || ap.customername || '',
+            hn: ap.hn || ap.customer_hn || '',
+            doctor: ap.doctor || ap.doctor_name || '-',
+            staff: ap.staff || ap.staff_name || '-',
+            course: ap.course || '',
+            note: ap.note || '',
+            date: ap.date || '',
+            time: ap.time || '',
+            status: 'รอรับบริการ',
+            branch: ap.branch || ''
+        };
+
+        console.log('QUEUE PAYLOAD =', payload);
+
+        const { data: insertedQueue, error: insertError } = await window.supabaseClient
+            .from('queues')
+            .insert([payload])
+            .select();
+
+        if (insertError) {
+            console.error('insert queue error:', insertError);
+            Swal.fire('ผิดพลาด', insertError.message || 'ไม่สามารถสร้างคิวได้', 'error');
+            return;
+        }
+
+        console.log('QUEUE INSERTED =', insertedQueue);
+
+        const { error: updateAppError } = await window.supabaseClient
+            .from('appointments')
+            .update({
+                status: 'ส่งเข้าคิวแล้ว',
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', appId);
+
+        if (updateAppError) {
+            console.error('update appointment status error:', updateAppError);
+        }
+
         Swal.fire({
-            icon: 'warning',
-            title: 'คนไข้อยู่ในคิวแล้ว',
-            text: 'รายการนัดหมายนี้ถูกส่งเข้าห้องคิวเรียบร้อยแล้วค่ะ',
-            confirmButtonColor: '#D48197'
+            icon: 'success',
+            title: 'ส่งเข้าห้องจัดการคิวสำเร็จ',
+            timer: 1200,
+            showConfirmButton: false
         });
-        return;
+
+        if (typeof window.renderAppointmentPage === 'function') {
+            await window.renderAppointmentPage();
+        }
+
+        if (typeof window.renderQueuePage === 'function') {
+            await window.renderQueuePage();
+        }
+
+    } catch (e) {
+        console.error('sendToServiceQueueById catch:', e);
+        Swal.fire('ผิดพลาด', e.message || 'ไม่สามารถสร้างคิวได้', 'error');
     }
+};
 
-    const nowTime = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-    const viewingBranch = window.getCurrentViewingBranch();
+/* =======================================================
+   2) ดูวันนัดทั้งหมดของลูกค้า
+======================================================= */
+window.viewAllAppointmentsById = async function(customerId) {
+    try {
+        if (!customerId) {
+            Swal.fire('ไม่พบข้อมูล', 'ไม่พบรหัสลูกค้า', 'warning');
+            return;
+        }
 
-    // 📦 1. เตรียมข้อมูล Object สำหรับเพิ่มลงตารางคิว (ใช้ UUID เชื่อมโยง)
-    const newQueueItem = {
-        id: crypto.randomUUID(),
-        customer_id: appData.customer_id,
-        appointment_id: appId, // ✅ ผูก ID นัดหมายต้นทาง
-        customer_name: appData.customer_name,
-        course: appData.course,
-        course_labels: appData.course_labels || [],
-        doctor: appData.doctor || '-',
-        staff: appData.staff || '-',
-        time: appData.time || nowTime,
-        status: "รอรับบริการ",
-        branch: appData.branch || viewingBranch,
-        date: new Date().toLocaleDateString('th-TH'),
-        created_at: new Date().toISOString()
-    };
+        if (!window.supabaseClient) {
+            Swal.fire('ผิดพลาด', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+            return;
+        }
 
-    // 🚀 2. บันทึกลงตาราง Queues ใน Supabase
-    const { error: queueError } = await window.supabaseClient
-        .from('queues')
-        .insert([newQueueItem]);
+        const { data, error } = await window.supabaseClient
+            .from('appointments')
+            .select('*')
+            .eq('customer_id', customerId)
+            .order('date', { ascending: false })
+            .order('time', { ascending: false });
 
-    if (queueError) {
-        console.error("Queue insert error:", queueError);
-        return Swal.fire('ผิดพลาด', 'ไม่สามารถสร้างคิวได้', 'error');
+        if (error) {
+            console.error('viewAllAppointmentsById error:', error);
+            Swal.fire('ผิดพลาด', 'โหลดข้อมูลนัดหมายไม่สำเร็จ', 'error');
+            return;
+        }
+
+        const rows = Array.isArray(data) ? data : [];
+
+        if (!rows.length) {
+            Swal.fire('ไม่พบข้อมูล', 'ลูกค้าคนนี้ยังไม่มีประวัตินัดหมาย', 'info');
+            return;
+        }
+
+        const formatDateTH = (dateStr) => {
+            if (!dateStr) return '-';
+            const [y, m, d] = String(dateStr).split('-');
+            if (!y || !m || !d) return dateStr;
+            return `${d}/${m}/${parseInt(y, 10) + 543}`;
+        };
+
+        const customerName =
+            rows[0]?.customer_name ||
+            rows[0]?.customerName ||
+            rows[0]?.customername ||
+            'ลูกค้า';
+
+        const tableHtml = `
+            <div class="text-left mb-3 text-sm text-slate-600 font-bold">
+                ลูกค้า: ${window.escapeHtml(customerName)}
+            </div>
+
+            <div class="max-h-[420px] overflow-auto rounded-2xl border border-pink-100">
+                <table class="w-full text-sm border-collapse">
+                    <thead class="bg-pink-50 sticky top-0">
+                        <tr>
+                            <th class="text-left px-3 py-2 border-b border-pink-100">วันที่</th>
+                            <th class="text-left px-3 py-2 border-b border-pink-100">เวลา</th>
+                            <th class="text-left px-3 py-2 border-b border-pink-100">รายการคอร์ส</th>
+                            <th class="text-left px-3 py-2 border-b border-pink-100">สถานะ</th>
+                            <th class="text-left px-3 py-2 border-b border-pink-100">หมายเหตุ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows.map(r => `
+                            <tr class="border-b border-pink-50 align-top">
+                                <td class="px-3 py-2">${window.escapeHtml(formatDateTH(r.date))}</td>
+                                <td class="px-3 py-2">${window.escapeHtml(r.time || '-')}</td>
+                                <td class="px-3 py-2 whitespace-pre-line">${window.escapeHtml(r.course || '-')}</td>
+                                <td class="px-3 py-2">${window.escapeHtml(r.status || '-')}</td>
+                                <td class="px-3 py-2 whitespace-pre-line">${window.escapeHtml(r.note || '-')}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        Swal.fire({
+            title: '<span class="text-slate-800 font-black italic uppercase">🗓️ วันนัดทั้งหมด</span>',
+            html: tableHtml,
+            width: 950,
+            confirmButtonText: 'ปิดหน้าต่าง',
+            confirmButtonColor: '#D48197',
+            customClass: { popup: 'rounded-[2rem]' }
+        });
+
+    } catch (e) {
+        console.error('viewAllAppointmentsById catch:', e);
+        Swal.fire('ผิดพลาด', e.message || 'ไม่สามารถเปิดประวัตินัดหมายได้', 'error');
     }
+};
 
-    // 🔄 3. อัปเดตสถานะในตาราง Appointments เป็น "ส่งเข้าคิวแล้ว"
-    await window.supabaseClient
-        .from('appointments')
-        .update({ status: "ส่งเข้าคิวแล้ว" })
-        .eq('id', appId);
 
-    Swal.fire({
-        icon: 'success',
-        title: 'ส่งเข้าห้องคิวสำเร็จ!',
-        text: `คุณ ${newQueueItem.customer_name} เข้าสู่คิวแล้วค่ะ`,
-        timer: 1500,
-        showConfirmButton: false
-    }).then(() => {
-        if (typeof renderAppointmentPage === 'function') renderAppointmentPage();
-        if (typeof loadPage === 'function') loadPage(52, 'ห้องจัดการคิว');
-    });
+/* =======================================================
+   3) พิมพ์บัตรนัด
+======================================================= */
+window.printAppointmentCardById = async function(appId) {
+    try {
+        const ap = await window.getAppointmentById(appId);
+
+        if (!ap) {
+            Swal.fire('ไม่พบข้อมูล', 'ไม่พบข้อมูลนัดหมายสำหรับพิมพ์บัตรนัด', 'warning');
+            return;
+        }
+
+        const { value: printSize } = await Swal.fire({
+            title: 'เลือกขนาดบัตรนัด',
+            input: 'radio',
+            inputOptions: {
+                half_a4: 'ครึ่งหน้า A4',
+                paper_80mm: 'กระดาษ 80mm'
+            },
+            inputValue: 'half_a4',
+            confirmButtonText: 'พิมพ์บัตรนัด',
+            cancelButtonText: 'ยกเลิก',
+            showCancelButton: true,
+            confirmButtonColor: '#D48197',
+            inputValidator: (value) => {
+                if (!value) return 'กรุณาเลือกขนาดกระดาษ';
+            }
+        });
+
+        if (!printSize) return;
+
+        const customerName = ap.customer_name || ap.customerName || ap.customername || '-';
+        const hn = ap.hn || ap.customer_hn || '-';
+        const doctor = ap.doctor || '-';
+        const staff = ap.staff || '-';
+        const course = ap.course || '-';
+        const note = ap.note || '-';
+
+        const formatDateTH = (dateStr) => {
+            if (!dateStr) return '-';
+            const [y, m, d] = String(dateStr).split('-');
+            if (!y || !m || !d) return dateStr;
+            return `${d}/${m}/${parseInt(y, 10) + 543}`;
+        };
+
+        const safeText = (value) => {
+            return String(value || '-')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;')
+                .replace(/\n/g, '<br>');
+        };
+
+        const is80mm = printSize === 'paper_80mm';
+
+        const pageCSS = is80mm
+            ? `
+                @page {
+                    size: 80mm auto;
+                    margin: 3mm;
+                }
+
+                html, body {
+                    margin: 0;
+                    padding: 0;
+                    width: 80mm;
+                    background: #fff;
+                    font-family: 'Sarabun', sans-serif;
+                    color: #374151;
+                }
+
+                body {
+                    padding: 0;
+                }
+
+                .receipt-wrap {
+                    width: 74mm;
+                    margin: 0 auto;
+                    padding: 2mm 0;
+                    box-sizing: border-box;
+                }
+
+                .card {
+                    width: 100%;
+                    border: 1px solid #f3d4de;
+                    border-radius: 10px;
+                    padding: 10px;
+                    box-sizing: border-box;
+                }
+
+                .title {
+                    text-align: center;
+                    font-size: 18px;
+                    font-weight: 800;
+                    color: #D48197;
+                    margin-bottom: 4px;
+                    line-height: 1.2;
+                }
+
+                .sub {
+                    text-align: center;
+                    font-size: 10px;
+                    color: #6b7280;
+                    margin-bottom: 10px;
+                }
+
+                .row {
+                    margin-bottom: 6px;
+                    padding: 6px 8px;
+                    border: 1px solid #f3f4f6;
+                    border-radius: 8px;
+                    background: #fff;
+                }
+
+                .label {
+                    font-size: 9px;
+                    color: #D48197;
+                    font-weight: 700;
+                    margin-bottom: 2px;
+                }
+
+                .value {
+                    font-size: 12px;
+                    font-weight: 600;
+                    word-break: break-word;
+                    line-height: 1.35;
+                    white-space: normal;
+                }
+
+                .footer {
+                    margin-top: 8px;
+                    text-align: center;
+                    font-size: 9px;
+                    color: #6b7280;
+                    line-height: 1.4;
+                }
+            `
+            : `
+                @page {
+                    size: A4 portrait;
+                    margin: 10mm;
+                }
+
+                html, body {
+                    margin: 0;
+                    padding: 0;
+                    background: #fff;
+                    font-family: 'Sarabun', sans-serif;
+                    color: #374151;
+                }
+
+                .page {
+                    width: 100%;
+                    min-height: 100vh;
+                    display: flex;
+                    justify-content: center;
+                    align-items: flex-start;
+                    padding-top: 0;
+                    box-sizing: border-box;
+                }
+
+                .card {
+                    width: 185mm;
+                    min-height: 130mm;
+                    border: 2px solid #f3d4de;
+                    border-radius: 18px;
+                    padding: 12mm;
+                    box-sizing: border-box;
+                    background: #fff;
+                }
+
+                .title {
+                    text-align: center;
+                    font-size: 26px;
+                    font-weight: 800;
+                    color: #D48197;
+                    margin-bottom: 6px;
+                    line-height: 1.2;
+                }
+
+                .sub {
+                    text-align: center;
+                    font-size: 14px;
+                    color: #6b7280;
+                    margin-bottom: 18px;
+                }
+
+                .grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 10px;
+                }
+
+                .row {
+                    margin-bottom: 0;
+                    padding: 10px 12px;
+                    background: #fafafa;
+                    border: 1px solid #f3f4f6;
+                    border-radius: 12px;
+                    box-sizing: border-box;
+                }
+
+                .row.full {
+                    grid-column: 1 / -1;
+                }
+
+                .label {
+                    font-size: 12px;
+                    color: #D48197;
+                    font-weight: 700;
+                    margin-bottom: 3px;
+                }
+
+                .value {
+                    font-size: 17px;
+                    font-weight: 600;
+                    line-height: 1.45;
+                    word-break: break-word;
+                    white-space: normal;
+                }
+
+                .footer {
+                    margin-top: 18px;
+                    text-align: center;
+                    font-size: 13px;
+                    color: #6b7280;
+                }
+            `;
+
+        const contentHTML = is80mm
+            ? `
+                <div class="receipt-wrap">
+                    <div class="card">
+                        <div class="title">ACE CLINIC</div>
+                        <div class="sub">บัตรนัดหมายลูกค้า</div>
+
+                        <div class="row">
+                            <div class="label">ชื่อลูกค้า</div>
+                            <div class="value">${safeText(customerName)}</div>
+                        </div>
+
+                        <div class="row">
+                            <div class="label">HN</div>
+                            <div class="value">${safeText(hn)}</div>
+                        </div>
+
+                        <div class="row">
+                            <div class="label">วันนัด / เวลา</div>
+                            <div class="value">${safeText(formatDateTH(ap.date))} เวลา ${safeText(ap.time || '-')} น.</div>
+                        </div>
+
+                        <div class="row">
+                            <div class="label">แพทย์</div>
+                            <div class="value">${safeText(doctor)}</div>
+                        </div>
+
+                        <div class="row">
+                            <div class="label">พนักงาน</div>
+                            <div class="value">${safeText(staff)}</div>
+                        </div>
+
+                        <div class="row">
+                            <div class="label">รายการคอร์ส / หัตถการ</div>
+                            <div class="value">${safeText(course)}</div>
+                        </div>
+
+                        <div class="row">
+                            <div class="label">หมายเหตุ</div>
+                            <div class="value">${safeText(note)}</div>
+                        </div>
+
+                        <div class="footer">
+                            กรุณามาก่อนเวลานัด 10-15 นาที<br>
+                            ขอบคุณค่ะ
+                        </div>
+                    </div>
+                </div>
+            `
+            : `
+                <div class="page">
+                    <div class="card">
+                        <div class="title">ACE CLINIC</div>
+                        <div class="sub">บัตรนัดหมายลูกค้า</div>
+
+                        <div class="grid">
+                            <div class="row full">
+                                <div class="label">ชื่อลูกค้า</div>
+                                <div class="value">${safeText(customerName)}</div>
+                            </div>
+
+                            <div class="row">
+                                <div class="label">HN</div>
+                                <div class="value">${safeText(hn)}</div>
+                            </div>
+
+                            <div class="row">
+                                <div class="label">วันนัด</div>
+                                <div class="value">${safeText(formatDateTH(ap.date))}</div>
+                            </div>
+
+                            <div class="row">
+                                <div class="label">เวลา</div>
+                                <div class="value">${safeText(ap.time || '-')}</div>
+                            </div>
+
+                            <div class="row">
+                                <div class="label">แพทย์ผู้ดูแล</div>
+                                <div class="value">${safeText(doctor)}</div>
+                            </div>
+
+                            <div class="row">
+                                <div class="label">พนักงานผู้ดูแล</div>
+                                <div class="value">${safeText(staff)}</div>
+                            </div>
+
+                            <div class="row full">
+                                <div class="label">รายการคอร์ส / หัตถการ</div>
+                                <div class="value">${safeText(course)}</div>
+                            </div>
+
+                            <div class="row full">
+                                <div class="label">หมายเหตุ</div>
+                                <div class="value">${safeText(note)}</div>
+                            </div>
+                        </div>
+
+                        <div class="footer">
+                            กรุณามาก่อนเวลานัด 10-15 นาที ขอบคุณค่ะ
+                        </div>
+                    </div>
+                </div>
+            `;
+
+        const p = window.open('', '_blank', 'width=900,height=700');
+
+        if (!p) {
+            Swal.fire('แจ้งเตือน', 'เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาต Pop-up ก่อนค่ะ', 'warning');
+            return;
+        }
+
+        p.document.write(`
+            <html>
+            <head>
+                <title>บัตรนัด - ACE Clinic</title>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width,initial-scale=1" />
+                <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+                <style>
+                    * {
+                        box-sizing: border-box;
+                    }
+
+                    ${pageCSS}
+
+                    @media print {
+                        html, body {
+                            -webkit-print-color-adjust: exact;
+                            print-color-adjust: exact;
+                        }
+                    }
+                </style>
+            </head>
+            <body>
+                ${contentHTML}
+
+                <script>
+                    window.onload = function () {
+                        setTimeout(function () {
+                            window.focus();
+                            window.print();
+                        }, 400);
+                    };
+                <\/script>
+            </body>
+            </html>
+        `);
+
+        p.document.close();
+
+    } catch (e) {
+        console.error('printAppointmentCardById catch:', e);
+        Swal.fire('ผิดพลาด', e.message || 'ไม่สามารถพิมพ์บัตรนัดได้', 'error');
+    }
 };
 
 // 3. ฟังก์ชันแก้ไขรายการคิว
 window.editQueueItem = function(qId) {
-    if (typeof openProcessServiceModal === "function") {
-        // ✅ ใช้ระบบ ID (UUID) ในการเปิด Modal บันทึกงาน
-        openProcessServiceModal(qId);
+    if (typeof window.openProcessServiceModal === "function") {
+        window.openProcessServiceModal(qId);
     }
 };
 
-window.renderQueuePage = async function() { // ✅ ปรับเป็น async เพื่อรอข้อมูลจาก Supabase
+window.renderQueuePage = async function() {
     const target = document.getElementById('dynamicContent') || document.getElementById('pageContent');
     if (!target) return;
 
-    // 1. ดึงข้อมูลคิวจาก Supabase (ตามเงื่อนไขเชื่อมต่อ Cloud)
     let allQueue = [];
+
     try {
         const { data, error } = await window.supabaseClient
             .from('queues')
             .select('*')
             .order('created_at', { ascending: true });
-        
+
         if (error) throw error;
-        allQueue = data || [];
+        allQueue = Array.isArray(data) ? data : [];
     } catch (e) {
-        console.error("Supabase fetch error, falling back to local:", e);
-        allQueue = JSON.parse(localStorage.getItem('todayQueueDB')) || [];
+        console.error("Supabase fetch error:", e);
+        allQueue = [];
     }
 
-    const todayStr = new Date().toLocaleDateString('th-TH');
-    if (!window.currentQDateFilter) window.currentQDateFilter = todayStr;
-
-    // 2. ดึงสถานะผู้ใช้และสาขาด้วยระบบ ID Safe
     const currentUser = window.getCurrentUserSafe();
     const viewingBranch = window.getCurrentViewingBranch();
     const isAdmin = ['แอดมินหลัก', 'CEO'].includes(currentUser.role || '');
 
-    // 3. ดึงค่า Filter จาก UI
     const searchTerm = (document.getElementById('qSearchInput')?.value || "").toLowerCase().trim();
     const statusFilter = document.getElementById('qStatusFilter')?.value || "ทั้งหมด";
     const pageSize = parseInt(document.getElementById('qPageSize')?.value) || 10;
     const currentPage = window.currentQPage || 1;
 
-    // 4. กรองข้อมูล (ID & Branch Based Security)
+    // ✅ ไม่บังคับวันที่เป็นวันนี้ทันที
+    if (typeof window.currentQDateFilter === 'undefined') {
+        window.currentQDateFilter = '';
+    }
+
     let filteredData = allQueue.filter(item => {
-        // ✅ ใช้ normalizeBranch เพื่อให้การเปรียบเทียบชื่อสาขาแม่นยำ
-        const itemBranch = window.normalizeBranch(item.branch);
-        const matchBranch = (viewingBranch === 'ทุกสาขา' && isAdmin) || (itemBranch === viewingBranch);
+        const itemBranch = window.normalizeBranch(item.branch || '');
+        const currentBranch = window.normalizeBranch(viewingBranch || '');
 
-        // ✅ รองรับฟีลด์ชื่อจาก Supabase (customer_name)
-        const nameVal = String(item.customer_name || item.name || "").toLowerCase();
+        const matchBranch =
+            (viewingBranch === 'ทุกสาขา' && isAdmin) ||
+            isAdmin ||
+            itemBranch === currentBranch;
+
+        const nameVal = String(item.customer_name || "").toLowerCase();
         const hnVal = String(item.hn || "").toLowerCase();
-        const matchSearch = nameVal.includes(searchTerm) || hnVal.includes(searchTerm);
+        const courseVal = String(item.course || "").toLowerCase();
 
-        const matchStatus = (statusFilter === "ทั้งหมด" || item.status === statusFilter);
-        const matchDate = !window.currentQDateFilter || (item.date === window.currentQDateFilter);
+        const matchSearch =
+            nameVal.includes(searchTerm) ||
+            hnVal.includes(searchTerm) ||
+            courseVal.includes(searchTerm);
+
+        const matchStatus =
+            statusFilter === "ทั้งหมด" || item.status === statusFilter;
+
+        const matchDate =
+            !window.currentQDateFilter ||
+            String(item.date || '') === String(window.currentQDateFilter);
 
         return matchBranch && matchSearch && matchStatus && matchDate;
     });
 
-   // 5. เรียงลำดับ (จัดกลุ่ม "เสร็จสิ้น" ไว้ท้ายสุด และเรียงตามเวลาเช็คอิน)
     filteredData.sort((a, b) => {
         const statusA = a.status === "เสร็จสิ้น" ? 1 : 0;
         const statusB = b.status === "เสร็จสิ้น" ? 1 : 0;
         if (statusA !== statusB) return statusA - statusB;
-        // ✅ ใช้เวลาเช็คอินจริงในระบบเป็นตัวเรียงลำดับ
         return String(a.time || '').localeCompare(String(b.time || ''));
     });
 
-    // 6. Pagination Logic (อ้างอิงตาม ID หน้าปัจจุบัน)
-    const startIndex = (currentPage - 1) * pageSize;
+    const totalPages = Math.ceil(filteredData.length / pageSize) || 1;
+    window.currentQPage = Math.min(currentPage, totalPages);
+    const startIndex = (window.currentQPage - 1) * pageSize;
     const paginatedData = filteredData.slice(startIndex, startIndex + pageSize);
 
-    // 7. สั่งเรนเดอร์ HTML (ฉบับปรับปรุงใหม่: แถวเดียว All-in-one)
     target.innerHTML = `
     <div class="animate-in fade-in duration-500 font-light p-4 -mt-6 text-left">
         <div class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-pink-100 mb-6 flex flex-col gap-4">
-            
             <div class="flex flex-wrap items-center gap-3 pt-2">
                 <div class="relative min-w-[120px]">
-                    <select id="qPageSize" onchange="window.renderQueuePage()" 
+                    <select id="qPageSize" onchange="window.currentQPage=1; window.renderQueuePage()" 
                         class="w-full border border-pink-100 rounded-xl px-4 py-2 text-[12px] outline-none bg-white font-light cursor-pointer h-[42px] appearance-none shadow-sm focus:border-pink-300 transition-all text-slate-600">
                         <option value="10" ${pageSize == 10 ? 'selected' : ''}>📄 10 รายการ</option>
                         <option value="30" ${pageSize == 30 ? 'selected' : ''}>📄 30 รายการ</option>
@@ -7450,22 +7988,24 @@ window.renderQueuePage = async function() { // ✅ ปรับเป็น asyn
                 </div>
 
                 <div class="relative min-w-[150px]">
-                    <select id="qStatusFilter" onchange="window.renderQueuePage()" 
+                    <select id="qStatusFilter" onchange="window.currentQPage=1; window.renderQueuePage()" 
                         class="w-full border border-pink-100 rounded-xl px-4 py-2 text-[12px] outline-none bg-white font-light cursor-pointer h-[42px] appearance-none shadow-sm focus:border-pink-300 transition-all text-slate-600">
                         <option value="ทั้งหมด" ${statusFilter === 'ทั้งหมด' ? 'selected' : ''}>🔍 สถานะ: ทั้งหมด</option>
                         <option value="รอรับบริการ" ${statusFilter === 'รอรับบริการ' ? 'selected' : ''}>⏳ รอรับบริการ</option>
                         <option value="พนักงานรับคิวแล้ว" ${statusFilter === 'พนักงานรับคิวแล้ว' ? 'selected' : ''}>🟣 รับคิวแล้ว</option>
                         <option value="เสร็จสิ้น" ${statusFilter === 'เสร็จสิ้น' ? 'selected' : ''}>🟢 เสร็จสิ้น</option>
+                        <option value="ยกเลิก" ${statusFilter === 'ยกเลิก' ? 'selected' : ''}>🔴 ยกเลิก</option>
                     </select>
                     <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-pink-300 pointer-events-none">▼</span>
                 </div>
 
                 <div class="relative min-w-[170px] flex items-center">
                     <input type="date" id="qDateInput"
-                        onchange="window.handleQueueDateChange(this.value)"
+                        value="${window.currentQDateFilter || ''}"
+                        onchange="window.currentQDateFilter=this.value; window.currentQPage=1; window.renderQueuePage()"
                         class="w-full border border-pink-100 rounded-xl px-4 py-2 text-[12px] outline-none bg-white h-[42px] shadow-sm focus:border-pink-300 transition-all text-slate-600 cursor-pointer">
                     
-                    <button onclick="window.clearQueueDateFilter()" 
+                    <button onclick="window.currentQDateFilter=''; window.currentQPage=1; window.renderQueuePage()" 
                         class="absolute right-9 text-slate-300 hover:text-pink-500 transition-all font-bold text-lg no-print"
                         style="display: ${window.currentQDateFilter ? 'block' : 'none'};">
                         ×
@@ -7473,103 +8013,90 @@ window.renderQueuePage = async function() { // ✅ ปรับเป็น asyn
                 </div>
 
                 <div class="relative flex-1 min-w-[200px]">
-        <input type="text" id="qSearchInput" value="${searchTerm}" placeholder="ค้นชื่อ หรือ HN..."
-            onkeyup="if(event.key==='Enter') { window.currentQPage=1; renderQueuePage(); }"
-            class="w-full border border-pink-100 bg-white rounded-xl px-10 py-2 text-[12px] outline-none font-light h-[42px] shadow-sm focus:border-pink-300 transition-all">
-        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300">🔍</span>
-    </div>
+                    <input type="text" id="qSearchInput" value="${searchTerm}" placeholder="ค้นชื่อ หรือ HN..."
+                        onkeyup="if(event.key==='Enter') { window.currentQPage=1; window.renderQueuePage(); }"
+                        class="w-full border border-pink-100 bg-white rounded-xl px-10 py-2 text-[12px] outline-none font-light h-[42px] shadow-sm focus:border-pink-300 transition-all">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300">🔍</span>
+                </div>
 
-    <button onclick="window.loadPage(66, 'รายงานค่ามือ DF')" 
-        class="bg-[#D48197] text-white px-5 h-[42px] rounded-xl text-[10px] font-bold shadow-md hover:bg-black transition-all flex items-center gap-2 shrink-0">
-        📊 รายงานค่ามือ
-    </button>
+                <button onclick="window.loadPage(66, 'รายงานค่ามือ DF')" 
+                    class="bg-[#D48197] text-white px-5 h-[42px] rounded-xl text-[10px] font-bold shadow-md hover:bg-black transition-all flex items-center gap-2 shrink-0">
+                    📊 รายงานค่ามือ
+                </button>
 
-    <button onclick="window.notifyNextQueue()" 
-        class="bg-black text-white px-5 h-[42px] rounded-xl text-[10px] font-bold shadow-md hover:scale-105 transition-all flex items-center gap-2 shrink-0">
-        <span class="animate-bounce">🔔</span> แจ้งเตือนคิวถัดไป
-    </button>
-</div>
-</div>
+                <button onclick="window.notifyNextQueue()" 
+                    class="bg-black text-white px-5 h-[42px] rounded-xl text-[10px] font-bold shadow-md hover:scale-105 transition-all flex items-center gap-2 shrink-0">
+                    <span class="animate-bounce">🔔</span> แจ้งเตือนคิวถัดไป
+                </button>
+            </div>
+        </div>
 
-<div class="bg-white rounded-[3rem] shadow-2xl border border-pink-100 overflow-hidden p-8">
-    <table class="w-full text-center text-[12px] border-separate border-spacing-y-0">
-        <thead>
-            <tr style="height: 55px;">
-                <th class="bg-[#D48197] text-white font-normal px-4 rounded-l-[1.5rem] w-24">เวลา</th>
-                <th class="bg-[#D48197] text-white font-normal px-2 w-24">HN</th>
-                <th class="bg-[#D48197] text-white font-normal px-6 text-left">ชื่อคนไข้</th>
-                <th class="bg-[#D48197] text-white font-normal px-6 text-left">หัตถการ</th>
-                <th class="bg-[#D48197] text-white font-normal px-4 w-32">สถานะ</th>
-                <th class="bg-[#D48197] text-white font-normal px-4 rounded-r-[1.5rem] w-56">จัดการ</th>
-            </tr>
-        </thead>
-        <tbody class="text-slate-600 font-light">
-            ${paginatedData.length > 0 ? paginatedData.map(q => {
-                // ✅ ใช้ ID หลักของคิว (UUID/Primary Key) แทนการใช้ Index
-                const realId = q.id;
-                const statusClass =
-                    q.status === 'เสร็จสิ้น' ? 'bg-green-50 text-green-600 border-green-200' :
-                    q.status === 'พนักงานรับคิวแล้ว' ? 'bg-purple-50 text-purple-600 border-purple-200' :
-                    'bg-yellow-50 text-yellow-600 border-yellow-200';
-
-                const rawQueueCourses = String(q.course || '-').split(',').map(x => x.trim()).filter(Boolean);
-                const savedQueueLabels = Array.isArray(q.course_labels) ? q.course_labels : [];
-
-                const courseBadges = rawQueueCourses.map((course, idx) => {
-                    const displayName = savedQueueLabels[idx] || course;
-                    return `
-                        <span class="inline-flex items-center px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-[10px] text-slate-600 mr-1 mb-1">
-                            ${displayName}
-                        </span>
-                    `;
-                }).join('');
-
-                return `
-                    <tr class="border-b border-pink-50 hover:bg-pink-50/10 transition-all ${q.isCalling ? 'animate-blink' : ''}" style="height: 75px;">
-                        <td class="p-2 text-slate-400 font-light italic">${q.time || '--:--'}</td>
-                        <td class="p-2 font-normal text-[#D48197]">${q.hn || '-'}</td>
-                        <td class="p-2 text-left font-normal text-slate-800 text-[14px]">
-                            ${q.customer_name || 'ไม่ระบุชื่อ'}
-                            ${q.accepted_by ? `<br><span class="text-[9px] text-green-500 font-bold uppercase">✔️ รับโดย: ${q.accepted_by}</span>` : ''}
-                        </td>
-                        <td class="p-2 text-left leading-tight">${courseBadges || '-'}</td>
-                        <td class="p-2 text-center">
-                            <span class="inline-flex items-center justify-center min-w-[120px] px-3 py-2 rounded-xl border text-[10px] font-bold ${statusClass}">
-                                ${q.status || 'รอรับบริการ'}
-                            </span>
-                        </td>
-                        <td class="p-2 text-center">
-                            <div class="flex items-center justify-center gap-2">
-                                ${q.status !== 'เสร็จสิ้น'
-                                    ? `<button onclick="window.openProcessServiceModal('${realId}')" class="bg-[#D48197] text-white px-4 py-2 rounded-xl text-[10px] font-bold hover:bg-black transition-all min-w-[90px]">บันทึกงาน</button>`
-                                    : `<span class="inline-flex items-center justify-center min-w-[90px] px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-400 text-[10px] italic">สำเร็จที่ ${q.finish_time || '-'}</span>`
-                                }
-                                <button onclick="window.openProcessServiceModal('${realId}')" class="bg-white border border-pink-200 text-pink-500 px-3 py-2 rounded-xl text-[10px] font-bold hover:bg-pink-50 transition-all">
-                                    แก้ไข
-                                </button>
-                                <button onclick="window.deleteQueueItemById('${realId}')" class="bg-white border border-red-200 text-red-500 px-3 py-2 rounded-xl text-[10px] font-bold hover:bg-red-50 transition-all">
-                                    ลบ
-                                </button>
-                            </div>
-                        </td>
+        <div class="bg-white rounded-[3rem] shadow-2xl border border-pink-100 overflow-hidden p-8">
+            <table class="w-full text-center text-[12px] border-separate border-spacing-y-0">
+                <thead>
+                    <tr style="height: 55px;">
+                        <th class="bg-[#D48197] text-white font-normal px-4 rounded-l-[1.5rem] w-24">เวลา</th>
+                        <th class="bg-[#D48197] text-white font-normal px-2 w-24">HN</th>
+                        <th class="bg-[#D48197] text-white font-normal px-6 text-left">ชื่อคนไข้</th>
+                        <th class="bg-[#D48197] text-white font-normal px-6 text-left">หัตถการ</th>
+                        <th class="bg-[#D48197] text-white font-normal px-4 w-32">สถานะ</th>
+                        <th class="bg-[#D48197] text-white font-normal px-4 rounded-r-[1.5rem] w-56">จัดการ</th>
                     </tr>
-                `;
-            }).join('') : `
-                <tr>
-                    <td colspan="6" class="p-20 text-center italic text-slate-300 font-light">🚦 ยังไม่มีคิวในขณะนี้</td>
-                </tr>
-            `}
-        </tbody>
-    </table>
-</div>
- </div>
-`;
+                </thead>
+                <tbody class="text-slate-600 font-light">
+                    ${paginatedData.length > 0 ? paginatedData.map(q => {
+                        const realId = q.id;
+                        const statusClass =
+                            q.status === 'เสร็จสิ้น' ? 'bg-green-50 text-green-600 border-green-200' :
+                            q.status === 'พนักงานรับคิวแล้ว' ? 'bg-purple-50 text-purple-600 border-purple-200' :
+                            q.status === 'ยกเลิก' ? 'bg-red-50 text-red-600 border-red-200' :
+                            'bg-yellow-50 text-yellow-600 border-yellow-200';
+
+                        return `
+                            <tr class="border-b border-pink-50 hover:bg-pink-50/10 transition-all ${q.is_calling ? 'animate-blink' : ''}" style="height: 75px;">
+                                <td class="p-2 text-slate-400 font-light italic">${q.time || '--:--'}</td>
+                                <td class="p-2 font-normal text-[#D48197]">${q.hn || '-'}</td>
+                                <td class="p-2 text-left font-normal text-slate-800 text-[14px]">
+                                    ${q.customer_name || 'ไม่ระบุชื่อ'}
+                                    ${q.accepted_by ? `<br><span class="text-[9px] text-green-500 font-bold uppercase">✔️ รับโดย: ${q.accepted_by}</span>` : ''}
+                                </td>
+                                <td class="p-2 text-left leading-tight whitespace-pre-line break-words">${q.course || '-'}</td>
+                                <td class="p-2 text-center">
+                                    <span class="inline-flex items-center justify-center min-w-[120px] px-3 py-2 rounded-xl border text-[10px] font-bold ${statusClass}">
+                                        ${q.status || 'รอรับบริการ'}
+                                    </span>
+                                </td>
+                                <td class="p-2 text-center">
+                                    <div class="flex items-center justify-center gap-2">
+                                        ${q.status !== 'เสร็จสิ้น'
+                                            ? `<button onclick="window.openProcessServiceModal('${realId}')" class="bg-[#D48197] text-white px-4 py-2 rounded-xl text-[10px] font-bold hover:bg-black transition-all min-w-[90px]">บันทึกงาน</button>`
+                                            : `<span class="inline-flex items-center justify-center min-w-[90px] px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-400 text-[10px] italic">สำเร็จที่ ${q.finish_time || '-'}</span>`
+                                        }
+                                        <button onclick="window.openProcessServiceModal('${realId}')" class="bg-white border border-pink-200 text-pink-500 px-3 py-2 rounded-xl text-[10px] font-bold hover:bg-pink-50 transition-all">
+                                            แก้ไข
+                                        </button>
+                                        <button onclick="window.deleteQueueItemById('${realId}')" class="bg-white border border-red-200 text-red-500 px-3 py-2 rounded-xl text-[10px] font-bold hover:bg-red-50 transition-all">
+                                            ลบ
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('') : `
+                        <tr>
+                            <td colspan="6" class="p-20 text-center italic text-slate-300 font-light">🚦 ยังไม่มีคิวในขณะนี้</td>
+                        </tr>
+                    `}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    `;
 };
-   
+
 window.notifyNextQueue = async function() {
-    // 1. ดึงข้อมูลคิวล่าสุดจาก Cloud (กรองตามสาขาและวันที่ปัจจุบัน)
     const viewingBranch = window.getCurrentViewingBranch();
-    const todayStr = window.currentQDateFilter || new Date().toLocaleDateString('th-TH');
+    const todayStr = window.currentQDateFilter || new Date().toISOString().split('T')[0];
 
     let query = window.supabaseClient
         .from('queues')
@@ -7580,25 +8107,23 @@ window.notifyNextQueue = async function() {
 
     if (viewingBranch !== 'ทุกสาขา') {
         const safeBranch = window.normalizeBranch(viewingBranch);
-	query = query.eq('branch', safeBranch);
+        query = query.eq('branch', safeBranch);
     }
 
     const { data: queueList, error } = await query;
 
     if (error) {
         console.error("Fetch next queue error:", error);
+        Swal.fire('ผิดพลาด', 'ไม่สามารถโหลดคิวได้', 'error');
         return;
     }
 
-    // 🎯 เลือกคิวแรกที่รอนานที่สุด
     const nextInLine = queueList && queueList.length > 0 ? queueList[0] : null;
 
     if (nextInLine) {
-        // ระบบสั่น (สำหรับมือถือ)
         if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
 
-        // การแจ้งเตือนบน Browser (ถ้าอนุญาต)
-        if (Notification.permission === "granted") {
+        if ("Notification" in window && Notification.permission === "granted") {
             const notification = new Notification("🔔 ACE CLINIC: มีคิวใหม่!", {
                 body: `คุณ ${nextInLine.customer_name} ถึงคิวแล้วค่ะ\nรายการ: ${nextInLine.course}`,
                 icon: 'https://cdn-icons-png.flaticon.com/128/3119/3119338.png',
@@ -7610,7 +8135,6 @@ window.notifyNextQueue = async function() {
             };
         }
 
-        // แสดงผลหน้าจอเรียกคิว (Luxury Style)
         Swal.fire({
             title: '<span class="ace-pink font-bold italic text-2xl">🔔 เรียกคิวคนไข้</span>',
             html: `
@@ -7640,7 +8164,6 @@ window.notifyNextQueue = async function() {
             if (result.isConfirmed) {
                 const currentUser = window.getCurrentUserSafe();
 
-                // 🔄 อัปเดตสถานะใน Supabase ผ่าน ID (Primary Key)
                 const { error: updateError } = await window.supabaseClient
                     .from('queues')
                     .update({ 
@@ -7652,6 +8175,7 @@ window.notifyNextQueue = async function() {
                     .eq('id', nextInLine.id);
 
                 if (updateError) {
+                    console.error(updateError);
                     Swal.fire('ผิดพลาด', 'ไม่สามารถรับคิวได้ในขณะนี้', 'error');
                     return;
                 }
@@ -7665,7 +8189,7 @@ window.notifyNextQueue = async function() {
                     timer: 2000
                 });
 
-                if (typeof renderQueuePage === "function") renderQueuePage();
+                if (typeof window.renderQueuePage === "function") await window.renderQueuePage();
             }
         });
     } else {
@@ -7681,9 +8205,7 @@ window.notifyNextQueue = async function() {
 /* =======================================================
     🗑️ ฟังก์ชันยกเลิกคิวและคืนคอร์ส (ID-Based Queue Refund)
    ======================================================= */
-
 window.deleteQueueItemById = async function(qId) {
-    // 🎯 1. ดึงข้อมูลคิวจาก Supabase ผ่าน ID เพื่อตรวจสอบสถานะก่อนลบ
     const { data: item, error: fetchError } = await window.supabaseClient
         .from('queues')
         .select('*')
@@ -7695,7 +8217,6 @@ window.deleteQueueItemById = async function(qId) {
         return;
     }
 
-    // 🎯 2. ใช้ SweetAlert2 ถามยืนยันก่อนลบ
     Swal.fire({
         title: '<span class="text-slate-800 font-black italic uppercase">🗑️ ยืนยันการยกเลิกคิว?</span>',
         html: `คุณต้องการลบคิวของคุณ <b class="text-[#D48197]">${item.customer_name}</b><br><small class="text-slate-400">*(หากทำรายการเสร็จแล้ว ระบบจะคืนคอร์สให้ลูกค้าอัตโนมัติ)*</small>`,
@@ -7707,72 +8228,72 @@ window.deleteQueueItemById = async function(qId) {
         cancelButtonText: 'ยกเลิก',
         customClass: { popup: 'rounded-[2.5rem]' }
     }).then(async (result) => {
-        if (result.isConfirmed) {
-            
-            // 🎯 3. ถ้าสถานะเป็น "เสร็จสิ้น" ให้ทำการคืนจำนวนคอร์สให้ลูกค้าใน Supabase
-            if (item.status === "เสร็จสิ้น") {
-                const customerId = item.customer_id;
-                
-                // ดึงข้อมูลคอร์สปัจจุบันของคนไข้
-                const { data: customer, error: custError } = await window.supabaseClient
+        if (!result.isConfirmed) return;
+
+        if (item.status === "เสร็จสิ้น") {
+            const customerId = item.customer_id;
+
+            const { data: customer, error: custError } = await window.supabaseClient
+                .from('customers')
+                .select('courses')
+                .eq('id', customerId)
+                .single();
+
+            if (!custError && customer && Array.isArray(customer.courses)) {
+                let updatedCourses = [...customer.courses];
+                const courseList = String(item.course || '').split(',').map(x => x.trim()).filter(Boolean);
+
+                courseList.forEach(courseName => {
+                    const courseIdx = updatedCourses.findIndex(bc =>
+                        window.normalizeCourseName(bc.name || '') === window.normalizeCourseName(courseName)
+                    );
+
+                    if (courseIdx !== -1) {
+                        let currentAmount = parseInt(updatedCourses[courseIdx].amount || 0, 10);
+                        let currentUsed = parseInt(updatedCourses[courseIdx].usedAmount || 0, 10);
+
+                        updatedCourses[courseIdx].amount = currentAmount + 1;
+                        updatedCourses[courseIdx].usedAmount = Math.max(0, currentUsed - 1);
+                    }
+                });
+
+                await window.supabaseClient
                     .from('customers')
-                    .select('courses')
-                    .eq('id', customerId)
-                    .single();
-
-                if (!custError && customer && Array.isArray(customer.courses)) {
-                    let updatedCourses = [...customer.courses];
-                    const courseList = String(item.course || '').split(',').map(x => x.trim()).filter(Boolean);
-
-                    courseList.forEach(courseName => {
-                        const courseIdx = updatedCourses.findIndex(bc => 
-                            window.normalizeCourseName(bc.name || '') === window.normalizeCourseName(courseName)
-                        );
-                        
-                        if (courseIdx !== -1) {
-                            // ✅ คืนจำนวนคอร์ส +1
-                            let currentAmount = parseInt(updatedCourses[courseIdx].amount || 0);
-                            updatedCourses[courseIdx].amount = currentAmount + 1;
-                        }
-                    });
-
-                    // บันทึกการคืนคอร์สกลับลง Supabase
-                    await window.supabaseClient
-                        .from('customers')
-                        .update({ courses: updatedCourses })
-                        .eq('id', customerId);
-                }
+                    .update({ courses: updatedCourses })
+                    .eq('id', customerId);
             }
+        }
 
-            // 🎯 4. ลบคิวออกจาก Supabase
-            const { error: deleteError } = await window.supabaseClient
-                .from('queues')
-                .delete()
-                .eq('id', qId);
+        const { error: deleteError } = await window.supabaseClient
+            .from('queues')
+            .delete()
+            .eq('id', qId);
 
-            if (deleteError) {
-                Swal.fire('ผิดพลาด', 'ไม่สามารถลบคิวจากฐานข้อมูลได้', 'error');
-                return;
-            }
+        if (deleteError) {
+            console.error(deleteError);
+            Swal.fire('ผิดพลาด', 'ไม่สามารถลบคิวจากฐานข้อมูลได้', 'error');
+            return;
+        }
 
-            // 🎯 5. แจ้งเตือนสำเร็จและวาดตารางใหม่
-            Swal.fire({
-                icon: 'success',
-                title: 'ยกเลิกคิวสำเร็จ!',
-                text: 'ระบบคืนจำนวนคอร์สให้คนไข้เรียบร้อยแล้วค่ะ',
-                timer: 1500,
-                showConfirmButton: false,
-                customClass: { popup: 'rounded-[2.5rem]' }
-            });
+        Swal.fire({
+            icon: 'success',
+            title: 'ยกเลิกคิวสำเร็จ!',
+            text: 'ระบบคืนจำนวนคอร์สให้คนไข้เรียบร้อยแล้วค่ะ',
+            timer: 1500,
+            showConfirmButton: false,
+            customClass: { popup: 'rounded-[2.5rem]' }
+        });
 
-            if (typeof renderQueuePage === 'function') {
-                renderQueuePage();
-            }
+        if (typeof window.renderQueuePage === 'function') {
+            await window.renderQueuePage();
+        }
+        if (typeof window.renderAppointmentPage === 'function') {
+            await window.renderAppointmentPage();
         }
     });
 };
 
-// 🎯 ฟังก์ชันสำรอง (กรณีมีโค้ดเก่าเรียกใช้ชื่อเดิม)
+// สำรองชื่อเดิม
 window.deleteQueueItem = function(qId) {
     window.deleteQueueItemById(qId);
 };
@@ -7780,11 +8301,6 @@ window.deleteQueueItem = function(qId) {
 /* =======================================================
     PROCESS SERVICE MODAL (ID-Based System)
    ======================================================= */
-
-window.getProcessRoleOptions = function(roleNames = [], selectedValue = '') {
-    return window.getBranchStaffOptions(roleNames, selectedValue);
-};
-
 // ✅ ปรับปรุง: ค้นหาค่า DF จาก Master DB บน Cloud/Local
 window.updateDFBySelectedCourse = function(courseName) {
     const courseMasterDB = JSON.parse(localStorage.getItem('courseMasterDB')) || [];
@@ -7863,12 +8379,14 @@ window.syncProcessCourseSelection = function() {
     if (doctorDFInput) doctorDFInput.value = doctorDF;
 };
 
-// ✅ ปรับปรุง: เปิดหน้าต่างบันทึกงานโดยอ้างอิง ID (UUID) ของคิว
+window.getProcessRoleOptions = async function(roleNames = [], selectedValue = '') {
+    return await window.getBranchStaffOptions(roleNames, selectedValue);
+};
+
 window.openProcessServiceModal = async function(qId) {
-    // 🎯 ดึงข้อมูลคิวล่าสุดจาก Cloud
     const { data: q, error } = await window.supabaseClient
         .from('queues')
-        .select('*, customers(*)')
+        .select('*')
         .eq('id', qId)
         .single();
 
@@ -7877,56 +8395,50 @@ window.openProcessServiceModal = async function(qId) {
         return;
     }
 
-    // หยุดสถานะการเรียกไฟกะพริบ (ถ้ามี)
     if (q.is_calling) {
-        await window.supabaseClient.from('queues').update({ is_calling: false }).eq('id', qId);
+        await window.supabaseClient
+            .from('queues')
+            .update({ is_calling: false })
+            .eq('id', qId);
     }
 
-    const stockDB = JSON.parse(localStorage.getItem('clinicStockDB')) || [];
-    const stockOptions = stockDB.map(s => `
-        <option value="${s.name}">
-            ${s.name} (คงเหลือ: ${s.qty} ${s.unit || ''})
-        </option>
-    `).join('');
+    const staffOptions = await window.getProcessRoleOptions(
+        ['พนักงานทรีตเม้นท์', 'ผู้ช่วยแพทย์', 'therapist', 'พนักงานผู้ดูแล'],
+        q.staff || ''
+    );
 
-    const preselectedCourse = String(q.course || '').split(',')[0]?.trim() || '';
-    const staffOptions = window.getProcessRoleOptions(['พนักงานทรีตเม้นท์', 'ผู้ช่วยแพทย์', 'therapist'], q.staff || '');
-    const doctorOptions = window.getDoctorOptionsForProcess(q.doctor || '');
+    const doctorOptions = `
+        <option value="">-- พิมพ์เองหรือเลือกก็ได้ --</option>
+        <option value="${q.doctor || ''}" selected>${q.doctor || '-'}</option>
+    `;
+
     const commonFieldClass = "w-full border-2 border-pink-100 p-4 rounded-2xl outline-none text-sm font-light bg-white text-slate-700 focus:border-pink-300 transition-all";
+
+    document.getElementById('processModal')?.remove();
 
     const modalWrap = document.createElement('div');
     modalWrap.id = "processModal";
     modalWrap.className = "fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[10005] font-light animate-in fade-in duration-300";
 
     modalWrap.innerHTML = `
-        <div class="bg-white w-full max-w-6xl rounded-[3.5rem] overflow-hidden shadow-2xl flex flex-col md:flex-row min-h-[700px] animate-in zoom-in duration-300">
+        <div class="bg-white w-full max-w-5xl rounded-[3.5rem] overflow-hidden shadow-2xl flex flex-col md:flex-row min-h-[640px] animate-in zoom-in duration-300">
 
             <div class="w-full md:w-2/5 bg-pink-50 flex flex-col items-center justify-start p-10 border-r border-pink-100">
                 <div class="w-52 h-52 bg-white rounded-[4rem] shadow-inner flex items-center justify-center border-4 border-white mb-6">
                     <span class="text-7xl">💉</span>
                 </div>
 
-                <h3 class="text-2xl font-bold text-slate-800 italic text-center">${q.customer_name || q.customers?.fullname || '-'}</h3>
-                <p class="text-slate-400 text-xs mt-1 font-bold uppercase">HN: ${q.customers?.hn || '-'}</p>
+                <h3 class="text-2xl font-bold text-slate-800 italic text-center">${q.customer_name || '-'}</h3>
+                <p class="text-slate-400 text-xs mt-1 font-bold uppercase">HN: ${q.hn || '-'}</p>
 
                 <div class="mt-8 bg-white/60 p-6 rounded-[2rem] w-full border border-white">
-                    <p class="text-[10px] text-[#D48197] font-black uppercase text-center mb-3 italic tracking-widest">📌 รายการที่ทำ (เลือกหักคอร์ส)</p>
-
-                    <div id="processCourseChecklist" class="space-y-2 max-h-[260px] overflow-y-auto pr-1">
-                        ${window.getRemainingCustomerCoursesOptions(q.customer_id, preselectedCourse)}
-                    </div>
-
-                    <div class="mt-4">
-                        <p class="text-[10px] text-slate-400 font-bold uppercase mb-2">รายการที่เลือก</p>
-                        <div id="processCourseSelectedSummary" class="min-h-[46px] p-3 rounded-2xl border border-pink-100 bg-pink-50/40 flex flex-wrap">
-                            <span class="text-slate-300 text-xs">ยังไม่ได้เลือกรายการ</span>
-                        </div>
-                    </div>
+                    <p class="text-[10px] text-[#D48197] font-black uppercase text-center mb-3 italic tracking-widest">📌 รายการที่ทำ</p>
+                    <div class="min-h-[120px] text-sm text-slate-600 whitespace-pre-line break-words">${q.course || '-'}</div>
                 </div>
             </div>
 
             <div class="flex-1 p-12 text-left relative overflow-y-auto" style="max-height: 90vh;">
-                <button onclick="this.closest('#processModal').remove()" class="absolute top-8 right-10 text-slate-300 text-3xl hover:text-pink-400 transition-all">✕</button>
+                <button onclick="document.getElementById('processModal').remove()" class="absolute top-8 right-10 text-slate-300 text-3xl hover:text-pink-400 transition-all">✕</button>
 
                 <h4 class="text-xl font-bold ace-pink uppercase italic mb-8 underline decoration-pink-100 decoration-4 underline-offset-8">
                     บันทึกข้อมูลและค่ามือ
@@ -7943,47 +8455,25 @@ window.openProcessServiceModal = async function(qId) {
 
                         <div>
                             <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">👨‍⚕️ แพทย์ผู้ทำ</label>
-                            <select id="procDoctorName" class="${commonFieldClass}">
-                                ${doctorOptions}
-                            </select>
+                            <input type="text" id="procDoctorName" value="${q.doctor || ''}" class="${commonFieldClass}" placeholder="พิมพ์ชื่อแพทย์">
                         </div>
                     </div>
 
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="text-[10px] text-slate-400 font-bold uppercase ml-2">💵 ค่ามือพนักงาน (DF)</label>
-                            <input type="number" id="staffDF" value="0" class="w-full border-2 border-slate-100 p-4 rounded-2xl outline-none text-base font-normal text-slate-600 bg-white focus:border-pink-200 transition-all">
+                            <input type="number" id="staffDF" value="${q.staff_df || 0}" class="w-full border-2 border-slate-100 p-4 rounded-2xl outline-none text-base font-normal text-slate-600 bg-white focus:border-pink-200 transition-all">
                         </div>
 
                         <div>
                             <label class="text-[10px] text-slate-400 font-bold uppercase ml-2">💵 ค่ามือแพทย์ (DF)</label>
-                            <input type="number" id="doctorDF" value="0" class="w-full border-2 border-slate-100 p-4 rounded-2xl outline-none text-base font-normal text-slate-600 bg-white focus:border-pink-200 transition-all">
+                            <input type="number" id="doctorDF" value="${q.doctor_df || 0}" class="w-full border-2 border-slate-100 p-4 rounded-2xl outline-none text-base font-normal text-slate-600 bg-white focus:border-pink-200 transition-all">
                         </div>
-                    </div>
-
-                    <div class="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100 shadow-inner">
-                        <p class="text-[10px] text-slate-400 font-bold uppercase mb-4 ml-1 italic">📦 หักลดยา/อุปกรณ์จากคลังฉีด</p>
-
-                        <div class="flex gap-2">
-                            <select id="procStockItem" class="flex-1 border border-pink-100 p-3 rounded-xl outline-none text-[12px] bg-white font-light focus:border-pink-300 transition-all">
-                                <option value="">-- เลือกยา/อุปกรณ์ --</option>
-                                ${stockOptions}
-                            </select>
-
-                            <input type="number" id="procQty" placeholder="0" class="w-20 border border-pink-100 p-3 rounded-xl outline-none text-sm text-center font-bold">
-
-                            <button type="button"
-                                onclick="window.addStockReductionRow()"
-                                class="bg-black text-white px-6 rounded-xl text-[10px] font-bold uppercase hover:bg-[#D48197] transition-all">
-                                เพิ่ม
-                            </button>
-                        </div>
-                        <div id="stockReductionList" class="mt-3 space-y-1"></div>
                     </div>
 
                     <div>
                         <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 italic">📔 หมายเหตุเพิ่มเติม</label>
-                        <textarea id="procNote" placeholder="รายละเอียดเพิ่มเติมเกี่ยวกับการทำหัตถการ..." class="w-full border-2 border-pink-50 p-4 rounded-2xl outline-none text-sm h-24 font-light focus:border-pink-200 transition-all text-slate-600"></textarea>
+                        <textarea id="procNote" class="w-full border-2 border-pink-50 p-4 rounded-2xl outline-none text-sm h-24 font-light focus:border-pink-200 transition-all text-slate-600">${q.note || ''}</textarea>
                     </div>
                 </div>
 
@@ -7999,179 +8489,137 @@ window.openProcessServiceModal = async function(qId) {
     `;
 
     document.body.appendChild(modalWrap);
-window.appCourseNote = '';
-
-if (editData) {
-    const rawCourse = String(editData.course || '').trim();
-    const parts = rawCourse.split('| หมายเหตุ:');
-    const selectedPart = String(parts[0] || '').trim();
-    const notePart = String(parts[1] || '').trim();
-
-    window.selectedCoursesForApp = selectedPart
-        ? selectedPart.split(',').map(x => x.trim()).filter(Boolean)
-        : [];
-
-    window.appCourseNote = notePart || '';
-} else {
-    window.selectedCoursesForApp = [];
-    window.appCourseNote = '';
-}
-
-window.renderSelectedCourses();
-
-const appCourse = document.getElementById('appCourse');
-const appCourseResults = document.getElementById('appCourseResults');
-
-let searchTimeout;
-
-if (appCourse) {
-    appCourse.addEventListener('focus', () => {
-        if (typeof window.searchCourseForApp === 'function') {
-            window.searchCourseForApp();
-        }
-    });
-
-    appCourse.addEventListener('input', () => {
-        window.appCourseNote = appCourse.value || '';
-
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(() => {
-            if (typeof window.searchCourseForApp === 'function') {
-                window.searchCourseForApp();
-            }
-        }, 200);
-    });
-}
-
-document.addEventListener('click', function closeCourseDropdown(e) {
-    const wrap = document.getElementById('appModal');
-    if (!wrap) return;
-
-    if (
-        appCourse &&
-        appCourseResults &&
-        !appCourse.contains(e.target) &&
-        !appCourseResults.contains(e.target)
-    ) {
-        appCourseResults.classList.add('hidden');
-    }
-}, { once: true });
-
-    // ✅ Event Listeners สำหรับการเลือกคอร์สแบบ Multi-select
-    document.querySelectorAll('.process-course-check').forEach(chk => {
-        chk.addEventListener('change', window.syncProcessCourseSelection);
-    });
-
-    window.syncProcessCourseSelection();
 };
 
 // 🎯 ฟังก์ชันบันทึกงานเสร็จสิ้น: หักคอร์สและ Sync สถานะนัดหมาย
 window.finishService = async function(qId) {
-    // 1. ดึงข้อมูลคิวจาก Supabase แทน LocalStorage เพื่อความแม่นยำ
+    // 1. ดึงข้อมูลคิวจาก Supabase
     const { data: qData, error: qError } = await window.supabaseClient
         .from('queues')
         .select('*')
         .eq('id', qId)
         .single();
 
-    if (qError || !qData) return;
+    if (qError || !qData) {
+        console.error('finishService queue load error:', qError);
+        Swal.fire('ผิดพลาด', 'ไม่พบข้อมูลคิว', 'error');
+        return;
+    }
 
-    // 2. ดึงรายการคอร์สที่ติ๊กเลือกทำจริง
+    // 2. ดึงรายการคอร์สที่ติ๊กเลือกทำจริง (ถ้ายังมีระบบ checkbox อยู่)
     const selectedCourseChecks = [...document.querySelectorAll('.process-course-check:checked')];
     const selectedCourses = selectedCourseChecks.map(chk => ({
         courseId: String(chk.dataset.courseId || '').trim(),
         courseName: String(chk.value || '').trim()
     }));
 
-    if (selectedCourses.length === 0) {
-        Swal.fire('กรุณาเลือกรายการ', 'กรุณาเลือกคอร์สที่ทำจริงเพื่อหักยอดค่ะ', 'warning');
-        return;
-    }
-
-    // 3. เริ่มกระบวนการหักคอร์สใน Database ลูกค้า (Supabase)
-    const { data: customer, error: custError } = await window.supabaseClient
-        .from('customers')
-        .select('courses')
-        .eq('id', qData.customer_id)
-        .single();
-
-    if (!custError && customer && Array.isArray(customer.courses)) {
-        let updatedCourses = [...customer.courses];
-
-        selectedCourses.forEach(selected => {
-            let courseIdx = -1;
-            
-            // ✅ หาโดย ID (ถ้ามี)
-            if (selected.courseId) {
-                courseIdx = updatedCourses.findIndex(c => String(c.id) === selected.courseId);
-            }
-            
-            // ✅ fallback: หาโดยชื่อคอร์ส
-            if (courseIdx === -1) {
-                courseIdx = updatedCourses.findIndex(c => 
-                    window.normalizeCourseName(c.name || '') === window.normalizeCourseName(selected.courseName)
-                );
-            }
-
-            if (courseIdx !== -1) {
-                const currentCourse = updatedCourses[courseIdx];
-                let currentAmt = parseInt(currentCourse.amount || 0, 10);
-                let currentUsed = parseInt(currentCourse.usedAmount || 0, 10);
-
-                if (currentAmt > 0) {
-                    currentCourse.amount = currentAmt - 1;
-                    currentCourse.usedAmount = currentUsed + 1;
-                    currentCourse.lastUsedAt = new Date().toISOString();
-                    currentCourse.status = currentCourse.amount <= 0 ? 'completed' : 'active';
-                }
-            }
-        });
-
-        // บันทึกยอดคอร์สใหม่กลับไปที่ Cloud
-        await window.supabaseClient
+    // ✅ ถ้ามี checkbox และมีการเลือก -> หักคอร์ส
+    if (selectedCourses.length > 0) {
+        const { data: customer, error: custError } = await window.supabaseClient
             .from('customers')
-            .update({ courses: updatedCourses })
-            .eq('id', qData.customer_id);
+            .select('courses')
+            .eq('id', qData.customer_id)
+            .single();
+
+        if (!custError && customer && Array.isArray(customer.courses)) {
+            let updatedCourses = [...customer.courses];
+
+            selectedCourses.forEach(selected => {
+                let courseIdx = -1;
+
+                if (selected.courseId) {
+                    courseIdx = updatedCourses.findIndex(c => String(c.id) === selected.courseId);
+                }
+
+                if (courseIdx === -1) {
+                    courseIdx = updatedCourses.findIndex(c =>
+                        window.normalizeCourseName(c.name || '') === window.normalizeCourseName(selected.courseName)
+                    );
+                }
+
+                if (courseIdx !== -1) {
+                    const currentCourse = updatedCourses[courseIdx];
+                    let currentAmt = parseInt(currentCourse.amount || 0, 10);
+                    let currentUsed = parseInt(currentCourse.usedAmount || 0, 10);
+
+                    if (currentAmt > 0) {
+                        currentCourse.amount = currentAmt - 1;
+                        currentCourse.usedAmount = currentUsed + 1;
+                        currentCourse.lastUsedAt = new Date().toISOString();
+                        currentCourse.status = currentCourse.amount <= 0 ? 'completed' : 'active';
+                    }
+                }
+            });
+
+            await window.supabaseClient
+                .from('customers')
+                .update({ courses: updatedCourses })
+                .eq('id', qData.customer_id);
+        }
     }
 
-    // 4. เตรียมข้อมูลอัปเดตสถานะคิว
-    const finishTime = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    // 3. เตรียมข้อมูลอัปเดตสถานะคิว
+    const finishTime = new Date().toLocaleTimeString('th-TH', {
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+
     const updatePayload = {
         status: "เสร็จสิ้น",
         finish_time: finishTime,
         staff_df: parseFloat(document.getElementById('staffDF')?.value || 0),
         doctor_df: parseFloat(document.getElementById('doctorDF')?.value || 0),
-        staff: document.getElementById('procStaffName')?.value || qData.staff,
-        doctor: document.getElementById('procDoctorName')?.value || qData.doctor,
-        note: document.getElementById('procNote')?.value || qData.note,
-        updated_at: new Date().toISOString()
+        staff: document.getElementById('procStaffName')?.value || qData.staff || '-',
+        doctor: document.getElementById('procDoctorName')?.value || qData.doctor || '-',
+        note: document.getElementById('procNote')?.value || qData.note || '',
+        updated_at: new Date().toISOString(),
+        is_calling: false
     };
 
-    // 5. อัปเดตสถานะคิวใน Supabase
-    await window.supabaseClient.from('queues').update(updatePayload).eq('id', qId);
+    // 4. อัปเดตสถานะคิวใน Supabase
+    const { error: updateQueueError } = await window.supabaseClient
+        .from('queues')
+        .update(updatePayload)
+        .eq('id', qId);
 
-    // 6. ⚡ Sync สถานะกลับไปที่หน้านัดหมาย (ใช้ ID อ้างอิง)
-    const appRefId = qData.appointment_id; 
+    if (updateQueueError) {
+        console.error('finishService queue update error:', updateQueueError);
+        Swal.fire('ผิดพลาด', updateQueueError.message || 'ไม่สามารถอัปเดตสถานะคิวได้', 'error');
+        return;
+    }
+
+    // 5. Sync สถานะกลับไปที่นัดหมาย
+    const appRefId = qData.appointment_id;
     if (appRefId) {
         await window.supabaseClient
             .from('appointments')
-            .update({ status: "เสร็จสิ้น" })
+            .update({
+                status: "เสร็จสิ้น",
+                doctor: updatePayload.doctor,
+                doctor_name: updatePayload.doctor,
+                staff: updatePayload.staff,
+                staff_name: updatePayload.staff,
+                note: updatePayload.note,
+                updated_at: new Date().toISOString()
+            })
             .eq('id', appRefId);
     }
 
-    // ปิด Modal และรีเฟรชหน้าจอ
+    // 6. ปิด Modal และรีเฟรชหน้าจอ
     document.getElementById('processModal')?.remove();
 
-    Swal.fire({ 
-        icon: 'success', 
-        title: 'บันทึกสำเร็จ', 
-        text: 'หักคอร์สและอัปเดตสถานะนัดหมายเรียบร้อยแล้วค่ะ',
-        timer: 1500, 
-        showConfirmButton: false 
+    Swal.fire({
+        icon: 'success',
+        title: 'บันทึกสำเร็จ',
+        text: selectedCourses.length > 0
+            ? 'หักคอร์สและอัปเดตสถานะนัดหมายเรียบร้อยแล้วค่ะ'
+            : 'อัปเดตสถานะนัดหมายเรียบร้อยแล้วค่ะ',
+        timer: 1500,
+        showConfirmButton: false
     });
 
-    renderQueuePage();
-    if (typeof renderAppointmentPage === 'function') renderAppointmentPage();
+    if (typeof window.renderQueuePage === 'function') await window.renderQueuePage();
+    if (typeof window.renderAppointmentPage === 'function') await window.renderAppointmentPage();
 };
 
 // 🎯 ฟังก์ชันยกเลิกคิวและคืนคอร์ส (ID-Based)

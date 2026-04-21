@@ -131,44 +131,58 @@
     .btn-close { background:#E5E7EB; color:#374151; }
 
     /* ========================================= */
-    /* 4. โครงสร้าง OPD / Slip (A5 บนหน้าจอ)       */
-    /* ========================================= */
+/* 4. โครงสร้าง OPD / Slip */
+/* ========================================= */
 
-    .page {
-        width: 210mm;
-        min-height: 297mm;
-        background: #fff;
-        margin: 20px auto;
-        box-shadow: 0 0 20px rgba(0,0,0,0.1);
-        display: flex;
-        flex-direction: column;
-    }
+.page {
+    width: 210mm;
+    min-height: 297mm;
+    background: #fff;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
 
-    .slip {
-        width: 100%;
-        height: 148.5mm;
-        padding: 8mm;
-        box-sizing: border-box;
-        border-bottom: 1px dashed #d1d5db; 
-        position: relative;
-    }
+.slip {
+    width: 100%;
+    height: 148.5mm; /* ครึ่งหนึ่งของ A4 แนวตั้ง */
+    padding: 6mm;
+    box-sizing: border-box;
+    border-bottom: 1px dashed #d1d5db;
+    position: relative;
+    page-break-inside: avoid;
+    break-inside: avoid;
+}
 
-    .card {
-        border: 1px solid #eee;
-        border-radius: 12px;
-        padding: 6mm;
-        height: 100%;
-    }
+.card {
+    border: 1px solid #eee;
+    border-radius: 12px;
+    padding: 6mm;
+    height: 100%;
+    box-sizing: border-box;
+}
 
-    .title { font-weight: 800; color: #D48197; font-size: 17px; line-height: 1.1; margin-bottom: 2px; }
-    .gold-bg { background: linear-gradient(45deg, #D48197, #C5A059) !important; }
-    
-    input[type=number]::-webkit-inner-spin-button, 
-    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.title {
+    font-weight: 800;
+    color: #D48197;
+    font-size: 17px;
+    line-height: 1.1;
+    margin-bottom: 2px;
+}
 
-  /* ========================================= */
-/* 5. 🖨️ ตั้งค่าการพิมพ์รายงาน / OPD */
-/* เสถียรขึ้นสำหรับ Windows / Chrome / Edge / Safari */
+.gold-bg {
+    background: linear-gradient(45deg, #D48197, #C5A059) !important;
+}
+
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* ========================================= */
+/* 5. ตั้งค่าการพิมพ์ OPD */
 /* ========================================= */
 @media print {
 
@@ -182,12 +196,16 @@
         print-color-adjust: exact !important;
     }
 
+    body {
+        font-size: 12px !important;
+    }
+
     /* ซ่อนทุกอย่างก่อน */
     body * {
         visibility: hidden !important;
     }
 
-    /* ส่วนที่ไม่ต้องพิมพ์ */
+    /* ไม่พิมพ์ส่วนเกิน */
     aside,
     header,
     nav,
@@ -199,26 +217,81 @@
         display: none !important;
     }
 
-    /* แสดงเฉพาะพื้นที่พิมพ์ */
+    /* แสดงเฉพาะส่วนพิมพ์ */
     #dynamicContent,
     #dynamicContent * {
         visibility: visible !important;
     }
 
     #dynamicContent {
-        position: fixed !important;
-        inset: 0 !important;
-        width: 100% !important;
-        min-height: 100% !important;
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
         margin: 0 !important;
-        padding: 12mm !important;
+        padding: 0 !important;
+        width: 100% !important;
+        min-height: auto !important;
         background: #fff !important;
         overflow: visible !important;
         box-sizing: border-box !important;
-        z-index: 999999 !important;
     }
 
-    /* กัน element ที่ใช้ scroll แล้วพิมพ์ขาด */
+    .page {
+        width: 100% !important;
+        min-height: auto !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        box-sizing: border-box !important;
+    }
+
+    .page:last-child {
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
+
+    .slip {
+        width: 100% !important;
+        height: 138mm !important;
+        padding: 5mm !important;
+        margin: 0 !important;
+        box-sizing: border-box !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+
+    .slip:last-child {
+        border-bottom: none !important;
+    }
+
+    .card {
+        width: 100% !important;
+        height: 100% !important;
+        margin: 0 !important;
+        box-sizing: border-box !important;
+    }
+
+    /* กันหัวดัน */
+    .page > :first-child,
+    .slip > :first-child,
+    .card > :first-child,
+    .title {
+        margin-top: 0 !important;
+    }
+
+    /* กัน class layout เดิมพาเยื้องขวา */
+    #dynamicContent .container,
+    #dynamicContent .container-fluid,
+    #dynamicContent .row,
+    #dynamicContent [class*="px-"],
+    #dynamicContent [class*="mx-auto"] {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
+
+    /* overflow */
     #dynamicContent .overflow-x-auto,
     #dynamicContent .overflow-y-auto,
     #dynamicContent .overflow-auto,
@@ -228,13 +301,12 @@
         max-width: none !important;
     }
 
-    /* ตาราง */
+    /* table */
     #dynamicContent table {
         width: 100% !important;
         border-collapse: collapse !important;
-        table-layout: auto !important;
+        table-layout: fixed !important;
         font-size: 11px !important;
-        page-break-inside: auto !important;
     }
 
     #dynamicContent thead {
@@ -255,13 +327,14 @@
     #dynamicContent th,
     #dynamicContent td {
         border: 1px solid #ddd !important;
-        padding: 6px 8px !important;
+        padding: 4px 6px !important;
         vertical-align: top !important;
         word-break: break-word !important;
         white-space: normal !important;
+        box-sizing: border-box !important;
     }
 
-    /* ถ้ามี card / shadow / radius เยอะเกินตอนพิมพ์ ให้เบาลง */
+    /* ตัด shadow */
     #dynamicContent .shadow,
     #dynamicContent .shadow-sm,
     #dynamicContent .shadow-md,
@@ -271,28 +344,27 @@
         box-shadow: none !important;
     }
 
-    /* ลิงก์ / ปุ่ม / form บางตัวไม่ควรเด้ง layout */
+    /* sticky/fixed */
+    #dynamicContent .sticky,
+    #dynamicContent [style*="position: sticky"],
+    #dynamicContent [style*="position: fixed"] {
+        position: static !important;
+    }
+
+    /* form */
     #dynamicContent input,
     #dynamicContent select,
     #dynamicContent textarea {
         border: 1px solid #ddd !important;
         background: #fff !important;
         color: #000 !important;
-    }
-
-    /* กัน sticky/fixed ทำให้พิมพ์ซ้อน */
-    #dynamicContent [style*="position: sticky"],
-    #dynamicContent .sticky {
-        position: static !important;
-    }
-
-    #dynamicContent [style*="position: fixed"] {
-        position: static !important;
+        box-shadow: none !important;
+        box-sizing: border-box !important;
     }
 
     @page {
-        size: A4 landscape;
-        margin: 8mm;
+        size: A4 portrait;
+        margin: 6mm;
     }
 }
 </style>
@@ -5530,7 +5602,9 @@ window.selectCustForApp = async function(fullname, customerId, hn = '') {
 
 window.searchCourseForApp = async function() {
     const wrapper = document.getElementById('appCourseListBox');
-    const customerInput = document.getElementById('appCustSearch');
+    const customerInput =
+        document.getElementById('appCustSearch') ||
+        document.getElementById('custSearchForBillInp');
 
     if (!wrapper || !customerInput) return;
 
@@ -5550,7 +5624,6 @@ window.searchCourseForApp = async function() {
     let rows = [];
 
     try {
-        // 🔥 ใช้ view ใหม่ (แต่ยัง safe ถ้า field ไม่มี)
         const TABLE_NAME = 'customer_course_balance_view_ui';
 
         if (customerId) {
@@ -5560,7 +5633,7 @@ window.searchCourseForApp = async function() {
                 .eq('customer_id', customerId)
                 .gt('remaining_qty', 0);
 
-            if (error) console.error(error);
+            if (error) console.error('searchCourseForApp customer_id error:', error);
             if (Array.isArray(data)) rows = data;
         }
 
@@ -5571,7 +5644,7 @@ window.searchCourseForApp = async function() {
                 .eq('hn', customerHn)
                 .gt('remaining_qty', 0);
 
-            if (error) console.error(error);
+            if (error) console.error('searchCourseForApp hn error:', error);
             if (Array.isArray(data)) rows = data;
         }
 
@@ -5583,17 +5656,16 @@ window.searchCourseForApp = async function() {
         const groupedMap = new Map();
 
         rows.forEach(item => {
-            const courseName = String(item.item_name || '-').trim();
+            const courseName = String(item.item_name || item.course_name || '-').trim();
             const remain = Number(item.remaining_qty || 0);
             const total = Number(item.total_qty || item.purchased_qty || 0);
             const unit = String(item.unit || 'ครั้ง').trim();
+            const expiryDate = item.display_expiry_date || null;
+            const expiryStatus = item.expiry_status || 'normal';
 
             if (!courseName || remain <= 0) return;
 
             const key = courseName.toLowerCase();
-
-            const expiryDate = item.display_expiry_date || null;
-            const expiryStatus = item.expiry_status || 'normal';
 
             if (!groupedMap.has(key)) {
                 groupedMap.set(key, {
@@ -5609,7 +5681,6 @@ window.searchCourseForApp = async function() {
                 old.remain += remain;
                 old.total += total;
 
-                // 🔥 เลือกวันหมดอายุที่ใกล้ที่สุด
                 if (expiryDate) {
                     if (!old.expiryDate || expiryDate < old.expiryDate) {
                         old.expiryDate = expiryDate;
@@ -5619,10 +5690,13 @@ window.searchCourseForApp = async function() {
             }
         });
 
-        const courseList = Array.from(groupedMap.values());
+        const courseList = Array.from(groupedMap.values()).sort((a, b) => {
+            const aDate = a.expiryDate || '9999-12-31';
+            const bDate = b.expiryDate || '9999-12-31';
+            return aDate.localeCompare(bDate);
+        });
 
         wrapper.innerHTML = courseList.map(c => {
-
             let expiryClass = 'text-slate-400';
 
             if (c.expiryStatus === 'expired') {
@@ -5633,19 +5707,17 @@ window.searchCourseForApp = async function() {
 
             return `
                 <div class="p-3 border-b border-pink-50 bg-white">
-                    
                     <div class="text-sm font-bold text-slate-700">
                         ${window.escapeHtml(c.courseName)}
                     </div>
 
                     <div class="text-[10px] text-pink-400 font-bold mt-1">
-                        คงเหลือ ${Number(c.remain || 0)}/${Number(c.total || 0)} ${window.escapeHtml(c.unit)}
+                        คงเหลือ ${Number(c.remain || 0)}/${Number(c.total || 0)} ${window.escapeHtml(c.unit || 'ครั้ง')}
                     </div>
 
                     <div class="text-[10px] mt-1 ${expiryClass}">
                         หมดอายุ: ${c.expiryDate ? window.escapeHtml(c.expiryDate) : '-'}
                     </div>
-
                 </div>
             `;
         }).join('');
@@ -5656,6 +5728,136 @@ window.searchCourseForApp = async function() {
     }
 };
 
+
+// ✅ เพิ่มฟังก์ชันแสดง “คอร์สคงเหลือ”
+window.renderRemainingCoursesPreview = async function() {
+    const previewBox = document.getElementById('remainingCoursesPreview');
+    const customerInput =
+        document.getElementById('appCustSearch') ||
+        document.getElementById('custSearchForBillInp');
+
+    if (!previewBox || !customerInput) return;
+
+    const customerId = String(customerInput.dataset.customerId || '').trim();
+    const customerHn = String(customerInput.dataset.hn || '').trim();
+
+    if (!customerId && !customerHn) {
+        previewBox.innerHTML = `<div class="text-slate-300 italic">ยังไม่ได้เลือกลูกค้า</div>`;
+        return;
+    }
+
+    if (!window.supabaseClient) {
+        previewBox.innerHTML = `<div class="text-red-300 italic">ยังไม่พบการเชื่อมต่อฐานข้อมูล</div>`;
+        return;
+    }
+
+    let rows = [];
+
+    try {
+        const TABLE_NAME = 'customer_course_balance_view_ui';
+
+        if (customerId) {
+            const { data, error } = await window.supabaseClient
+                .from(TABLE_NAME)
+                .select('*')
+                .eq('customer_id', customerId)
+                .gt('remaining_qty', 0);
+
+            if (error) console.error('renderRemainingCoursesPreview customer_id error:', error);
+            if (Array.isArray(data)) rows = data;
+        }
+
+        if ((!rows || rows.length === 0) && customerHn) {
+            const { data, error } = await window.supabaseClient
+                .from(TABLE_NAME)
+                .select('*')
+                .eq('hn', customerHn)
+                .gt('remaining_qty', 0);
+
+            if (error) console.error('renderRemainingCoursesPreview hn error:', error);
+            if (Array.isArray(data)) rows = data;
+        }
+
+        if (!rows || rows.length === 0) {
+            previewBox.innerHTML = `<div class="text-slate-300 italic">ไม่พบคอร์สคงเหลือ</div>`;
+            return;
+        }
+
+        const groupedMap = new Map();
+
+        rows.forEach(item => {
+            const courseName = String(item.item_name || item.course_name || '-').trim();
+            const remain = Number(item.remaining_qty || 0);
+            const total = Number(item.total_qty || item.purchased_qty || 0);
+            const unit = String(item.unit || 'ครั้ง').trim();
+            const expiryDate = item.display_expiry_date || null;
+            const expiryStatus = item.expiry_status || 'normal';
+
+            if (!courseName || remain <= 0) return;
+
+            const key = courseName.toLowerCase();
+
+            if (!groupedMap.has(key)) {
+                groupedMap.set(key, {
+                    courseName,
+                    remain,
+                    total,
+                    unit,
+                    expiryDate,
+                    expiryStatus
+                });
+            } else {
+                const old = groupedMap.get(key);
+                old.remain += remain;
+                old.total += total;
+
+                if (expiryDate) {
+                    if (!old.expiryDate || expiryDate < old.expiryDate) {
+                        old.expiryDate = expiryDate;
+                        old.expiryStatus = expiryStatus;
+                    }
+                }
+            }
+        });
+
+        const courseList = Array.from(groupedMap.values()).sort((a, b) => {
+            const aDate = a.expiryDate || '9999-12-31';
+            const bDate = b.expiryDate || '9999-12-31';
+            return aDate.localeCompare(bDate);
+        });
+
+        previewBox.innerHTML = `
+            <div class="space-y-2">
+                ${courseList.map(c => {
+                    let expiryClass = 'text-slate-400';
+
+                    if (c.expiryStatus === 'expired') {
+                        expiryClass = 'text-red-600 font-semibold';
+                    } else if (c.expiryStatus === 'warning') {
+                        expiryClass = 'text-orange-500 font-semibold';
+                    }
+
+                    return `
+                        <div class="text-[13px] leading-relaxed">
+                            <div>
+                                <span class="text-slate-700 font-semibold">${window.escapeHtml(c.courseName)}</span>
+                                <span class="text-pink-500 font-bold">
+                                    คงเหลือ ${Number(c.remain || 0)} / ${Number(c.total || 0)} ${window.escapeHtml(c.unit || 'ครั้ง')}
+                                </span>
+                            </div>
+                            <div class="text-[11px] mt-1 ${expiryClass}">
+                                วันหมดอายุ: ${c.expiryDate ? window.escapeHtml(c.expiryDate) : '-'}
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    } catch (e) {
+        console.error('renderRemainingCoursesPreview error:', e);
+        previewBox.innerHTML = `<div class="text-red-300 italic">โหลดคอร์สคงเหลือไม่สำเร็จ</div>`;
+    }
+};
 window.getAppointmentCourseText = function() {
     const selected = Array.isArray(window.selectedCoursesForApp)
         ? window.selectedCoursesForApp
@@ -6783,130 +6985,6 @@ window.clearQueueDateFilter = function() {
     renderQueuePage(); 
 };
 
-// ✅ เพิ่มฟังก์ชันแสดง “คอร์สคงเหลือ”
-window.renderRemainingCoursesPreview = async function() {
-    const previewBox = document.getElementById('remainingCoursesPreview');
-    const customerInput = document.getElementById('appCustSearch');
-
-    if (!previewBox || !customerInput) return;
-
-    const customerId = String(customerInput.dataset.customerId || '').trim();
-    const customerHn = String(customerInput.dataset.hn || '').trim();
-
-    if (!customerId && !customerHn) {
-        previewBox.innerHTML = `<div class="text-slate-300 italic">ยังไม่ได้เลือกลูกค้า</div>`;
-        return;
-    }
-
-    if (!window.supabaseClient) {
-        previewBox.innerHTML = `<div class="text-red-300 italic">ยังไม่พบการเชื่อมต่อฐานข้อมูล</div>`;
-        return;
-    }
-
-    let rows = [];
-
-    try {
-        const TABLE_NAME = 'customer_course_balance_view_ui';
-
-        if (customerId) {
-            const { data, error } = await window.supabaseClient
-                .from(TABLE_NAME)
-                .select('*')
-                .eq('customer_id', customerId)
-                .gt('remaining_qty', 0);
-
-            if (error) console.error(error);
-            if (Array.isArray(data)) rows = data;
-        }
-
-        if ((!rows || rows.length === 0) && customerHn) {
-            const { data, error } = await window.supabaseClient
-                .from(TABLE_NAME)
-                .select('*')
-                .eq('hn', customerHn)
-                .gt('remaining_qty', 0);
-
-            if (error) console.error(error);
-            if (Array.isArray(data)) rows = data;
-        }
-
-        if (!rows || rows.length === 0) {
-            previewBox.innerHTML = `<div class="text-slate-300 italic">ไม่พบคอร์สคงเหลือ</div>`;
-            return;
-        }
-
-        const groupedMap = new Map();
-
-        rows.forEach(item => {
-            const courseName = String(item.item_name || item.course_name || '-').trim();
-            const remain = Number(item.remaining_qty || 0);
-            const total = Number(item.total_qty || item.purchased_qty || 0);
-            const unit = String(item.unit || 'ครั้ง').trim();
-
-            if (!courseName || remain <= 0) return;
-
-            const key = courseName.toLowerCase();
-            const expiryDate = item.display_expiry_date || null;
-            const expiryStatus = item.expiry_status || 'normal';
-
-            if (!groupedMap.has(key)) {
-                groupedMap.set(key, {
-                    courseName,
-                    remain,
-                    total,
-                    unit,
-                    expiryDate,
-                    expiryStatus
-                });
-            } else {
-                const old = groupedMap.get(key);
-                old.remain += remain;
-                old.total += total;
-
-                // เอาวันหมดอายุที่ใกล้ที่สุดมาแสดง
-                if (expiryDate) {
-                    if (!old.expiryDate || expiryDate < old.expiryDate) {
-                        old.expiryDate = expiryDate;
-                        old.expiryStatus = expiryStatus;
-                    }
-                }
-            }
-        });
-
-        const courseList = Array.from(groupedMap.values());
-
-        previewBox.innerHTML = `
-            <div class="space-y-2">
-                ${courseList.map(c => {
-                    let expiryClass = 'text-slate-400';
-
-                    if (c.expiryStatus === 'expired') {
-                        expiryClass = 'text-red-600 font-semibold';
-                    } else if (c.expiryStatus === 'warning') {
-                        expiryClass = 'text-orange-500 font-semibold';
-                    }
-
-                    return `
-                        <div class="text-[13px] leading-relaxed">
-                            <div>
-                                <span class="text-slate-700 font-semibold">${window.escapeHtml(c.courseName)}</span>
-                                <span class="text-pink-500 font-bold">
-                                    คงเหลือ ${Number(c.remain || 0)} / ${Number(c.total || 0)} ${window.escapeHtml(c.unit || 'ครั้ง')}
-                                </span>
-                            </div>
-                            <div class="text-[11px] mt-1 ${expiryClass}">
-                                วันหมดอายุ: ${c.expiryDate ? window.escapeHtml(c.expiryDate) : '-'}
-                            </div>
-                        </div>
-                    `;
-                }).join('')}
-            </div>
-        `;
-    } catch (e) {
-        console.error('renderRemainingCoursesPreview error:', e);
-        previewBox.innerHTML = `<div class="text-red-300 italic">โหลดคอร์สคงเหลือไม่สำเร็จ</div>`;
-    }
-};
 
 window.saveNewAppointment = async function(appId = '') {
     try {
@@ -8592,7 +8670,11 @@ window.renderQueueCourseChecklist = function(courseList = [], preselected = []) 
                     data-doctordf="${Number(item.doctor_df || 0)}"
                     data-sale-item-id="${window.escapeHtml(item.sale_item_id || '')}"
                     data-item-code="${window.escapeHtml(item.item_code || '')}"
+                    data-old-course-code="${window.escapeHtml(item.old_course_code || '')}"
                     data-bill-no="${window.escapeHtml(item.bill_no || '')}"
+                    data-total-qty="${Number(item.total_qty || 0)}"
+                    data-remaining-qty="${Number(item.remaining_qty || 0)}"
+                    data-unit="${window.escapeHtml(item.unit || 'ครั้ง')}"
                     ${checked}
                 >
                 <div class="flex-1">
@@ -8868,6 +8950,165 @@ window.openProcessServiceModal = async function(qId) {
     }
 };
 
+window.normalizeCourseKey = function(v) {
+    return String(v || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/-/g, '')
+        .replace(/_/g, '');
+};
+
+window.findMatchingSalesItemForCourse = async function(customerId, courseItem, hn = '') {
+    try {
+        if (!window.supabaseClient) return null;
+
+        let query = window.supabaseClient
+            .from('sales_items')
+            .select('id, customer_id, hn, item_code, item_name, qty, unit, old_course_code, branch_name, created_at, course_id')
+            .order('created_at', { ascending: false });
+
+        if (customerId) {
+            query = query.eq('customer_id', String(customerId));
+        } else if (hn) {
+            query = query.eq('hn', String(hn));
+        } else {
+            return null;
+        }
+
+        const { data, error } = await query;
+        if (error) {
+            console.error('findMatchingSalesItemForCourse error:', error);
+            return null;
+        }
+
+        const rows = Array.isArray(data) ? data : [];
+        if (!rows.length) return null;
+
+        const targetName = window.normalizeCourseKey(courseItem.course_name || courseItem.item_name || '');
+        const targetCode = window.normalizeCourseKey(courseItem.item_code || '');
+        const targetOldCode = window.normalizeCourseKey(courseItem.old_course_code || '');
+
+        let found = rows.find(r =>
+            targetCode &&
+            window.normalizeCourseKey(r.item_code) === targetCode
+        );
+
+        if (!found) {
+            found = rows.find(r =>
+                targetOldCode &&
+                window.normalizeCourseKey(r.old_course_code) === targetOldCode
+            );
+        }
+
+        if (!found) {
+            found = rows.find(r =>
+                window.normalizeCourseKey(r.item_name) === targetName
+            );
+        }
+
+        return found || null;
+    } catch (e) {
+        console.error('findMatchingSalesItemForCourse catch:', e);
+        return null;
+    }
+};
+
+window.upsertCourseBalanceOverride = async function(params = {}) {
+    try {
+        const {
+            customer_id,
+            sale_item_id,
+            bill_no = '',
+            item_code = '',
+            item_name = '',
+            old_course_code = '',
+            total_qty = 0,
+            used_delta = 0,
+            unit = 'ครั้ง'
+        } = params;
+
+        if (!window.supabaseClient || !customer_id) return false;
+
+        let query = window.supabaseClient
+            .from('course_balance_overrides')
+            .select('*')
+            .eq('customer_id', String(customer_id));
+
+        if (sale_item_id) {
+            query = query.eq('sale_item_id', String(sale_item_id));
+        } else if (item_code) {
+            query = query.eq('item_code', String(item_code));
+        } else {
+            query = query.eq('item_name', String(item_name || ''));
+        }
+
+        const { data: oldRows, error: oldError } = await query.limit(1);
+
+        if (oldError) {
+            console.error('load old override error:', oldError);
+            return false;
+        }
+
+        const oldRow = Array.isArray(oldRows) && oldRows.length ? oldRows[0] : null;
+
+        let currentUsed = 0;
+        let currentRemain = Number(total_qty || 0);
+
+        if (oldRow) {
+            currentUsed = Number(oldRow.override_used_qty || 0);
+            if (oldRow.override_remaining_qty !== null && oldRow.override_remaining_qty !== undefined) {
+                currentRemain = Number(oldRow.override_remaining_qty || 0);
+            } else {
+                currentRemain = Math.max(0, Number(total_qty || 0) - currentUsed);
+            }
+        }
+
+        const nextUsed = Math.max(0, currentUsed + Number(used_delta || 0));
+        const nextRemain = Math.max(0, Number(total_qty || 0) - nextUsed);
+
+        const payload = {
+            customer_id: String(customer_id),
+            sale_item_id: sale_item_id ? String(sale_item_id) : null,
+            bill_no: String(bill_no || ''),
+            item_code: String(item_code || ''),
+            item_name: String(item_name || ''),
+            old_course_code: String(old_course_code || ''),
+            total_qty: Number(total_qty || 0),
+            override_used_qty: nextUsed,
+            override_remaining_qty: nextRemain,
+            unit: String(unit || 'ครั้ง'),
+            updated_at: new Date().toISOString()
+        };
+
+        if (oldRow?.id) {
+            const { error: updateError } = await window.supabaseClient
+                .from('course_balance_overrides')
+                .update(payload)
+                .eq('id', oldRow.id);
+
+            if (updateError) {
+                console.error('update override error:', updateError);
+                return false;
+            }
+        } else {
+            const { error: insertError } = await window.supabaseClient
+                .from('course_balance_overrides')
+                .insert([payload]);
+
+            if (insertError) {
+                console.error('insert override error:', insertError);
+                return false;
+            }
+        }
+
+        return true;
+    } catch (e) {
+        console.error('upsertCourseBalanceOverride catch:', e);
+        return false;
+    }
+};
+
 // 🎯 ฟังก์ชันบันทึกงานเสร็จสิ้น: หักคอร์สและ Sync สถานะนัดหมาย
 window.finishService = async function(qId) {
     try {
@@ -8883,117 +9124,154 @@ window.finishService = async function(qId) {
             .single();
 
         if (qError || !qData) {
-            Swal.fire('ไม่พบข้อมูล', 'ไม่สามารถโหลดข้อมูลคิวได้', 'error');
+            Swal.fire('ไม่พบข้อมูล', 'ไม่พบข้อมูลคิวที่ต้องการบันทึก', 'error');
             return;
         }
 
-        if (String(qData.status || '') === 'เสร็จสิ้น') {
-            Swal.fire('แจ้งเตือน', 'คิวนี้ถูกบันทึกเสร็จสิ้นไปแล้ว', 'warning');
+        const selectedCourseChecks = [...document.querySelectorAll('.process-course-check:checked')];
+
+        if (selectedCourseChecks.length === 0) {
+            Swal.fire('กรุณาเลือกรายการ', 'กรุณาเลือกคอร์สที่ทำจริงก่อนบันทึกค่ะ', 'warning');
             return;
         }
 
-        const checkedCourses = [...document.querySelectorAll('.process-course-check:checked')];
+        const procStaffName = document.getElementById('procStaffName')?.value?.trim() || qData.staff || '';
+        const procDoctorName = document.getElementById('procDoctorName')?.value?.trim() || qData.doctor || '';
+        const staffDF = Number(document.getElementById('staffDF')?.value || 0);
+        const doctorDF = Number(document.getElementById('doctorDF')?.value || 0);
+        const procNote = document.getElementById('procNote')?.value?.trim() || '';
 
-        if (checkedCourses.length === 0) {
-            Swal.fire('กรุณาเลือกรายการ', 'กรุณาเลือกคอร์สที่ทำจริงเพื่อหักยอดค่ะ', 'warning');
-            return;
-        }
-
-        const procStaffName = String(document.getElementById('procStaffName')?.value || qData.staff || '').trim();
-        const procDoctorName = String(document.getElementById('procDoctorName')?.value || qData.doctor || '').trim();
-        const procNote = String(document.getElementById('procNote')?.value || qData.note || '').trim();
-        const totalStaffDF = Number(document.getElementById('staffDF')?.value || 0);
-        const totalDoctorDF = Number(document.getElementById('doctorDF')?.value || 0);
-
-        const todayISO = new Date().toISOString().split('T')[0];
-        const usedDate = qData.date || todayISO;
         const finishTime = new Date().toLocaleTimeString('th-TH', {
             hour: '2-digit',
-            minute: '2-digit'
+            minute: '2-digit',
+            hour12: false
         });
 
-        // ✅ ตัดคอร์สจริงผ่าน course_usage
-        const usageRows = checkedCourses.map((chk, idx) => {
-            const courseName = String(chk.dataset.courseName || chk.value || '').trim();
-            const saleItemIdRaw = String(chk.dataset.saleItemId || '').trim();
+        const usedCourseNames = [];
+        const usageRows = [];
 
-            return {
-                customer_id: qData.customer_id ? String(qData.customer_id) : null,
-                hn: qData.hn || null,
-                customer_name: qData.customer_name || null,
-                sale_item_id: saleItemIdRaw || null,
-                course_id: null,
-                old_course_code: null,
-                item_code: String(chk.dataset.itemCode || '').trim() || null,
-                item_name: courseName || null,
-                service_no: String(qId), // ✅ ใช้ qId เป็นเลขอ้างอิงการใช้บริการ
+        for (const chk of selectedCourseChecks) {
+            const course_name = String(chk.dataset.courseName || chk.value || '').trim();
+            const item_code = String(chk.dataset.itemCode || '').trim();
+            const old_course_code = String(chk.dataset.oldCourseCode || '').trim();
+            const sale_item_id_from_view = String(chk.dataset.saleItemId || '').trim();
+            const total_qty = Number(chk.dataset.totalQty || 0);
+            const unit = String(chk.dataset.unit || 'ครั้ง').trim();
+
+            let matchedSalesItem = null;
+
+            if (sale_item_id_from_view) {
+                matchedSalesItem = {
+                    id: sale_item_id_from_view,
+                    item_code,
+                    item_name: course_name,
+                    old_course_code,
+                    qty: total_qty,
+                    unit
+                };
+            } else {
+                matchedSalesItem = await window.findMatchingSalesItemForCourse(
+                    qData.customer_id,
+                    {
+                        course_name,
+                        item_code,
+                        old_course_code
+                    },
+                    qData.hn || ''
+                );
+            }
+
+            const sale_item_id = matchedSalesItem?.id ? String(matchedSalesItem.id) : null;
+            const final_item_code = String(matchedSalesItem?.item_code || item_code || '').trim();
+            const final_old_course_code = String(matchedSalesItem?.old_course_code || old_course_code || '').trim();
+            const final_unit = String(matchedSalesItem?.unit || unit || 'ครั้ง').trim();
+            const final_total_qty = Number(total_qty || matchedSalesItem?.qty || 0);
+
+            usedCourseNames.push(course_name);
+
+            usageRows.push({
+                customer_id: String(qData.customer_id || ''),
+                hn: String(qData.hn || ''),
+                customer_name: String(qData.customer_name || ''),
+                sale_item_id: sale_item_id,
+                course_id: matchedSalesItem?.course_id || null,
+                old_course_code: final_old_course_code || null,
+                item_code: final_item_code || null,
+                item_name: course_name,
+                service_no: String(qId),
                 legacy_ref_no: qData.appointment_id ? String(qData.appointment_id) : null,
                 used_qty: 1,
-                used_date: usedDate,
-                unit: 'ครั้ง',
+                used_date: qData.date || new Date().toISOString().split('T')[0],
+                unit: final_unit,
                 service_value: 0,
-                status_text: 'ใช้งานแล้ว',
+                status_text: 'ใช้บริการแล้ว',
                 note: procNote || null,
-                branch_name: qData.branch || null,
+                branch_name: String(qData.branch || ''),
                 source_file: 'queue_service',
                 match_status: 'manual'
-            };
-        });
+            });
 
-        const { error: usageError } = await window.supabaseClient
-            .from('course_usage')
-            .insert(usageRows);
+            const ok = await window.upsertCourseBalanceOverride({
+                customer_id: String(qData.customer_id || ''),
+                sale_item_id: sale_item_id,
+                bill_no: '',
+                item_code: final_item_code,
+                item_name: course_name,
+                old_course_code: final_old_course_code,
+                total_qty: final_total_qty,
+                used_delta: 1,
+                unit: final_unit
+            });
 
-        if (usageError) {
-            console.error('course_usage insert error:', usageError);
-            Swal.fire('ผิดพลาด', usageError.message || 'ไม่สามารถตัดคอร์สลูกค้าได้', 'error');
-            return;
+            if (!ok) {
+                throw new Error(`อัปเดตยอดคงเหลือไม่สำเร็จ: ${course_name}`);
+            }
         }
 
-        const usedCourseNames = checkedCourses
-            .map(chk => String(chk.dataset.courseName || chk.value || '').trim())
-            .filter(Boolean);
+        if (usageRows.length > 0) {
+            const { error: usageError } = await window.supabaseClient
+                .from('course_usage')
+                .insert(usageRows);
 
-        // ✅ บันทึกสถานะคิว
-        const queuePayload = {
-            status: 'เสร็จสิ้น',
+            if (usageError) {
+                console.error('insert course_usage error:', usageError);
+                throw new Error(usageError.message || 'บันทึกประวัติการใช้คอร์สไม่สำเร็จ');
+            }
+        }
+
+        const updatePayload = {
+            status: "เสร็จสิ้น",
             finish_time: finishTime,
+            staff_df: staffDF,
+            doctor_df: doctorDF,
+            staff: procStaffName || qData.staff || '',
+            doctor: procDoctorName || qData.doctor || '',
+            note: procNote || qData.note || '',
             used_course_names: usedCourseNames,
-            staff_df: totalStaffDF,
-            doctor_df: totalDoctorDF,
-            staff: procStaffName || null,
-            doctor: procDoctorName || null,
-            note: procNote || null,
             updated_at: new Date().toISOString()
         };
 
         const { error: queueUpdateError } = await window.supabaseClient
             .from('queues')
-            .update(queuePayload)
+            .update(updatePayload)
             .eq('id', qId);
 
         if (queueUpdateError) {
-            console.error('queue update error:', queueUpdateError);
-            Swal.fire('ผิดพลาด', queueUpdateError.message || 'ไม่สามารถอัปเดตสถานะคิวได้', 'error');
-            return;
+            console.error('update queue error:', queueUpdateError);
+            throw new Error(queueUpdateError.message || 'อัปเดตสถานะคิวไม่สำเร็จ');
         }
 
-        // ✅ sync กลับไป appointments
         if (qData.appointment_id) {
-            const { error: appUpdateError } = await window.supabaseClient
+            const { error: appError } = await window.supabaseClient
                 .from('appointments')
                 .update({
                     status: 'เสร็จสิ้น',
-                    staff: procStaffName || null,
-                    staff_name: procStaffName || null,
-                    doctor: procDoctorName || null,
-                    doctor_name: procDoctorName || null,
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', qData.appointment_id);
 
-            if (appUpdateError) {
-                console.error('appointment update error:', appUpdateError);
+            if (appError) {
+                console.warn('update appointment warning:', appError);
             }
         }
 
@@ -9002,48 +9280,105 @@ window.finishService = async function(qId) {
         Swal.fire({
             icon: 'success',
             title: 'บันทึกสำเร็จ',
-            text: 'ตัดคอร์สและบันทึกค่ามือเรียบร้อยแล้วค่ะ',
-            timer: 1400,
+            text: 'ระบบตัดคอร์สและบันทึกการใช้บริการเรียบร้อยแล้วค่ะ',
+            timer: 1500,
             showConfirmButton: false
         });
 
-        if (typeof window.renderQueuePage === 'function') {
-            await window.renderQueuePage();
-        }
+        if (typeof window.renderQueuePage === 'function') await window.renderQueuePage();
+        if (typeof window.renderAppointmentPage === 'function') await window.renderAppointmentPage();
 
-        if (typeof window.renderAppointmentPage === 'function') {
-            await window.renderAppointmentPage();
+        if (typeof window.renderCustomerProfile === 'function' && qData.customer_id) {
+            try {
+                await window.renderCustomerProfile(qData.customer_id);
+            } catch (e) {
+                console.warn('refresh customer profile warning:', e);
+            }
         }
 
     } catch (e) {
         console.error('finishService error:', e);
-        Swal.fire('ผิดพลาด', e.message || 'ไม่สามารถบันทึกข้อมูลบริการได้', 'error');
+        Swal.fire('ผิดพลาด', e.message || 'บันทึกการใช้บริการไม่สำเร็จ', 'error');
     }
 };
+// 🎯 ฟังก์ชันยกเลิกคิวและคืนคอร์ส (ID-Based) - เวอร์ชันแก้แล้ว
+window.deleteQueueItem = async function(qId) {
+    try {
+        const result = await Swal.fire({
+            title: 'ยืนยันการลบคิว?',
+            text: 'หากคิวนี้หักคอร์สไปแล้ว ระบบจะคืนคอร์สให้ลูกค้าอัตโนมัติค่ะ',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'ใช่, ลบและคืนคอร์ส',
+            confirmButtonColor: '#ef4444',
+            cancelButtonColor: '#94a3b8'
+        });
 
-// 🎯 ฟังก์ชันยกเลิกคิวและคืนคอร์ส (ID-Based)
-window.deleteQueueItem = function(qId) {
-    Swal.fire({
-        title: 'ยืนยันการลบคิว?',
-        text: "หากคิวนี้หักคอร์สไปแล้ว ระบบจะคืนคอร์สให้ลูกค้าอัตโนมัติค่ะ",
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'ใช่, ลบและคืนคอร์ส',
-        confirmButtonColor: '#ef4444',
-        cancelButtonColor: '#94a3b8'
-    }).then(async (result) => {
-        if (result.isConfirmed) {
-            // 1. ดึงข้อมูลคิวจาก Cloud
-            const { data: qData, error: qError } = await window.supabaseClient
-                .from('queues')
-                .select('*')
-                .eq('id', qId)
-                .single();
+        if (!result.isConfirmed) return;
 
-            if (qError || !qData) return;
+        // 1) ดึงข้อมูลคิว
+        const { data: qData, error: qError } = await window.supabaseClient
+            .from('queues')
+            .select('*')
+            .eq('id', qId)
+            .single();
 
-            // 2. คืนคอร์สถ้าสถานะคือเสร็จสิ้น
-            if (qData.status === "เสร็จสิ้น") {
+        if (qError || !qData) {
+            Swal.fire('ไม่พบข้อมูล', 'ไม่พบคิวที่ต้องการลบ', 'error');
+            return;
+        }
+
+        // 2) ถ้าคิวเสร็จสิ้นแล้ว => คืนคอร์ส
+        if (qData.status === 'เสร็จสิ้น') {
+            const usedCourseNames = Array.isArray(qData.used_course_names) && qData.used_course_names.length
+                ? qData.used_course_names
+                : String(qData.course || '')
+                    .split(',')
+                    .map(x => String(x || '').trim())
+                    .filter(Boolean);
+
+            for (const courseName of usedCourseNames) {
+                // หา sales item ตัวจริงก่อน
+                const matchedSalesItem = typeof window.findMatchingSalesItemForCourse === 'function'
+                    ? await window.findMatchingSalesItemForCourse(
+                        qData.customer_id,
+                        { course_name: courseName },
+                        qData.hn || ''
+                    )
+                    : null;
+
+                // คืน override
+                if (typeof window.upsertCourseBalanceOverride === 'function') {
+                    const ok = await window.upsertCourseBalanceOverride({
+                        customer_id: String(qData.customer_id || ''),
+                        sale_item_id: matchedSalesItem?.id ? String(matchedSalesItem.id) : null,
+                        bill_no: '',
+                        item_code: String(matchedSalesItem?.item_code || ''),
+                        item_name: String(courseName || ''),
+                        old_course_code: String(matchedSalesItem?.old_course_code || ''),
+                        total_qty: Number(matchedSalesItem?.qty || 0),
+                        used_delta: -1,
+                        unit: String(matchedSalesItem?.unit || 'ครั้ง')
+                    });
+
+                    if (!ok) {
+                        console.warn('คืน override ไม่สำเร็จ:', courseName);
+                    }
+                }
+            }
+
+            // 3) ลบประวัติ usage ที่ผูกกับคิวนี้ออก
+            const { error: usageDeleteError } = await window.supabaseClient
+                .from('course_usage')
+                .delete()
+                .eq('service_no', String(qId));
+
+            if (usageDeleteError) {
+                console.warn('ลบ course_usage ไม่สำเร็จ:', usageDeleteError);
+            }
+
+            // 4) สำรอง: ถ้ายังใช้ customers.courses อยู่บางส่วน ก็คืนให้ด้วย
+            try {
                 const { data: customer } = await window.supabaseClient
                     .from('customers')
                     .select('courses')
@@ -9051,16 +9386,22 @@ window.deleteQueueItem = function(qId) {
                     .single();
 
                 if (customer && Array.isArray(customer.courses)) {
-                    let updatedCourses = [...customer.courses];
-                    const coursesDone = String(qData.course).split(',').map(x => x.trim());
+                    const updatedCourses = [...customer.courses];
 
-                    coursesDone.forEach(cName => {
-                        const bcIdx = updatedCourses.findIndex(bc => 
-                            window.normalizeCourseName(bc.name) === window.normalizeCourseName(cName)
+                    usedCourseNames.forEach(cName => {
+                        const idx = updatedCourses.findIndex(c =>
+                            typeof window.normalizeCourseName === 'function'
+                                ? window.normalizeCourseName(c.name || '') === window.normalizeCourseName(cName)
+                                : String(c.name || '').trim() === String(cName || '').trim()
                         );
-                        if (bcIdx !== -1) {
-                            updatedCourses[bcIdx].amount = (parseInt(updatedCourses[bcIdx].amount || 0) + 1);
-                            updatedCourses[bcIdx].usedAmount = Math.max(0, parseInt(updatedCourses[bcIdx].usedAmount || 0) - 1);
+
+                        if (idx !== -1) {
+                            updatedCourses[idx].amount = Number(updatedCourses[idx].amount || 0) + 1;
+                            updatedCourses[idx].usedAmount = Math.max(
+                                0,
+                                Number(updatedCourses[idx].usedAmount || 0) - 1
+                            );
+                            updatedCourses[idx].status = 'active';
                         }
                     });
 
@@ -9069,15 +9410,47 @@ window.deleteQueueItem = function(qId) {
                         .update({ courses: updatedCourses })
                         .eq('id', qData.customer_id);
                 }
+            } catch (custErr) {
+                console.warn('คืน customers.courses ไม่สำเร็จ:', custErr);
             }
-
-            // 3. ลบคิวออกจาก Cloud
-            await window.supabaseClient.from('queues').delete().eq('id', qId);
-
-            renderQueuePage();
-            Swal.fire('ลบสำเร็จ', 'ระบบลบคิวและคืนคอร์สเรียบร้อยแล้วค่ะ', 'success');
         }
-    });
+
+        // 5) ถ้ามี appointment อ้างถึงคิวนี้ ให้คืนสถานะนัดหมายกลับ
+        if (qData.appointment_id) {
+            const { error: appUpdateError } = await window.supabaseClient
+                .from('appointments')
+                .update({
+                    status: 'รอดำเนินการ',
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', qData.appointment_id);
+
+            if (appUpdateError) {
+                console.warn('คืนสถานะ appointment ไม่สำเร็จ:', appUpdateError);
+            }
+        }
+
+        // 6) ลบคิว
+        const { error: deleteError } = await window.supabaseClient
+            .from('queues')
+            .delete()
+            .eq('id', qId);
+
+        if (deleteError) {
+            Swal.fire('ผิดพลาด', deleteError.message || 'ลบคิวไม่สำเร็จ', 'error');
+            return;
+        }
+
+        // 7) รีเฟรชหน้า
+        if (typeof window.renderQueuePage === 'function') await window.renderQueuePage();
+        if (typeof window.renderAppointmentPage === 'function') await window.renderAppointmentPage();
+
+        Swal.fire('ลบสำเร็จ', 'ระบบลบคิวและคืนคอร์สเรียบร้อยแล้วค่ะ', 'success');
+
+    } catch (e) {
+        console.error('deleteQueueItem error:', e);
+        Swal.fire('ผิดพลาด', e.message || 'ลบคิวไม่สำเร็จ', 'error');
+    }
 };
 
 // =======================================================
@@ -9804,7 +10177,7 @@ window.cancelBillProcess = async function(billId, customerId = '') {
 
     const result = await Swal.fire({
         title: '🚨 ยืนยันการยกเลิกบิล?',
-        text: "ระบบจะเปลี่ยนสถานะบิลเป็น 'ยกเลิก'",
+        text: "ระบบจะเปลี่ยนสถานะบิลเป็น 'ยกเลิก' และลบคอร์สที่เกิดจากบิลนี้",
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#ef4444',
@@ -9817,7 +10190,7 @@ window.cancelBillProcess = async function(billId, customerId = '') {
     if (!result.isConfirmed) return;
 
     try {
-        // 1) โหลดบิลจาก Supabase
+        // 1) โหลดบิล
         const { data: bill, error: findError } = await window.supabaseClient
             .from('sales_header')
             .select('*')
@@ -9829,7 +10202,7 @@ window.cancelBillProcess = async function(billId, customerId = '') {
             return Swal.fire('ไม่พบข้อมูล', 'ไม่พบเลขที่บิลนี้ในระบบ', 'error');
         }
 
-        // 2) ถ้าบิลถูกยกเลิกไปแล้ว
+        // 2) ถ้ายกเลิกแล้วไม่ต้องทำซ้ำ
         if (String(bill.status || '') === 'ยกเลิก') {
             return Swal.fire('แจ้งเตือน', 'บิลนี้ถูกยกเลิกไปแล้ว', 'info');
         }
@@ -9847,8 +10220,13 @@ window.cancelBillProcess = async function(billId, customerId = '') {
             ? window.getUserHomeBranch()
             : String(user.homeBranch || user.branch || '').trim();
 
-        const safeHomeBranch = window.normalizeBranchName(homeBranch);
-        const safeBillBranch = window.normalizeBranchName(bill.branch_name);
+        const safeHomeBranch = (typeof window.normalizeBranchName === 'function')
+            ? window.normalizeBranchName(homeBranch)
+            : String(homeBranch || '').trim();
+
+        const safeBillBranch = (typeof window.normalizeBranchName === 'function')
+            ? window.normalizeBranchName(bill.branch_name)
+            : String(bill.branch_name || '').trim();
 
         if (!isAdminAll && safeBillBranch !== safeHomeBranch) {
             return Swal.fire({
@@ -9859,7 +10237,25 @@ window.cancelBillProcess = async function(billId, customerId = '') {
             });
         }
 
-        // 4) update สถานะบิล
+        // 4) ลบคอร์สคงเหลือที่เกิดจากบิลนี้ก่อน
+        // ป้องกันไปลบของ import เก่า โดยล็อก source_file = billing_insert
+        const { error: deleteBalanceError } = await window.supabaseClient
+            .from('customer_course_balance')
+            .delete()
+            .eq('invoice_no', bill.bill_no)
+            .eq('customer_id', bill.customer_id)
+            .eq('source_file', 'billing_insert');
+
+        if (deleteBalanceError) {
+            console.error('cancelBillProcess deleteBalanceError:', deleteBalanceError);
+            return Swal.fire(
+                'ยกเลิกไม่สำเร็จ',
+                'ลบคอร์สคงเหลือจากบิลนี้ไม่สำเร็จ: ' + (deleteBalanceError.message || ''),
+                'error'
+            );
+        }
+
+        // 5) เปลี่ยนสถานะบิลเป็นยกเลิก
         const cancelledAt = new Date().toISOString();
 
         const { error: updateError } = await window.supabaseClient
@@ -9876,16 +10272,26 @@ window.cancelBillProcess = async function(billId, customerId = '') {
             return Swal.fire('ยกเลิกไม่สำเร็จ', updateError.message || 'เกิดข้อผิดพลาด', 'error');
         }
 
-        // 5) ตอนนี้ยังไม่คืนคอร์ส เพราะ schema customers ไม่มี field courses
-        // ถ้าจะคืนคอร์สแบบ Supabase 100% ต้องมี table แยก เช่น customer_course_wallet/customer_course_sessions
-
         await Swal.fire({
             icon: 'success',
             title: 'ยกเลิกบิลสำเร็จ',
-            text: 'สถานะบิลถูกเปลี่ยนเป็น "ยกเลิก" เรียบร้อยแล้ว',
+            text: 'ระบบเปลี่ยนสถานะบิลและลบคอร์สจากบิลนี้เรียบร้อยแล้ว',
             showConfirmButton: false,
-            timer: 1500
+            timer: 1600
         });
+
+        // 6) รีเฟรชหน้าที่เกี่ยวข้อง
+        if (typeof window.refreshActiveCustomerDetailRealtime === 'function' && bill.customer_id) {
+            await window.refreshActiveCustomerDetailRealtime(bill.customer_id);
+        }
+
+        if (typeof window.searchCourseForApp === 'function') {
+            await window.searchCourseForApp();
+        }
+
+        if (typeof window.renderRemainingCoursesPreview === 'function') {
+            await window.renderRemainingCoursesPreview();
+        }
 
         if (typeof window.renderSalesPage === 'function') {
             await window.renderSalesPage();
@@ -9896,8 +10302,6 @@ window.cancelBillProcess = async function(billId, customerId = '') {
         Swal.fire('ข้อผิดพลาด', e.message || 'เกิดปัญหาทางเทคนิคในการยกเลิกบิล', 'error');
     }
 };
-
-
 
 window.askPrintFormat = function(billId, hn) {
     Swal.fire({
@@ -10819,8 +11223,9 @@ window.confirmFinalPayment = async function() {
         const customerHN = document.getElementById('billHN')?.innerText || '-';
         const activeCustomer = window.activeCustomer || null;
         const customerId = activeCustomer?.id || '';
+        const customerOldHn = activeCustomer?.old_hn || activeCustomer?.oldHn || null;
 
-        if (customerHN === "-" || !customerName) {
+        if (customerHN === "-" || !customerName || !customerId) {
             return Swal.fire('ข้อมูลไม่ครบ', 'กรุณาค้นหาและเลือกข้อมูลคนไข้ก่อนค่ะ', 'warning');
         }
 
@@ -10866,6 +11271,8 @@ window.confirmFinalPayment = async function() {
             const courseId = normalizeText(item.courseId || item.course_id);
 
             if (itemType === 'course') return true;
+            if (itemType === 'คอร์ส') return true;
+            if (itemType === 'คอร์ส/บริการ') return true;
             if (unit === 'ครั้ง') return true;
             if (oldCode) return true;
             if (courseId) return true;
@@ -10891,7 +11298,14 @@ window.confirmFinalPayment = async function() {
             const qty = toNumber(item.qty || 1) || 1;
             const unitPrice = toNumber(item.price || 0);
             const grossTotal = qty * unitPrice;
-            const itemType = normalizeText(item.item_type || item.type || item.cat || (isCourseLikeItem(item) ? 'course' : 'product')) || 'course';
+
+            const itemTypeRaw = normalizeText(
+                item.item_type || item.type || item.cat || ''
+            );
+
+            const finalItemType = isCourseLikeItem(item)
+                ? 'course'
+                : (itemTypeRaw || 'product');
 
             return {
                 rowIndex: index,
@@ -10900,7 +11314,7 @@ window.confirmFinalPayment = async function() {
                 old_course_code: item.code || item.old_course_code || null,
                 item_code: item.code || item.item_code || null,
                 item_name: item.name || item.item_name || '',
-                item_type: itemType,
+                item_type: finalItemType,
                 category_name: item.category_name || item.category || null,
                 qty,
                 unit: item.unit || 'ครั้ง',
@@ -10913,20 +11327,18 @@ window.confirmFinalPayment = async function() {
 
         const subTotal = preparedItems.reduce((sum, item) => sum + item.gross_total, 0);
 
-const discountInputEl = document.getElementById('billDiscount');
-const discountInputValue = toNumber(discountInputEl?.value || 0);
+        const discountInputEl = document.getElementById('billDiscount');
+        const discountInputValue = toNumber(discountInputEl?.value || 0);
 
-// ใช้ค่าจาก input จริงเป็นหลัก เพื่อกันกรณีหน้าจอแสดงแล้ว แต่ global ยังไม่ sync
-const discountAmount = Math.min(
-    Math.max(0, discountInputValue),
-    subTotal
-);
+        const discountAmount = Math.min(
+            Math.max(0, discountInputValue),
+            subTotal
+        );
 
-const netTotal = Math.max(0, subTotal - discountAmount);
+        const netTotal = Math.max(0, subTotal - discountAmount);
 
-// sync กลับเข้า global ด้วย
-window.lastCalculatedDiscount = discountAmount;
-window.lastCalculatedNet = netTotal;
+        window.lastCalculatedDiscount = discountAmount;
+        window.lastCalculatedNet = netTotal;
 
         const billId = crypto.randomUUID();
         const billNo = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Date.now()).slice(-6)}`;
@@ -11000,58 +11412,123 @@ window.lastCalculatedNet = netTotal;
             return Swal.fire('บันทึกบิลไม่สำเร็จ', headerError.message || 'เกิดข้อผิดพลาด', 'error');
         }
 
-       const itemsPayload = preparedItems.map(item => {
-    const discountShare = subTotal > 0
-        ? (item.gross_total / subTotal) * discountAmount
-        : 0;
+        const itemsPayload = preparedItems.map(item => {
+            const discountShare = subTotal > 0
+                ? (item.gross_total / subTotal) * discountAmount
+                : 0;
 
-    const itemNet = Math.max(0, item.gross_total - discountShare);
+            const itemNet = Math.max(0, item.gross_total - discountShare);
 
-    return {
-        id: item.id,
-        sales_header_id: billId,
-        customer_id: customerId || null,
-        hn: customerHN,
-        item_code: item.item_code || null,
-        item_name: item.item_name || '',
-        qty: item.qty,
-        unit: item.unit || 'ครั้ง',
-        unit_price: item.unit_price,
-        total_price: item.gross_total,
-        discount_amount: discountShare,
-        net_total: itemNet,
-        old_course_code: item.old_course_code || null,
-        branch_name: safeViewingBranch,
-        created_at: new Date().toISOString(),
-        course_id: item.course_id || null
-    };
-});
+            return {
+                id: item.id,
+                sales_header_id: billId,
+                customer_id: customerId || null,
+                hn: customerHN,
+                item_code: item.item_code || null,
+                item_name: item.item_name || '',
+                qty: item.qty,
+                unit: item.unit || 'ครั้ง',
+                unit_price: item.unit_price,
+                total_price: item.gross_total,
+                discount_amount: discountShare,
+                net_total: itemNet,
+                old_course_code: item.old_course_code || null,
+                branch_name: safeViewingBranch,
+                created_at: new Date().toISOString(),
+                course_id: item.course_id || null
+            };
+        });
 
         if (itemsPayload.length > 0) {
-    const { error: itemsError } = await window.supabaseClient
-        .from('sales_items')
-        .insert(itemsPayload);
+            const { error: itemsError } = await window.supabaseClient
+                .from('sales_items')
+                .insert(itemsPayload);
 
-    if (itemsError) {
-        console.error('sales_items insert error:', itemsError);
+            if (itemsError) {
+                console.error('sales_items insert error:', itemsError);
 
-        await window.supabaseClient
-            .from('sales_header')
-            .delete()
-            .eq('id', billId);
+                await window.supabaseClient
+                    .from('sales_header')
+                    .delete()
+                    .eq('id', billId);
 
-        return Swal.fire(
-            'บันทึกรายการบิลไม่สำเร็จ',
-            itemsError.message || 'เกิดข้อผิดพลาด',
-            'error'
-        );
-    }
-}
+                return Swal.fire(
+                    'บันทึกรายการบิลไม่สำเร็จ',
+                    itemsError.message || 'เกิดข้อผิดพลาด',
+                    'error'
+                );
+            }
+        }
+
+        const courseItems = preparedItems.filter(item => isCourseLikeItem(item));
+
+        console.log('preparedItems =', preparedItems);
+        console.log('courseItems for balance =', courseItems);
+
+        const balancePayload = courseItems.map(item => {
+            const discountShare = subTotal > 0
+                ? (item.gross_total / subTotal) * discountAmount
+                : 0;
+
+            const itemNet = Math.max(0, item.gross_total - discountShare);
+
+            return {
+                id: crypto.randomUUID(),
+                customer_id: customerId,
+                hn: customerHN,
+                old_hn: customerOldHn,
+                invoice_no: billNo,
+                invoice_date: billDate,
+                course_code: item.item_code || item.old_course_code || null,
+                course_name: item.item_name || '',
+                total_qty: item.qty,
+                remaining_qty: item.qty,
+                unit: item.unit || 'ครั้ง',
+                expiry_date: null,
+                unit_price: item.unit_price || 0,
+                total_price: item.gross_total || 0,
+                sales_total: itemNet,
+                branch_name: safeViewingBranch,
+                source_file: 'billing_insert',
+                created_at: new Date().toISOString()
+            };
+        });
+
+        console.log('balancePayload =', balancePayload);
+
+        if (balancePayload.length > 0) {
+            const { data: balanceData, error: balanceError } = await window.supabaseClient
+                .from('customer_course_balance')
+                .insert(balancePayload)
+                .select();
+
+            if (balanceError) {
+                console.error('customer_course_balance insert error:', balanceError);
+
+                await window.supabaseClient
+                    .from('sales_items')
+                    .delete()
+                    .eq('sales_header_id', billId);
+
+                await window.supabaseClient
+                    .from('sales_header')
+                    .delete()
+                    .eq('id', billId);
+
+                return Swal.fire(
+                    'บันทึกคอร์สคงเหลือไม่สำเร็จ',
+                    balanceError.message || 'เกิดข้อผิดพลาด',
+                    'error'
+                );
+            }
+
+            console.log('customer_course_balance inserted =', balanceData);
+        }
 
         Swal.fire({
             icon: 'success',
             title: 'บันทึกบิลสำเร็จ!',
-            text: 'ยอดเงินและรายการขายถูกบันทึกเรียบร้อยค่ะ',
+            text: 'ยอดเงิน รายการขาย และคอร์สคงเหลือ ถูกบันทึกเรียบร้อยค่ะ',
             timer: 1800,
             showConfirmButton: false
         }).then(async () => {
@@ -11072,6 +11549,14 @@ window.lastCalculatedNet = netTotal;
 
             if (typeof window.refreshActiveCustomerDetailRealtime === 'function' && customerId) {
                 await window.refreshActiveCustomerDetailRealtime(customerId);
+            }
+
+            if (typeof window.searchCourseForApp === 'function') {
+                await window.searchCourseForApp();
+            }
+
+            if (typeof window.renderRemainingCoursesPreview === 'function') {
+                await window.renderRemainingCoursesPreview();
             }
 
             if (typeof window.renderSalesPage === 'function') {

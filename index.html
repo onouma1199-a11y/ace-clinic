@@ -479,7 +479,7 @@ tbody tr:hover{background:#FAFAFF!important;}
             <h2 id="modalTitle" class="text-2xl font-bold text-slate-600 uppercase tracking-tight">เพิ่มลูกค้าใหม่</h2>
 
           <div class="relative z-[9999] flex gap-2 pointer-events-auto">
-    <button
+   <button
     type="button"
     onclick="window.readIDCard()" 
     class="bg-[#D48197] text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:brightness-110 transition-all uppercase shadow-md"
@@ -1194,7 +1194,7 @@ window.readIDCard = async function() {
 
         for (const url of endpointList) {
             try {
-                console.log('ลองเชื่อมต่อ card helper:', url);
+                console.log('ลองเชื่อมต่อ card reader:', url);
 
                 const controller = new AbortController();
                 const timeout = setTimeout(() => controller.abort(), 5000);
@@ -1216,12 +1216,7 @@ window.readIDCard = async function() {
                     throw new Error(`Empty response @ ${url}`);
                 }
 
-                try {
-                    raw = JSON.parse(text);
-                } catch (jsonErr) {
-                    throw new Error(`Response ไม่ใช่ JSON @ ${url}`);
-                }
-
+                raw = JSON.parse(text);
                 console.log('CARD RAW RESPONSE =', raw);
 
                 if (raw) break;
@@ -1250,51 +1245,57 @@ window.readIDCard = async function() {
         const lastName = String(card.last_name_th || '').trim();
         const fullName = `${firstName} ${lastName}`.trim();
 
-        // ✅ หยอดค่าลง input ตาม customers table
-        // citizen_id
+        // ✅ ไม่แก้ HN เด็ดขาด
+        // เอาเฉพาะข้อมูลจากบัตรไปใส่ฟอร์มลูกค้า
+
+        // เลขบัตรประชาชน
         setInputValueMulti([
-            'customerCitizenId',
             'citizen_id',
-            'customer_citizen_id'
+            'customerCitizenId',
+            'customer_citizen_id',
+            'customer_idcard',
+            'idCardNo'
         ], card.citizen_id);
 
-        // first_name
+        // ชื่อจริง
         setInputValueMulti([
-            'customerFirstName',
             'first_name',
+            'customerFirstName',
             'customer_firstname',
             'customer_first_name'
         ], firstName);
 
-        // last_name
+        // นามสกุล
         setInputValueMulti([
-            'customerLastName',
             'last_name',
+            'customerLastName',
             'customer_lastname',
             'customer_last_name'
         ], lastName);
 
-        // fullname
+        // ชื่อเต็ม
         setInputValueMulti([
-            'customerFullName',
             'fullname',
-            'customer_fullname',
-            'full_name'
+            'full_name',
+            'customerFullName',
+            'customer_fullname'
         ], fullName);
 
-        // birth_date
+        // วันเกิด
         setInputValueMulti([
-            'customerBirthDate',
             'birth_date',
+            'customerBirthDate',
             'customer_birthdate',
             'customer_birth_date'
         ], card.birth_date);
 
-        // address
+        // ที่อยู่
         setInputValueMulti([
-            'customerAddress',
             'address',
-            'customer_address'
+            'customerAddress',
+            'customer_address',
+            'shipping_address',
+            'current_address'
         ], card.address);
 
         Swal.fire({
@@ -1331,7 +1332,6 @@ window.normalizeThaiCardResponse = function(raw) {
         return { success: false, message: 'response ไม่ถูกต้อง' };
     }
 
-    // รองรับ helper แบบเดิม
     const citizenId =
         raw.idCardNo ||
         raw.citizen_id ||
@@ -1390,33 +1390,33 @@ function normalizeDateToISO(value) {
 
     const str = String(value).trim();
 
-    // กรณีเป็น YYYY-MM-DD อยู่แล้ว
     if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
         return str;
     }
 
-    // กรณีเป็น YYYYMMDD
     if (/^\d{8}$/.test(str)) {
-        return `${str.substring(0,4)}-${str.substring(4,6)}-${str.substring(6,8)}`;
+        let yyyy = parseInt(str.substring(0, 4), 10);
+        const mm = str.substring(4, 6);
+        const dd = str.substring(6, 8);
+
+        if (yyyy > 2400) yyyy -= 543;
+        return `${yyyy}-${mm}-${dd}`;
     }
 
-    // กรณีเป็น DD/MM/YYYY หรือ DD-MM-YYYY
     const m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
     if (m) {
         const dd = m[1].padStart(2, '0');
         const mm = m[2].padStart(2, '0');
         let yyyy = parseInt(m[3], 10);
 
-        // ถ้าเป็น พ.ศ.
         if (yyyy > 2400) yyyy -= 543;
-
         return `${yyyy}-${mm}-${dd}`;
     }
 
     return str;
 }
 
-/* -------------------- หยอดค่าลง Input ตัวเดียว -------------------- */
+/* -------------------- set ค่า input ตัวเดียว -------------------- */
 function setInputValue(id, value) {
     const el = document.getElementById(id);
     if (!el || value === undefined || value === null || value === '') return false;
@@ -1427,16 +1427,15 @@ function setInputValue(id, value) {
     return true;
 }
 
-/* -------------------- หยอดค่าลง Input หลายชื่อ เผื่อ id หน้า form ไม่ตรงกัน -------------------- */
+/* -------------------- set ค่า input หลายชื่อ -------------------- */
 function setInputValueMulti(idList, value) {
     if (!Array.isArray(idList)) return false;
 
     for (const id of idList) {
-        const ok = setInputValue(id, value);
-        if (ok) return true;
+        if (setInputValue(id, value)) return true;
     }
 
-    console.warn('ไม่พบ input จากรายการ id =', idList, 'value =', value);
+    console.warn('ไม่พบ input id ในรายการ:', idList, 'value =', value);
     return false;
 }
 /* =======================================================

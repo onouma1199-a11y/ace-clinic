@@ -479,13 +479,15 @@ tbody tr:hover{background:#FAFAFF!important;}
             <h2 id="modalTitle" class="text-2xl font-bold text-slate-600 uppercase tracking-tight">เพิ่มลูกค้าใหม่</h2>
 
           <div class="relative z-[9999] flex gap-2 pointer-events-auto">
-   <button
+    <button
+
     type="button"
-    onclick="window.readIDCard()" 
+
+    onclick="window.readIDCard()"
+
     class="bg-[#D48197] text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:brightness-110 transition-all uppercase shadow-md"
->
-    อ่านข้อมูลบัตร
-</button>
+
+>อ่านข้อมูลบัตร</button>
 
 
                 <button
@@ -1171,273 +1173,154 @@ window.getCustomers = function() {
 
 /* -------------------- อ่านบัตรประชาชน -------------------- */
 window.readIDCard = async function() {
+
     Swal.fire({
-        title: 'กำลังรอข้อมูลจากบัตร...',
+
+        title: 'กำลังอ่านข้อมูลจากบัตร...',
+
         text: 'กรุณาเสียบบัตรประชาชนที่เครื่องอ่าน ZOWEETEK',
+
         allowOutsideClick: false,
+
         allowEscapeKey: false,
+
         didOpen: () => { Swal.showLoading(); }
+
     });
 
-    const endpointList = [
-        'http://localhost:8008/read',
-        'http://127.0.0.1:8008/read',
-        'http://localhost:8008/read-card',
-        'http://127.0.0.1:8008/read-card',
-        'http://localhost:8008/',
-        'http://127.0.0.1:8008/'
-    ];
-
     try {
-        let raw = null;
-        let lastError = null;
 
-        for (const url of endpointList) {
-            try {
-                console.log('ลองเชื่อมต่อ card reader:', url);
+        const response = await fetch('http://127.0.0.1:3007/read-card', {
 
-                const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 5000);
+            method: 'GET',
 
-                const response = await fetch(url, {
-                    method: 'GET',
-                    headers: { 'Content-Type': 'application/json' },
-                    signal: controller.signal
-                });
+            headers: {
 
-                clearTimeout(timeout);
+                'Content-Type': 'application/json'
 
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status} @ ${url}`);
-                }
-
-                const text = await response.text();
-                if (!text) {
-                    throw new Error(`Empty response @ ${url}`);
-                }
-
-                raw = JSON.parse(text);
-                console.log('CARD RAW RESPONSE =', raw);
-
-                if (raw) break;
-            } catch (err) {
-                console.warn('เชื่อมต่อไม่ได้:', url, err);
-                lastError = err;
             }
-        }
 
-        if (!raw) {
-            throw lastError || new Error('ไม่สามารถเชื่อมต่อโปรแกรมอ่านบัตรได้');
-        }
-
-        const card = window.normalizeThaiCardResponse(raw);
-
-        if (!card.success) {
-            Swal.fire(
-                'แจ้งเตือน',
-                card.message || 'ไม่พบข้อมูลบัตร กรุณาเสียบบัตรใหม่อีกครั้ง',
-                'warning'
-            );
-            return;
-        }
-
-        const firstName = String(card.first_name_th || '').trim();
-        const lastName = String(card.last_name_th || '').trim();
-        const fullName = `${firstName} ${lastName}`.trim();
-
-        // ✅ ไม่แก้ HN เด็ดขาด
-        // เอาเฉพาะข้อมูลจากบัตรไปใส่ฟอร์มลูกค้า
-
-        // เลขบัตรประชาชน
-        setInputValueMulti([
-            'citizen_id',
-            'customerCitizenId',
-            'customer_citizen_id',
-            'customer_idcard',
-            'idCardNo'
-        ], card.citizen_id);
-
-        // ชื่อจริง
-        setInputValueMulti([
-            'first_name',
-            'customerFirstName',
-            'customer_firstname',
-            'customer_first_name'
-        ], firstName);
-
-        // นามสกุล
-        setInputValueMulti([
-            'last_name',
-            'customerLastName',
-            'customer_lastname',
-            'customer_last_name'
-        ], lastName);
-
-        // ชื่อเต็ม
-        setInputValueMulti([
-            'fullname',
-            'full_name',
-            'customerFullName',
-            'customer_fullname'
-        ], fullName);
-
-        // วันเกิด
-        setInputValueMulti([
-            'birth_date',
-            'customerBirthDate',
-            'customer_birthdate',
-            'customer_birth_date'
-        ], card.birth_date);
-
-        // ที่อยู่
-        setInputValueMulti([
-            'address',
-            'customerAddress',
-            'customer_address',
-            'shipping_address',
-            'current_address'
-        ], card.address);
-
-        Swal.fire({
-            icon: 'success',
-            title: 'อ่านข้อมูลสำเร็จ',
-            text: `ยินดีต้อนรับคุณ ${firstName || ''}`,
-            timer: 1800,
-            showConfirmButton: false
         });
 
+        if (!response.ok) {
+
+            throw new Error(`HTTP ${response.status}`);
+
+        }
+
+        const data = await response.json();
+
+        console.log('READ CARD DATA =', data);
+
+        if (data && data.success) {
+
+            const firstName = String(data.first_name_th || '').trim();
+
+            const lastName = String(data.last_name_th || '').trim();
+
+            const fullName = `${firstName} ${lastName}`.trim();
+
+            // ✅ หยอดลงฟอร์มลูกค้าให้ตรงกับตาราง customers
+
+            setInputValue('customerCitizenId', data.citizen_id);
+
+            setInputValue('customerFirstName', firstName);
+
+            setInputValue('customerLastName', lastName);
+
+            setInputValue('customerFullName', fullName);
+
+            setInputValue('customerBirthDate', data.birth_date);
+
+            setInputValue('customerAddress', data.address);
+
+            Swal.fire({
+
+                icon: 'success',
+
+                title: 'อ่านข้อมูลสำเร็จ',
+
+                text: `ยินดีต้อนรับคุณ ${firstName || ''}`,
+
+                timer: 1800,
+
+                showConfirmButton: false
+
+            });
+
+        } else {
+
+            Swal.fire(
+
+                'แจ้งเตือน',
+
+                data?.message || 'ไม่พบข้อมูลบัตร กรุณาเสียบบัตรใหม่อีกครั้ง',
+
+                'warning'
+
+            );
+
+        }
+
     } catch (error) {
+
         console.error('ID Card Error:', error);
 
         Swal.fire({
+
             icon: 'error',
-            title: 'การเชื่อมต่อผิดพลาด',
+
+            title: 'เชื่อมต่อโปรแกรมอ่านบัตรไม่ได้',
+
             html: `
-                <div style="text-align:left; line-height:1.8">
+
+                <div style="text-align:left; line-height:1.7">
+
                     <div>กรุณาตรวจสอบว่า</div>
-                    <div>1. เปิดโปรแกรมอ่านบัตรใน Windows แล้ว</div>
-                    <div>2. โปรแกรมขึ้นว่า <b>Server card reader started: http://localhost:8008</b></div>
-                    <div>3. เสียบเครื่องอ่าน ZOWEETEK แล้ว</div>
-                    <div>4. เสียบบัตรประชาชนแล้ว</div>
+
+                    <div>1. เสียบเครื่องอ่าน ZOWEETEK แล้ว</div>
+
+                    <div>2. เสียบบัตรประชาชนแล้ว</div>
+
+                    <div>3. เปิดโปรแกรม C# Helper แล้ว</div>
+
+                    <div>4. โปรแกรมรันที่ <b>127.0.0.1:3007</b></div>
+
                 </div>
+
             `,
+
             confirmButtonText: 'รับทราบ'
+
         });
+
     }
+
 };
 
-/* -------------------- แปลง response ให้เป็นรูปแบบกลาง -------------------- */
-window.normalizeThaiCardResponse = function(raw) {
-    if (!raw || typeof raw !== 'object') {
-        return { success: false, message: 'response ไม่ถูกต้อง' };
-    }
+/* -------------------- ฟังก์ชันหยอดค่าลง Input -------------------- */
 
-    const citizenId =
-        raw.idCardNo ||
-        raw.citizen_id ||
-        raw.citizenId ||
-        raw.pid ||
-        '';
+window.setInputValue = function(id, value) {
 
-    const firstName =
-        raw.firstNameTH ||
-        raw.first_name_th ||
-        raw.firstName ||
-        raw.firstname ||
-        raw.th_first_name ||
-        '';
-
-    const lastName =
-        raw.lastNameTH ||
-        raw.last_name_th ||
-        raw.lastName ||
-        raw.lastname ||
-        raw.th_last_name ||
-        '';
-
-    const birthDate =
-        raw.birthDateISO ||
-        raw.birth_date ||
-        raw.birthDate ||
-        raw.birthday ||
-        '';
-
-    const address =
-        raw.address ||
-        raw.fullAddress ||
-        raw.addr ||
-        '';
-
-    const success =
-        raw.status === 'success' ||
-        raw.success === true ||
-        !!citizenId;
-
-    return {
-        success,
-        citizen_id: citizenId,
-        first_name_th: firstName,
-        last_name_th: lastName,
-        birth_date: normalizeDateToISO(birthDate),
-        address: address,
-        message: raw.message || ''
-    };
-};
-
-/* -------------------- แปลงวันที่เป็น YYYY-MM-DD -------------------- */
-function normalizeDateToISO(value) {
-    if (!value) return '';
-
-    const str = String(value).trim();
-
-    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-        return str;
-    }
-
-    if (/^\d{8}$/.test(str)) {
-        let yyyy = parseInt(str.substring(0, 4), 10);
-        const mm = str.substring(4, 6);
-        const dd = str.substring(6, 8);
-
-        if (yyyy > 2400) yyyy -= 543;
-        return `${yyyy}-${mm}-${dd}`;
-    }
-
-    const m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-    if (m) {
-        const dd = m[1].padStart(2, '0');
-        const mm = m[2].padStart(2, '0');
-        let yyyy = parseInt(m[3], 10);
-
-        if (yyyy > 2400) yyyy -= 543;
-        return `${yyyy}-${mm}-${dd}`;
-    }
-
-    return str;
-}
-
-/* -------------------- set ค่า input ตัวเดียว -------------------- */
-function setInputValue(id, value) {
     const el = document.getElementById(id);
-    if (!el || value === undefined || value === null || value === '') return false;
+
+    if (!el) {
+
+        console.warn('ไม่พบ input id =', id);
+
+        return;
+
+    }
+
+    if (value === undefined || value === null) return;
 
     el.value = value;
+
     el.dispatchEvent(new Event('input', { bubbles: true }));
+
     el.dispatchEvent(new Event('change', { bubbles: true }));
-    return true;
-}
+   };
 
-/* -------------------- set ค่า input หลายชื่อ -------------------- */
-function setInputValueMulti(idList, value) {
-    if (!Array.isArray(idList)) return false;
-
-    for (const id of idList) {
-        if (setInputValue(id, value)) return true;
-    }
-
-    console.warn('ไม่พบ input id ในรายการ:', idList, 'value =', value);
-    return false;
-}
 /* =======================================================
    🚀 ZONE 2: CORE SYSTEM (ระบบล็อกอิน & สลับหน้าเมนู)
    ======================================================= */
@@ -5834,7 +5717,7 @@ window.searchCourseForApp = async function() {
     let rows = [];
 
     try {
-        const TABLE_NAME = 'customer_course_balance_view_ui';
+        const TABLE_NAME = 'customer_course_balance';
 
         if (customerId) {
             const { data, error } = await window.supabaseClient
@@ -5964,7 +5847,7 @@ window.renderRemainingCoursesPreview = async function() {
     let rows = [];
 
     try {
-        const TABLE_NAME = 'customer_course_balance_view_ui';
+        const TABLE_NAME = 'customer_course_balance';
 
         if (customerId) {
             const { data, error } = await window.supabaseClient
@@ -6516,9 +6399,15 @@ window.renderAppointmentPage = async function() {
     // ✅ ดึงข้อมูลนัดหมายผ่านระบบกรองสาขา
     const allAppointments = await window.getAppointmentDBByBranch();
 
-    const dateEl = document.getElementById('filterDate');
-    const dateFilter = dateEl ? dateEl.value : "";
+    if (typeof window.currentAppointmentDateFilter === 'undefined' || window.currentAppointmentDateFilter === null) {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    window.currentAppointmentDateFilter = `${yyyy}-${mm}-${dd}`;
+}
 
+const dateFilter = window.currentAppointmentDateFilter || "";
     const currentSearch = document.getElementById('appSearchInput')?.value || "";
     const statusFilter = document.getElementById('statusFilter')?.value || "ทั้งหมด";
     const appRowsPerPage = parseInt(document.getElementById('appPageSize')?.value) || 10;
@@ -6542,7 +6431,8 @@ window.renderAppointmentPage = async function() {
     String(ap.hn || ap.customer_hn || '').toLowerCase().includes(currentSearch.toLowerCase());
 
         const matchStatus = statusFilter === "ทั้งหมด" || ap.status === statusFilter;
-        const matchDate = !dateFilter || ap.date === dateFilter;
+        const apDate = String(ap.date || '').slice(0, 10);
+const matchDate = !dateFilter || apDate === dateFilter;
 
         return matchBranch && matchSearch && matchStatus && matchDate;
     });
@@ -6590,12 +6480,12 @@ window.renderAppointmentPage = async function() {
                     </div>
         
                    <div class="relative min-w-[170px] flex items-center">
-    <input type="date" id="filterDate" 
-        onchange="window.currentAppPage=1; renderAppointmentPage()"
-        value="${dateFilter || ''}"
-        class="w-full border border-pink-200 px-4 py-2 rounded-xl text-[11px] outline-none bg-white font-normal h-[42px] shadow-sm focus:border-pink-400 transition-all text-slate-600 cursor-pointer">
+   <input type="date" id="filterDate" 
+    onchange="window.currentAppointmentDateFilter=this.value; window.currentAppPage=1; renderAppointmentPage()"
+    value="${window.currentAppointmentDateFilter || ''}"
+    class="w-full border border-pink-200 px-4 py-2 rounded-xl text-[11px] outline-none bg-white font-normal h-[42px] shadow-sm focus:border-pink-400 transition-all text-slate-600 cursor-pointer">
     
-    <button onclick="document.getElementById('filterDate').value=''; window.currentAppPage=1; renderAppointmentPage();" 
+    <button onclick="window.currentAppointmentDateFilter=''; window.currentAppPage=1; renderAppointmentPage();" 
         class="absolute right-9 text-slate-300 hover:text-pink-500 transition-all font-bold text-lg no-print"
         style="display: ${dateFilter ? 'block' : 'none'};">
         ×
@@ -8184,6 +8074,8 @@ window.editQueueItem = function(qId) {
     }
 };
 
+
+// ✅ แสดงตารางห้องจัดการคิว
 window.renderQueuePage = async function() {
     const target = document.getElementById('dynamicContent') || document.getElementById('pageContent');
     if (!target) return;
@@ -8212,11 +8104,14 @@ window.renderQueuePage = async function() {
     const pageSize = parseInt(document.getElementById('qPageSize')?.value) || 10;
     const currentPage = window.currentQPage || 1;
 
-    // ✅ ไม่บังคับวันที่เป็นวันนี้ทันที
-    if (typeof window.currentQDateFilter === 'undefined') {
-        window.currentQDateFilter = '';
-    }
-
+    // ✅ ค่าเริ่มต้นให้เป็น "วันนี้"
+if (!window.currentQDateFilter) {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    window.currentQDateFilter = `${yyyy}-${mm}-${dd}`;
+}
     let filteredData = allQueue.filter(item => {
         const itemBranch = window.normalizeBranch(item.branch || '');
         const currentBranch = window.normalizeBranch(viewingBranch || '');
@@ -8238,9 +8133,10 @@ window.renderQueuePage = async function() {
         const matchStatus =
             statusFilter === "ทั้งหมด" || item.status === statusFilter;
 
-        const matchDate =
-            !window.currentQDateFilter ||
-            String(item.date || '') === String(window.currentQDateFilter);
+        const itemDate = String(item.date || '').slice(0, 10);
+const matchDate =
+    !window.currentQDateFilter ||
+    itemDate === String(window.currentQDateFilter);
 
         return matchBranch && matchSearch && matchStatus && matchDate;
     });
@@ -8253,7 +8149,7 @@ window.renderQueuePage = async function() {
     });
 
     const totalPages = Math.ceil(filteredData.length / pageSize) || 1;
-    window.currentQPage = Math.min(currentPage, totalPages);
+    window.currentQPage = Math.max(1, Math.min(currentPage, totalPages));
     const startIndex = (window.currentQPage - 1) * pageSize;
     const paginatedData = filteredData.slice(startIndex, startIndex + pageSize);
 
@@ -8591,7 +8487,7 @@ window.deleteQueueItem = function(qId) {
 };
 
 /* =======================================================
-    PROCESS SERVICE MODAL (ID-Based System)
+    ห้องจัดการคิว
    ======================================================= */
 // ✅ ปรับปรุง: ค้นหาค่า DF จาก Master DB บน Cloud/Local
 window.updateDFBySelectedCourse = function(courseName) {
@@ -8766,25 +8662,35 @@ window.getQueueCustomerRemainingCourses = async function(customerId, hn = '') {
 
         if (customerId) {
             const { data, error } = await window.supabaseClient
-                .from('customer_course_balance_view')
+                .from('customer_course_balance')
                 .select('*')
                 .eq('customer_id', String(customerId))
-                .gt('remaining_qty', 0);
+                .gt('remaining_qty', 0)
+                .order('created_at', { ascending: true });
 
-            if (!error && Array.isArray(data)) rows = data;
+            if (error) {
+                console.error('getQueueCustomerRemainingCourses customer_id error:', error);
+            }
+
+            if (Array.isArray(data)) rows = data;
         }
 
         if ((!rows || rows.length === 0) && hn) {
             const { data, error } = await window.supabaseClient
-                .from('customer_course_balance_view')
+                .from('customer_course_balance')
                 .select('*')
                 .eq('hn', String(hn))
-                .gt('remaining_qty', 0);
+                .gt('remaining_qty', 0)
+                .order('created_at', { ascending: true });
 
-            if (!error && Array.isArray(data)) rows = data;
+            if (error) {
+                console.error('getQueueCustomerRemainingCourses hn error:', error);
+            }
+
+            if (Array.isArray(data)) rows = data;
         }
 
-        if (!rows.length) return [];
+        if (!rows || rows.length === 0) return [];
 
         const { data: masterRows, error: masterError } = await window.supabaseClient
             .from('course_master')
@@ -8804,15 +8710,12 @@ window.getQueueCustomerRemainingCourses = async function(customerId, hn = '') {
             const key = normalize(name);
             if (!key) return null;
 
-            // 1) ตรงเป๊ะ
             let found = masterList.find(m => normalize(m.course_name) === key);
             if (found) return found;
 
-            // 2) master อยู่ในชื่อจริง
             found = masterList.find(m => key.includes(normalize(m.course_name)));
             if (found) return found;
 
-            // 3) ชื่อจริงอยู่ใน master
             found = masterList.find(m => normalize(m.course_name).includes(key));
             if (found) return found;
 
@@ -8821,28 +8724,52 @@ window.getQueueCustomerRemainingCourses = async function(customerId, hn = '') {
 
         return rows.map((r, index) => {
             const rawName =
-                r.item_name ||
                 r.course_name ||
+                r.item_name ||
                 r.name ||
                 '-';
+
+            const totalQty = Number(r.total_qty || 0);
+            const remainingQty = Number(r.remaining_qty || 0);
+            const usedQty = Math.max(0, totalQty - remainingQty);
 
             const master = findMaster(rawName);
 
             return {
-                id: String(r.id || r.sale_item_id || r.item_code || `${rawName}_${index}`),
+                // ✅ ต้องเป็น balance row id จริง
+                id: String(r.id || `${rawName}_${index}`),
+                balance_id: String(r.id || `${rawName}_${index}`),
+
+                customer_id: String(r.customer_id || ''),
+                hn: String(r.hn || ''),
+                old_hn: String(r.old_hn || ''),
+
                 course_id: master?.id ? String(master.id) : '',
                 course_name: String(rawName || '').trim(),
-                total_qty: Number(r.total_qty || 0),
-                remaining_qty: Number(r.remaining_qty || 0),
-                used_qty: Number(r.used_qty || 0),
+
+                total_qty: totalQty,
+                remaining_qty: remainingQty,
+                used_qty: usedQty,
+
                 unit: String(r.unit || 'ครั้ง').trim(),
-                bill_no: String(r.bill_no || r.invoice_no || ''),
-                sale_item_id: String(r.sale_item_id || ''),
-                item_code: String(r.item_code || ''),
+
+                // ✅ ใช้ invoice ของ table จริง
+                bill_no: String(r.invoice_no || ''),
+                invoice_no: String(r.invoice_no || ''),
+                invoice_date: String(r.invoice_date || ''),
+
+                // ✅ table จริงใช้ course_code
+                item_code: String(r.course_code || ''),
+                old_course_code: String(r.course_code || ''),
                 item_name: String(rawName || '').trim(),
+
+                sale_item_id: String(r.sale_item_id || ''),
+
                 staff_df: Number(master?.staff_df || 0),
                 doctor_df: Number(master?.doctor_df || 0),
-                display_label: `${String(rawName || '').trim()} คงเหลือ ${Number(r.remaining_qty || 0)} / ${Number(r.total_qty || 0)} ${String(r.unit || 'ครั้ง')}`
+
+                display_label:
+                    `${String(rawName || '').trim()} คงเหลือ ${remainingQty} / ${totalQty} ${String(r.unit || 'ครั้ง')}`
             };
         });
     } catch (e) {
@@ -8855,7 +8782,11 @@ window.renderQueueCourseChecklist = function(courseList = [], preselected = []) 
     const box = document.getElementById('processCourseChecklist');
     if (!box) return;
 
-    const selectedSet = new Set((preselected || []).map(x => String(x || '').trim()));
+    if (!Array.isArray(window.selectedProcessCourses)) {
+        window.selectedProcessCourses = [];
+    }
+
+    const preselectedSet = new Set((preselected || []).map(x => String(x || '').trim()));
 
     if (!Array.isArray(courseList) || courseList.length === 0) {
         box.innerHTML = `
@@ -8866,85 +8797,184 @@ window.renderQueueCourseChecklist = function(courseList = [], preselected = []) 
         return;
     }
 
-    box.innerHTML = courseList.map(item => {
-        const checked = selectedSet.has(String(item.course_name || '').trim()) ? 'checked' : '';
+    box.innerHTML = courseList.map((item, index) => {
+        const courseName = String(item.course_name || item.item_name || '-').trim();
+        const balanceIdRaw = item.id || item.balance_id;
+        const balanceId = balanceIdRaw ? String(balanceIdRaw).trim() : `tmp_${index}`;
+
+        const remainQty = Number(item.remaining_qty || 0);
+        const totalQty = Number(item.total_qty || 0);
+        const unit = String(item.unit || 'ครั้ง').trim();
+
+        const itemCode = String(item.item_code || '').trim();
+        const oldCourseCode = String(item.old_course_code || '').trim();
+        const saleItemId = String(item.sale_item_id || '').trim();
+
+        const billNo = String(item.bill_no || item.invoice_no || '').trim();
+        const invoiceDate = String(item.invoice_date || '').trim();
+
+        const staffDF = Number(item.staff_df || 0);
+        const doctorDF = Number(item.doctor_df || 0);
+
+        const checked = preselectedSet.has(courseName) ? 'checked' : '';
+        const defaultQty = checked ? 1 : '';
+
         return `
-            <label class="flex items-start gap-3 p-3 rounded-2xl border border-pink-100 bg-white hover:bg-pink-50/40 cursor-pointer transition-all">
-                <input
-                    type="checkbox"
-                    class="process-course-check mt-1"
-                    value="${window.escapeHtml(item.course_name || '')}"
-                    data-course-id="${window.escapeHtml(item.id || '')}"
-                    data-course-name="${window.escapeHtml(item.course_name || '')}"
-                    data-staffdf="${Number(item.staff_df || 0)}"
-                    data-doctordf="${Number(item.doctor_df || 0)}"
-                    data-sale-item-id="${window.escapeHtml(item.sale_item_id || '')}"
-                    data-item-code="${window.escapeHtml(item.item_code || '')}"
-                    data-old-course-code="${window.escapeHtml(item.old_course_code || '')}"
-                    data-bill-no="${window.escapeHtml(item.bill_no || '')}"
-                    data-total-qty="${Number(item.total_qty || 0)}"
-                    data-remaining-qty="${Number(item.remaining_qty || 0)}"
-                    data-unit="${window.escapeHtml(item.unit || 'ครั้ง')}"
-                    ${checked}
-                >
-                <div class="flex-1">
-                    <div class="text-sm font-bold text-slate-700">
-                        ${window.escapeHtml(item.course_name || '-')}
+            <div class="p-3 rounded-2xl border border-pink-100 bg-white hover:bg-pink-50/40 transition-all">
+                <label class="flex items-start gap-3 cursor-pointer">
+                    <input
+                        type="checkbox"
+                        class="process-course-check mt-1"
+                        value="${window.escapeHtml(courseName)}"
+                        data-balance-id="${window.escapeHtml(balanceId)}"
+                        data-course-name="${window.escapeHtml(courseName)}"
+                        data-item-code="${window.escapeHtml(itemCode)}"
+                        data-old-course-code="${window.escapeHtml(oldCourseCode)}"
+                        data-sale-item-id="${window.escapeHtml(saleItemId)}"
+                        data-bill-no="${window.escapeHtml(billNo)}"
+                        data-remaining-qty="${remainQty}"
+                        data-total-qty="${totalQty}"
+                        data-unit="${window.escapeHtml(unit)}"
+                        data-staff-df="${staffDF}"
+                        data-doctor-df="${doctorDF}"
+                        ${checked}
+                    >
+                    <div class="flex-1">
+                        <div class="text-sm font-bold text-slate-700">
+                            ${window.escapeHtml(courseName)}
+                        </div>
+
+                        <div class="text-[11px] text-pink-500 font-bold mt-1">
+                            คงเหลือ ${remainQty} / ${totalQty} ${window.escapeHtml(unit)}
+                        </div>
+
+                        <div class="text-[10px] text-slate-400 mt-1">
+                            เลขบิล: ${window.escapeHtml(billNo || '-')}
+                            ${invoiceDate ? ` | วันที่: ${window.escapeHtml(invoiceDate)}` : ''}
+                        </div>
                     </div>
-                    <div class="text-[11px] text-pink-500 font-bold mt-1">
-                        คงเหลือ ${Number(item.remaining_qty || 0)} / ${Number(item.total_qty || 0)} ${window.escapeHtml(item.unit || 'ครั้ง')}
-                    </div>
+                </label>
+
+                <div class="mt-3 pl-7">
+                    <label class="text-[10px] text-slate-400 font-bold block mb-1">
+                        จำนวนที่ใช้
+                    </label>
+
+                    <input
+                        type="number"
+                        min="1"
+                        max="${remainQty}"
+                        value="${defaultQty}"
+                        class="process-course-qty w-28 border border-pink-100 rounded-xl px-3 py-2 text-sm outline-none"
+                        data-balance-id="${window.escapeHtml(balanceId)}"
+                        data-course-name="${window.escapeHtml(courseName)}"
+                        data-max="${remainQty}"
+                        placeholder="ระบุจำนวน"
+                        ${checked ? '' : 'disabled'}
+                    >
                 </div>
-            </label>
-        `;
-    }).join('');
-
-    document.querySelectorAll('.process-course-check').forEach(chk => {
-        chk.addEventListener('change', window.syncProcessCourseSelection);
-    });
-};
-
-window.syncProcessCourseSelection = function() {
-    const checks = [...document.querySelectorAll('.process-course-check:checked')];
-    const summaryBox = document.getElementById('processCourseSelectedSummary');
-    const staffDFInput = document.getElementById('staffDF');
-    const doctorDFInput = document.getElementById('doctorDF');
-
-    let totalStaffDF = 0;
-    let totalDoctorDF = 0;
-
-    if (checks.length === 0) {
-        if (summaryBox) {
-            summaryBox.innerHTML = `<span class="text-slate-300 text-xs">ยังไม่ได้เลือกรายการ</span>`;
-        }
-        if (staffDFInput) staffDFInput.value = 0;
-        if (doctorDFInput) doctorDFInput.value = 0;
-        return;
-    }
-
-    const html = checks.map(chk => {
-        const staffDf = Number(chk.dataset.staffdf || 0);
-        const doctorDf = Number(chk.dataset.doctordf || 0);
-
-        totalStaffDF += staffDf;
-        totalDoctorDF += doctorDf;
-
-        return `
-            <div class="mb-1">
-                • ${window.escapeHtml(chk.dataset.courseName || chk.value || '')}
-                <span class="text-pink-500 font-bold">
-                    (DF พน. ${staffDf} / หมอ ${doctorDf})
-                </span>
             </div>
         `;
     }).join('');
 
-    if (summaryBox) {
-        summaryBox.innerHTML = html;
+    document.querySelectorAll('.process-course-check').forEach(chk => {
+        chk.addEventListener('change', function() {
+            const wrap = this.closest('.p-3');
+            const qtyInput = wrap?.querySelector('.process-course-qty');
+
+            if (qtyInput) {
+                qtyInput.disabled = !this.checked;
+
+                if (this.checked) {
+                    if (!qtyInput.value || Number(qtyInput.value) <= 0) {
+                        qtyInput.value = 1;
+                    }
+                } else {
+                    qtyInput.value = '';
+                }
+            }
+
+            if (typeof window.syncProcessCourseSelection === 'function') {
+                window.syncProcessCourseSelection();
+            }
+        });
+    });
+
+    document.querySelectorAll('.process-course-qty').forEach(inp => {
+        inp.addEventListener('input', function() {
+            const max = Number(this.dataset.max || 0);
+            let val = Number(this.value || 0);
+
+            if (val < 1) val = 1;
+            if (max > 0 && val > max) val = max;
+
+            this.value = val;
+
+            if (typeof window.syncProcessCourseSelection === 'function') {
+                window.syncProcessCourseSelection();
+            }
+        });
+    });
+
+    if (typeof window.syncProcessCourseSelection === 'function') {
+        window.syncProcessCourseSelection();
     }
+};
+
+window.syncProcessCourseSelection = function() {
+    const checks = Array.from(document.querySelectorAll('.process-course-check'));
+    const summaryBox = document.getElementById('processCourseSelectedSummary');
+    const staffDFInput = document.getElementById('staffDF');
+    const doctorDFInput = document.getElementById('doctorDF');
+
+    window.selectedProcessCourses = [];
+
+    let totalStaffDF = 0;
+    let totalDoctorDF = 0;
+
+    checks.forEach(chk => {
+        if (!chk.checked) return;
+
+        const wrap = chk.closest('.p-3');
+        const qtyInput = wrap ? wrap.querySelector('.process-course-qty') : null;
+
+        const balanceId = String(chk.dataset.balanceId || '').trim();
+        const courseName = String(chk.dataset.courseName || '').trim();
+        const maxQty = Number(chk.dataset.remainingQty || 0);
+        const unit = String(chk.dataset.unit || 'ครั้ง').trim();
+        const staffDF = Number(chk.dataset.staffDf || 0);
+        const doctorDF = Number(chk.dataset.doctorDf || 0);
+
+        let useQty = Number(qtyInput?.value || 1);
+
+        if (useQty < 1) useQty = 1;
+        if (maxQty > 0 && useQty > maxQty) useQty = maxQty;
+
+        totalStaffDF += staffDF * useQty;
+        totalDoctorDF += doctorDF * useQty;
+
+        window.selectedProcessCourses.push({
+            balanceId,
+            courseName,
+            useQty,
+            unit,
+            staffDF,
+            doctorDF
+        });
+    });
 
     if (staffDFInput) staffDFInput.value = totalStaffDF;
     if (doctorDFInput) doctorDFInput.value = totalDoctorDF;
+
+    if (summaryBox) {
+        if (!window.selectedProcessCourses.length) {
+            summaryBox.innerHTML = `<span class="text-slate-300 text-xs">ยังไม่ได้เลือกรายการ</span>`;
+        } else {
+            summaryBox.innerHTML = window.selectedProcessCourses.map(item => {
+                return `• ${window.escapeHtml(item.courseName)} — ใช้ ${Number(item.useQty || 0)} ${window.escapeHtml(item.unit || '')}`;
+            }).join('<br>');
+        }
+    }
 };
 
 window.getSelectedProcessCourses = function() {
@@ -9000,143 +9030,142 @@ window.openProcessServiceModal = async function(qId) {
 
         const modalWrap = document.createElement('div');
         modalWrap.id = "processModal";
-        modalWrap.className = "fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[10005] font-light animate-in fade-in duration-300";
+       modalWrap.className = "fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-[10005] font-light animate-in fade-in duration-300 p-4 overflow-y-auto";
 
-        modalWrap.innerHTML = `
-            <div class="bg-white w-full max-w-6xl rounded-[3.5rem] overflow-hidden shadow-2xl flex flex-col md:flex-row min-h-[700px] animate-in zoom-in duration-300">
+modalWrap.innerHTML = `
+    <div class="bg-white w-full max-w-6xl rounded-[3.5rem] overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[92vh] min-h-0 animate-in zoom-in duration-300">
 
-                <div class="w-full md:w-2/5 bg-pink-50 flex flex-col items-center justify-start p-10 border-r border-pink-100">
-                    <div class="w-52 h-52 bg-white rounded-[4rem] shadow-inner flex items-center justify-center border-4 border-white mb-6">
-                        <span class="text-7xl">💉</span>
-                    </div>
+        <div class="w-full md:w-2/5 bg-pink-50 flex flex-col items-center justify-start p-10 border-r border-pink-100 overflow-y-auto max-h-[92vh]">
+            <div class="w-52 h-52 bg-white rounded-[4rem] shadow-inner flex items-center justify-center border-4 border-white mb-6">
+                <span class="text-7xl">💉</span>
+            </div>
 
-                    <h3 class="text-2xl font-bold text-slate-800 italic text-center">
-                        ${window.escapeHtml(q.customer_name || '-')}
-                    </h3>
+            <h3 class="text-2xl font-bold text-slate-800 italic text-center">
+                ${window.escapeHtml(q.customer_name || '-')}
+            </h3>
 
-                    <p class="text-slate-400 text-xs mt-1 font-bold uppercase">
-                        HN: ${window.escapeHtml(q.hn || '-')}
-                    </p>
+            <p class="text-slate-400 text-xs mt-1 font-bold uppercase">
+                HN: ${window.escapeHtml(q.hn || '-')}
+            </p>
 
-                    <div class="mt-3 text-[11px] text-pink-500 font-bold">
-                        ${window.escapeHtml(q.branch || '-')}
-                    </div>
+            <div class="mt-3 text-[11px] text-pink-500 font-bold">
+                ${window.escapeHtml(q.branch || '-')}
+            </div>
 
-                    <div class="mt-8 bg-white/60 p-6 rounded-[2rem] w-full border border-white">
-                        <p class="text-[10px] text-[#D48197] font-black uppercase text-center mb-3 italic tracking-widest">
-                            📌 คอร์สคงเหลือของลูกค้า
-                        </p>
+            <div class="mt-8 bg-white/60 p-6 rounded-[2rem] w-full border border-white">
+                <p class="text-[10px] text-[#D48197] font-black uppercase text-center mb-3 italic tracking-widest">
+                    📌 คอร์สคงเหลือของลูกค้า
+                </p>
 
-                        <div id="processCourseChecklist" class="space-y-2 max-h-[280px] overflow-y-auto pr-1">
-                            <div class="text-center text-slate-300 italic py-6">กำลังโหลด...</div>
-                        </div>
-
-                        <div class="mt-4">
-                            <p class="text-[10px] text-slate-400 font-bold uppercase mb-2">
-                                รายการที่เลือกทำจริง
-                            </p>
-                            <div id="processCourseSelectedSummary" class="min-h-[70px] p-3 rounded-2xl border border-pink-100 bg-pink-50/40 text-sm text-slate-700 whitespace-pre-line break-words">
-                                <span class="text-slate-300 text-xs">ยังไม่ได้เลือกรายการ</span>
-                            </div>
-                        </div>
-                    </div>
+                <div id="processCourseChecklist" class="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+                    <div class="text-center text-slate-300 italic py-6">กำลังโหลด...</div>
                 </div>
 
-                <div class="flex-1 p-12 text-left relative overflow-y-auto" style="max-height: 90vh;">
-                    <button
-                        onclick="document.getElementById('processModal').remove()"
-                        class="absolute top-8 right-10 text-slate-300 text-3xl hover:text-pink-400 transition-all"
-                    >✕</button>
-
-                    <h4 class="text-xl font-bold ace-pink uppercase italic mb-8 underline decoration-pink-100 decoration-4 underline-offset-8">
-                        บันทึกข้อมูลและค่ามือ
-                    </h4>
-
-                    <div class="space-y-6">
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">
-                                    👩‍⚕️ พนักงานผู้ทำ
-                                </label>
-                                <input
-                                    list="procStaffList"
-                                    id="procStaffName"
-                                    value="${window.escapeHtml(staffSource.inputValue || '')}"
-                                    class="${commonFieldClass}"
-                                    placeholder="พิมพ์หรือเลือกชื่อพนักงาน"
-                                >
-                                <datalist id="procStaffList">
-                                    ${staffSource.datalistHTML || ''}
-                                </datalist>
-                            </div>
-
-                            <div>
-                                <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">
-                                    👨‍⚕️ แพทย์ผู้ทำ
-                                </label>
-                                <input
-                                    list="procDoctorList"
-                                    id="procDoctorName"
-                                    value="${window.escapeHtml(doctorSource.inputValue || '')}"
-                                    class="${commonFieldClass}"
-                                    placeholder="พิมพ์หรือเลือกชื่อแพทย์"
-                                >
-                                <datalist id="procDoctorList">
-                                    ${doctorSource.datalistHTML || ''}
-                                </datalist>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="text-[10px] text-slate-400 font-bold uppercase ml-2">
-                                    💵 ค่ามือพนักงาน (DF)
-                                </label>
-                                <input
-                                    type="number"
-                                    id="staffDF"
-                                    value="${Number(q.staff_df || 0)}"
-                                    class="w-full border-2 border-slate-100 p-4 rounded-2xl outline-none text-base font-normal text-slate-600 bg-white focus:border-pink-200 transition-all"
-                                >
-                            </div>
-
-                            <div>
-                                <label class="text-[10px] text-slate-400 font-bold uppercase ml-2">
-                                    💵 ค่ามือแพทย์ (DF)
-                                </label>
-                                <input
-                                    type="number"
-                                    id="doctorDF"
-                                    value="${Number(q.doctor_df || 0)}"
-                                    class="w-full border-2 border-slate-100 p-4 rounded-2xl outline-none text-base font-normal text-slate-600 bg-white focus:border-pink-200 transition-all"
-                                >
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 italic">
-                                📔 หมายเหตุเพิ่มเติม
-                            </label>
-                            <textarea
-                                id="procNote"
-                                class="w-full border-2 border-pink-50 p-4 rounded-2xl outline-none text-sm h-24 font-light focus:border-pink-200 transition-all text-slate-600"
-                            >${window.escapeHtml(q.note || '')}</textarea>
-                        </div>
-                    </div>
-
-                    <div class="flex justify-end mt-10">
-                        <button
-                            type="button"
-                            onclick="window.finishService('${qId}')"
-                            class="w-full py-5 rounded-3xl text-[12px] font-bold bg-[#D48197] text-white shadow-2xl hover:bg-black transition-all uppercase tracking-[0.2em] scale-100 hover:scale-[1.02]"
-                        >
-                            ✅ บันทึกข้อมูลและเสร็จสิ้นการบริการ
-                        </button>
+                <div class="mt-4">
+                    <p class="text-[10px] text-slate-400 font-bold uppercase mb-2">
+                        รายการที่เลือกทำจริง
+                    </p>
+                    <div id="processCourseSelectedSummary" class="min-h-[70px] p-3 rounded-2xl border border-pink-100 bg-pink-50/40 text-sm text-slate-700 whitespace-pre-line break-words">
+                        <span class="text-slate-300 text-xs">ยังไม่ได้เลือกรายการ</span>
                     </div>
                 </div>
             </div>
-        `;
+        </div>
 
+        <div class="flex-1 p-12 text-left relative overflow-y-auto max-h-[92vh]">
+            <button
+                onclick="document.getElementById('processModal').remove()"
+                class="absolute top-8 right-10 text-slate-300 text-3xl hover:text-pink-400 transition-all"
+            >✕</button>
+
+            <h4 class="text-xl font-bold ace-pink uppercase italic mb-8 underline decoration-pink-100 decoration-4 underline-offset-8">
+                บันทึกข้อมูลและค่ามือ
+            </h4>
+
+            <div class="space-y-6">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">
+                            👩‍⚕️ พนักงานผู้ทำ
+                        </label>
+                        <input
+                            list="procStaffList"
+                            id="procStaffName"
+                            value="${window.escapeHtml(staffSource.inputValue || '')}"
+                            class="${commonFieldClass}"
+                            placeholder="พิมพ์หรือเลือกชื่อพนักงาน"
+                        >
+                        <datalist id="procStaffList">
+                            ${staffSource.datalistHTML || ''}
+                        </datalist>
+                    </div>
+
+                    <div>
+                        <label class="text-[10px] text-[#D48197] font-bold uppercase ml-2">
+                            👨‍⚕️ แพทย์ผู้ทำ
+                        </label>
+                        <input
+                            list="procDoctorList"
+                            id="procDoctorName"
+                            value="${window.escapeHtml(doctorSource.inputValue || '')}"
+                            class="${commonFieldClass}"
+                            placeholder="พิมพ์หรือเลือกชื่อแพทย์"
+                        >
+                        <datalist id="procDoctorList">
+                            ${doctorSource.datalistHTML || ''}
+                        </datalist>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2">
+                            💵 ค่ามือพนักงาน (DF)
+                        </label>
+                        <input
+                            type="number"
+                            id="staffDF"
+                            value="${Number(q.staff_df || 0)}"
+                            class="w-full border-2 border-slate-100 p-4 rounded-2xl outline-none text-base font-normal text-slate-600 bg-white focus:border-pink-200 transition-all"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="text-[10px] text-slate-400 font-bold uppercase ml-2">
+                            💵 ค่ามือแพทย์ (DF)
+                        </label>
+                        <input
+                            type="number"
+                            id="doctorDF"
+                            value="${Number(q.doctor_df || 0)}"
+                            class="w-full border-2 border-slate-100 p-4 rounded-2xl outline-none text-base font-normal text-slate-600 bg-white focus:border-pink-200 transition-all"
+                        >
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-slate-400 font-bold uppercase ml-2 italic">
+                        📔 หมายเหตุเพิ่มเติม
+                    </label>
+                    <textarea
+                        id="procNote"
+                        class="w-full border-2 border-pink-50 p-4 rounded-2xl outline-none text-sm h-24 font-light focus:border-pink-200 transition-all text-slate-600"
+                    >${window.escapeHtml(q.note || '')}</textarea>
+                </div>
+            </div>
+
+            <div class="flex justify-end mt-10">
+                <button
+                    type="button"
+                    onclick="window.finishService('${qId}')"
+                    class="w-full py-5 rounded-3xl text-[12px] font-bold bg-[#D48197] text-white shadow-2xl hover:bg-black transition-all uppercase tracking-[0.2em] scale-100 hover:scale-[1.02]"
+                >
+                    ✅ บันทึกข้อมูลและเสร็จสิ้นการบริการ
+                </button>
+            </div>
+        </div>
+    </div>
+`;
         document.body.appendChild(modalWrap);
 
         // รายการที่เคยเลือกไว้เดิม
@@ -9319,13 +9348,37 @@ window.upsertCourseBalanceOverride = async function(params = {}) {
     }
 };
 
-// 🎯 ฟังก์ชันบันทึกงานเสร็จสิ้น: หักคอร์สและ Sync สถานะนัดหมาย
+// 🎯 ฟังก์ชันบันทึกงานเสร็จสิ้น: หักคอร์ส + บันทึก usage + sync นัดหมาย
 window.finishService = async function(qId) {
+    if (window.__finishServiceLoading) return;
+
+    let saveBtn = null;
+    let oldBtnHtml = '';
+
     try {
         if (!window.supabaseClient) {
-            Swal.fire('ผิดพลาด', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
-            return;
+            return Swal.fire('ผิดพลาด', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
         }
+
+        window.__finishServiceLoading = true;
+
+        saveBtn = [...document.querySelectorAll('button')]
+            .find(btn => String(btn.getAttribute('onclick') || '').includes(`window.finishService('${qId}')`));
+
+        if (saveBtn) {
+            oldBtnHtml = saveBtn.innerHTML;
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '⏳ กำลังบันทึก...';
+            saveBtn.classList.add('opacity-70', 'pointer-events-none');
+        }
+
+        const nowIso = new Date().toISOString();
+        const usedDate = new Date().toISOString().split('T')[0];
+        const finishTime = new Date().toLocaleTimeString('th-TH', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
 
         const { data: qData, error: qError } = await window.supabaseClient
             .from('queues')
@@ -9334,15 +9387,24 @@ window.finishService = async function(qId) {
             .single();
 
         if (qError || !qData) {
-            Swal.fire('ไม่พบข้อมูล', 'ไม่พบข้อมูลคิวที่ต้องการบันทึก', 'error');
-            return;
+            throw new Error('ไม่พบข้อมูลคิวที่ต้องการบันทึก');
         }
 
-        const selectedCourseChecks = [...document.querySelectorAll('.process-course-check:checked')];
+        const currentStatus = String(qData.status || '').trim();
+        if (currentStatus === 'เสร็จสิ้น') {
+            return Swal.fire('แจ้งเตือน', 'คิวนี้ถูกบันทึกเสร็จสิ้นแล้ว', 'info');
+        }
 
-        if (selectedCourseChecks.length === 0) {
-            Swal.fire('กรุณาเลือกรายการ', 'กรุณาเลือกคอร์สที่ทำจริงก่อนบันทึกค่ะ', 'warning');
-            return;
+        const safeBranch = String(qData.branch || '')
+            .replace('เอซคลินิก', '')
+            .replace('ACE Clinic', '')
+            .replace('สาขา', '')
+            .replace(':', '')
+            .trim();
+
+        const selectedChecks = [...document.querySelectorAll('.process-course-check:checked')];
+        if (selectedChecks.length === 0) {
+            return Swal.fire('กรุณาเลือกรายการ', 'กรุณาเลือกคอร์สที่ทำจริงก่อนบันทึกค่ะ', 'warning');
         }
 
         const procStaffName = document.getElementById('procStaffName')?.value?.trim() || qData.staff || '';
@@ -9351,123 +9413,132 @@ window.finishService = async function(qId) {
         const doctorDF = Number(document.getElementById('doctorDF')?.value || 0);
         const procNote = document.getElementById('procNote')?.value?.trim() || '';
 
-        const finishTime = new Date().toLocaleTimeString('th-TH', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-        });
-
         const usedCourseNames = [];
+        const usedCourses = [];
         const usageRows = [];
 
-        for (const chk of selectedCourseChecks) {
-            const course_name = String(chk.dataset.courseName || chk.value || '').trim();
-            const item_code = String(chk.dataset.itemCode || '').trim();
-            const old_course_code = String(chk.dataset.oldCourseCode || '').trim();
-            const sale_item_id_from_view = String(chk.dataset.saleItemId || '').trim();
-            const total_qty = Number(chk.dataset.totalQty || 0);
-            const unit = String(chk.dataset.unit || 'ครั้ง').trim();
+        for (const chk of selectedChecks) {
+            const balanceId = String(chk.dataset.balanceId || '').trim();
+            const courseName = String(chk.dataset.courseName || chk.value || '').trim();
 
-            let matchedSalesItem = null;
+            const wrap = chk.closest('div.p-3') || chk.closest('.rounded-2xl') || chk.parentElement;
+            const qtyInput = wrap ? wrap.querySelector('.process-course-qty') : null;
+            let useQty = Number(qtyInput?.value || 1);
 
-            if (sale_item_id_from_view) {
-                matchedSalesItem = {
-                    id: sale_item_id_from_view,
-                    item_code,
-                    item_name: course_name,
-                    old_course_code,
-                    qty: total_qty,
-                    unit
-                };
-            } else {
-                matchedSalesItem = await window.findMatchingSalesItemForCourse(
-                    qData.customer_id,
-                    {
-                        course_name,
-                        item_code,
-                        old_course_code
-                    },
-                    qData.hn || ''
-                );
+            if (!balanceId) {
+                throw new Error(`ไม่พบ balance id ของคอร์ส ${courseName}`);
             }
 
-            const sale_item_id = matchedSalesItem?.id ? String(matchedSalesItem.id) : null;
-            const final_item_code = String(matchedSalesItem?.item_code || item_code || '').trim();
-            const final_old_course_code = String(matchedSalesItem?.old_course_code || old_course_code || '').trim();
-            const final_unit = String(matchedSalesItem?.unit || unit || 'ครั้ง').trim();
-            const final_total_qty = Number(total_qty || matchedSalesItem?.qty || 0);
+            if (!Number.isFinite(useQty) || useQty <= 0) {
+                useQty = 1;
+            }
 
-            usedCourseNames.push(course_name);
+            const { data: balanceRow, error: balanceError } = await window.supabaseClient
+                .from('customer_course_balance')
+                .select('*')
+                .eq('id', balanceId)
+                .single();
+
+            if (balanceError || !balanceRow) {
+                throw new Error(`ไม่พบข้อมูลคอร์สคงเหลือ: ${courseName}`);
+            }
+
+            const remainQty = Number(balanceRow.remaining_qty || 0);
+            const totalQty = Number(balanceRow.total_qty || 0);
+            const finalUnit = String(balanceRow.unit || 'ครั้ง').trim();
+            const finalCourseName = String(balanceRow.course_name || courseName || '-').trim();
+            const finalItemCode = String(balanceRow.course_code || '').trim();
+            const finalOldCourseCode = String(balanceRow.course_code || '').trim();
+            const finalBillNo = String(balanceRow.invoice_no || '').trim();
+
+            if (remainQty <= 0) {
+                throw new Error(`คอร์ส ${finalCourseName} ถูกใช้หมดแล้ว`);
+            }
+
+            if (useQty > remainQty) {
+                throw new Error(`คอร์ส ${finalCourseName} เหลือไม่พอ (เหลือ ${remainQty})`);
+            }
+
+            const nextRemain = remainQty - useQty;
+
+            const { error: updateBalanceError } = await window.supabaseClient
+                .from('customer_course_balance')
+                .update({
+                    remaining_qty: nextRemain
+                })
+                .eq('id', balanceId);
+
+            if (updateBalanceError) {
+                throw new Error(updateBalanceError.message || `ตัดคอร์สไม่สำเร็จ: ${finalCourseName}`);
+            }
 
             usageRows.push({
                 customer_id: String(qData.customer_id || ''),
                 hn: String(qData.hn || ''),
                 customer_name: String(qData.customer_name || ''),
-                sale_item_id: sale_item_id,
-                course_id: matchedSalesItem?.course_id || null,
-                old_course_code: final_old_course_code || null,
-                item_code: final_item_code || null,
-                item_name: course_name,
+                sale_item_id: null,
+                course_id: null,
+                old_course_code: finalOldCourseCode || null,
+                item_code: finalItemCode || null,
+                item_name: finalCourseName,
+                bill_no: finalBillNo || null,
                 service_no: String(qId),
                 legacy_ref_no: qData.appointment_id ? String(qData.appointment_id) : null,
-                used_qty: 1,
-                used_date: qData.date || new Date().toISOString().split('T')[0],
-                unit: final_unit,
+                used_qty: useQty,
+                used_date: qData.date || usedDate,
+                unit: finalUnit,
                 service_value: 0,
                 status_text: 'ใช้บริการแล้ว',
                 note: procNote || null,
-                branch_name: String(qData.branch || ''),
+                branch_name: safeBranch || String(qData.branch || ''),
                 source_file: 'queue_service',
-                match_status: 'manual'
+                match_status: 'balance_direct',
+                created_at: nowIso
             });
 
-            const ok = await window.upsertCourseBalanceOverride({
-                customer_id: String(qData.customer_id || ''),
-                sale_item_id: sale_item_id,
-                bill_no: '',
-                item_code: final_item_code,
-                item_name: course_name,
-                old_course_code: final_old_course_code,
-                total_qty: final_total_qty,
-                used_delta: 1,
-                unit: final_unit
+            usedCourseNames.push(finalCourseName);
+            usedCourses.push({
+                balanceId,
+                courseName: finalCourseName,
+                useQty,
+                billNo: finalBillNo || '',
+                itemCode: finalItemCode || '',
+                oldCourseCode: finalOldCourseCode || '',
+                unit: finalUnit,
+                totalQty,
+                remainingAfterUse: nextRemain
             });
-
-            if (!ok) {
-                throw new Error(`อัปเดตยอดคงเหลือไม่สำเร็จ: ${course_name}`);
-            }
         }
 
-        if (usageRows.length > 0) {
-            const { error: usageError } = await window.supabaseClient
-                .from('course_usage')
-                .insert(usageRows);
-
-            if (usageError) {
-                console.error('insert course_usage error:', usageError);
-                throw new Error(usageError.message || 'บันทึกประวัติการใช้คอร์สไม่สำเร็จ');
-            }
+        if (usageRows.length === 0) {
+            throw new Error('ไม่พบรายการที่พร้อมบันทึก');
         }
 
-        const updatePayload = {
-            status: "เสร็จสิ้น",
-            finish_time: finishTime,
-            staff_df: staffDF,
-            doctor_df: doctorDF,
-            staff: procStaffName || qData.staff || '',
-            doctor: procDoctorName || qData.doctor || '',
-            note: procNote || qData.note || '',
-            used_course_names: usedCourseNames,
-            updated_at: new Date().toISOString()
-        };
+        const { error: usageError } = await window.supabaseClient
+            .from('course_usage')
+            .insert(usageRows);
+
+        if (usageError) {
+            throw new Error(usageError.message || 'บันทึกประวัติการใช้คอร์สไม่สำเร็จ');
+        }
 
         const { error: queueUpdateError } = await window.supabaseClient
             .from('queues')
-            .update(updatePayload)
+            .update({
+                status: 'เสร็จสิ้น',
+                finish_time: finishTime,
+                staff_df: staffDF,
+                doctor_df: doctorDF,
+                staff: procStaffName || qData.staff || '',
+                doctor: procDoctorName || qData.doctor || '',
+                note: procNote || qData.note || '',
+                used_course_names: usedCourseNames,
+                used_courses: usedCourses,
+                updated_at: nowIso
+            })
             .eq('id', qId);
 
         if (queueUpdateError) {
-            console.error('update queue error:', queueUpdateError);
             throw new Error(queueUpdateError.message || 'อัปเดตสถานะคิวไม่สำเร็จ');
         }
 
@@ -9476,7 +9547,7 @@ window.finishService = async function(qId) {
                 .from('appointments')
                 .update({
                     status: 'เสร็จสิ้น',
-                    updated_at: new Date().toISOString()
+                    updated_at: nowIso
                 })
                 .eq('id', qData.appointment_id);
 
@@ -9487,7 +9558,11 @@ window.finishService = async function(qId) {
 
         document.getElementById('processModal')?.remove();
 
-        Swal.fire({
+        // ล้าง cache เฉย ๆ เผื่อวันหลังเปิดหน้าลูกค้าใหม่ จะเห็น usage ล่าสุด
+        window.customerDetailCache = window.customerDetailCache || {};
+        delete window.customerDetailCache[String(qData.customer_id)];
+
+        await Swal.fire({
             icon: 'success',
             title: 'บันทึกสำเร็จ',
             text: 'ระบบตัดคอร์สและบันทึกการใช้บริการเรียบร้อยแล้วค่ะ',
@@ -9495,22 +9570,29 @@ window.finishService = async function(qId) {
             showConfirmButton: false
         });
 
-        if (typeof window.renderQueuePage === 'function') await window.renderQueuePage();
-        if (typeof window.renderAppointmentPage === 'function') await window.renderAppointmentPage();
+        // ✅ อยู่หน้าเดิม คือหน้าห้องจัดการคิว
+        if (typeof window.renderQueuePage === 'function') {
+            await window.renderQueuePage();
+        }
 
-        if (typeof window.renderCustomerProfile === 'function' && qData.customer_id) {
-            try {
-                await window.renderCustomerProfile(qData.customer_id);
-            } catch (e) {
-                console.warn('refresh customer profile warning:', e);
-            }
+        if (typeof window.renderAppointmentPage === 'function') {
+            await window.renderAppointmentPage();
         }
 
     } catch (e) {
         console.error('finishService error:', e);
         Swal.fire('ผิดพลาด', e.message || 'บันทึกการใช้บริการไม่สำเร็จ', 'error');
+    } finally {
+        window.__finishServiceLoading = false;
+
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = oldBtnHtml || '✅ บันทึกข้อมูลและเสร็จสิ้นการบริการ';
+            saveBtn.classList.remove('opacity-70', 'pointer-events-none');
+        }
     }
 };
+
 // 🎯 ฟังก์ชันยกเลิกคิวและคืนคอร์ส (ID-Based) - เวอร์ชันแก้แล้ว
 window.deleteQueueItem = async function(qId) {
     try {
@@ -12045,7 +12127,7 @@ window.initCustomerDetailCache = async function(customerId, customerObj = null) 
             appointsRes
         ] = await Promise.all([
             window.supabaseClient
-                .from('customer_course_balance_view')
+                .from('customer_course_balance')
                 .select('*')
                 .or([
                     `customer_id.eq.${customerIdStr}`,
@@ -12763,16 +12845,10 @@ window.toggleRemainingCourseRow = window.toggleRemainingCourseRow || async funct
     }
 };
 
-window.toggleUsageCourseRow = window.toggleUsageCourseRow || async function(encodedPayload) {
+window.toggleUsageCourseRow = function(encodedPayload) {
     try {
         const payload = JSON.parse(decodeURIComponent(escape(atob(encodedPayload))));
-        const rowKey = [
-            String(payload.customer_id || '').trim(),
-            String(payload.bill_no || '').trim(),
-            String(payload.old_course_code || '').trim(),
-            String(payload.item_code || '').trim(),
-            String(payload.item_name || '').trim()
-        ].join('|');
+        const rowKey = String(payload.key || '').trim();
 
         window.courseUsageRowState = window.courseUsageRowState || { expandedKey: null };
 
@@ -12782,9 +12858,29 @@ window.toggleUsageCourseRow = window.toggleUsageCourseRow || async function(enco
             window.courseUsageRowState.expandedKey = rowKey;
         }
 
-        if (window.activeCustomer?.id) {
-            await window.switchCustomerTab('usage', window.activeCustomer.id);
-        }
+        const container = document.getElementById('tabContentInner');
+        const customerId = String(window.activeCustomer?.id || '').trim();
+        const customerBranch = String(window.activeCustomer?.branch || '').trim();
+        const cacheRows = window.customerDetailCache?.[customerId]?.usage || [];
+
+        if (!container || !customerId) return;
+
+        const formatThaiDate = (dateString) => {
+            if (!dateString) return '-';
+            try {
+                const date = new Date(dateString);
+                if (Number.isNaN(date.getTime())) return String(dateString || '-');
+                return date.toLocaleDateString('th-TH', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                });
+            } catch (e) {
+                return String(dateString || '-');
+            }
+        };
+
+        window.renderUsageTabContent(container, [...cacheRows], customerBranch, formatThaiDate);
     } catch (e) {
         console.error('toggleUsageCourseRow error:', e);
     }
@@ -12862,6 +12958,363 @@ window.renderRemainingCourseExpanded = async function(item) {
     }
 };
 
+window.normalizeUsageBranchValue = function(value) {
+    return String(value || '')
+        .replace('เอซคลินิก', '')
+        .replace('ACE Clinic', '')
+        .replace('สาขา', '')
+        .replace(':', '')
+        .trim()
+        .toLowerCase();
+};
+
+window.normalizeUsageCourseKey = function(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, ' ');
+};
+
+window.loadCustomerUsageRows = async function(customerIdStr, customerHN = '', customerOldHN = '') {
+    let usageRows = [];
+
+    const normalizeText = (value) => String(value || '').trim();
+
+    const pushUnique = (arr) => {
+        (arr || []).forEach(item => {
+            const safeBillNo =
+                item.bill_no ||
+                item.invoice_no ||
+                item.service_no ||
+                item.legacy_ref_no ||
+                '';
+
+            const key = [
+                normalizeText(item.id),
+                normalizeText(item.customer_id),
+                normalizeText(item.hn),
+                normalizeText(item.service_no),
+                normalizeText(safeBillNo),
+                normalizeText(item.item_code),
+                normalizeText(item.item_name),
+                normalizeText(item.used_date),
+                normalizeText(item.created_at),
+                normalizeText(item.used_qty)
+            ].join('|');
+
+            const exists = usageRows.some(x =>
+                [
+                    normalizeText(x.id),
+                    normalizeText(x.customer_id),
+                    normalizeText(x.hn),
+                    normalizeText(x.service_no),
+                    normalizeText(x.bill_no || x.invoice_no || x.service_no || x.legacy_ref_no || ''),
+                    normalizeText(x.item_code),
+                    normalizeText(x.item_name),
+                    normalizeText(x.used_date),
+                    normalizeText(x.created_at),
+                    normalizeText(x.used_qty)
+                ].join('|') === key
+            );
+
+            if (!exists) {
+                usageRows.push({
+                    ...item,
+                    bill_no: safeBillNo,
+                    used_qty: Number(item.used_qty || 0) || 0
+                });
+            }
+        });
+    };
+
+    const q1 = await window.supabaseClient
+        .from('course_usage')
+        .select('*')
+        .eq('customer_id', customerIdStr)
+        .order('used_date', { ascending: false })
+        .order('created_at', { ascending: false });
+
+    if (!q1.error) pushUnique(q1.data);
+    else console.error('usage q1 error:', q1.error);
+
+    if (customerHN) {
+        const q2 = await window.supabaseClient
+            .from('course_usage')
+            .select('*')
+            .eq('hn', customerHN)
+            .order('used_date', { ascending: false })
+            .order('created_at', { ascending: false });
+
+        if (!q2.error) pushUnique(q2.data);
+        else console.error('usage q2 error:', q2.error);
+    }
+
+    if (customerOldHN) {
+        const q3 = await window.supabaseClient
+            .from('course_usage')
+            .select('*')
+            .eq('hn', customerOldHN)
+            .order('used_date', { ascending: false })
+            .order('created_at', { ascending: false });
+
+        if (!q3.error) pushUnique(q3.data);
+        else console.error('usage q3 error:', q3.error);
+    }
+
+    return usageRows;
+};
+
+window.renderUsageTabContent = function(container, usageRows, customerBranch, formatThaiDate) {
+    const normalizeText = (value) => String(value || '').trim();
+
+    if (customerBranch) {
+        const safeCustomerBranch = window.normalizeUsageBranchValue(customerBranch);
+
+        const sameBranchRows = usageRows.filter(x => {
+            const rowBranch = window.normalizeUsageBranchValue(x.branch_name || x.branch || '');
+            return !rowBranch || rowBranch === safeCustomerBranch;
+        });
+
+        if (sameBranchRows.length > 0) usageRows = sameBranchRows;
+    }
+
+    usageRows.sort((a, b) => {
+        const da = String(a.used_date || a.created_at || '');
+        const db = String(b.used_date || b.created_at || '');
+        return db.localeCompare(da);
+    });
+
+    const usageGroupMap = new Map();
+
+    usageRows.forEach(row => {
+        const groupKey = [
+            normalizeText(row.customer_id),
+            window.normalizeUsageCourseKey(row.item_name)
+        ].join('|');
+
+        const rowRef = row.bill_no || row.invoice_no || row.service_no || row.legacy_ref_no || '';
+        const rowDate = String(row.used_date || row.created_at || '');
+
+        if (!usageGroupMap.has(groupKey)) {
+            usageGroupMap.set(groupKey, {
+                key: groupKey,
+                customer_id: row.customer_id || '',
+                hn: row.hn || '',
+                bill_no: rowRef,
+                item_name: row.item_name || '-',
+                item_code: row.item_code || '',
+                old_course_code: row.old_course_code || '',
+                unit: row.unit || 'ครั้ง',
+                branch_name: row.branch_name || row.branch || '',
+                first_used_date: rowDate,
+                last_used_date: rowDate,
+                total_used_qty: Number(row.used_qty || 0) || 0,
+                rows: [row]
+            });
+        } else {
+            const old = usageGroupMap.get(groupKey);
+            old.total_used_qty += Number(row.used_qty || 0) || 0;
+            old.rows.push(row);
+
+            const oldFirst = String(old.first_used_date || '');
+            const oldLast = String(old.last_used_date || '');
+
+            if (rowDate && (!oldFirst || rowDate < oldFirst)) old.first_used_date = rowDate;
+            if (rowDate && (!oldLast || rowDate > oldLast)) {
+                old.last_used_date = rowDate;
+                old.bill_no = rowRef || old.bill_no || '';
+            }
+        }
+    });
+
+    const groupedUsage = Array.from(usageGroupMap.values()).sort((a, b) => {
+        const da = String(b.last_used_date || '');
+        const db = String(a.last_used_date || '');
+        return da.localeCompare(db);
+    });
+
+    window.courseUsageRowState = window.courseUsageRowState || { expandedKey: null };
+
+    if (groupedUsage.length === 0) {
+        container.innerHTML = `
+            <div class="border-2 border-slate-100 bg-slate-50/50 rounded-[2.5rem] p-8 shadow-inner overflow-hidden mb-6 relative z-10">
+                <div class="p-16 text-center text-slate-300 italic font-bold rounded-3xl border-2 border-slate-100 bg-white">
+                    ยังไม่พบประวัติการใช้คอร์ส
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    const usageCardHtml = [];
+
+    for (const group of groupedUsage) {
+        const encoded = window.safeBase64Encode(group);
+        const isExpanded = window.courseUsageRowState.expandedKey === group.key;
+
+        let expandedHtml = '';
+        if (isExpanded) {
+            const detailRows = [...group.rows].sort((a, b) => {
+                const da = String(a.used_date || a.created_at || '');
+                const db = String(b.used_date || b.created_at || '');
+                return db.localeCompare(da);
+            });
+
+            expandedHtml = `
+                <div class="mt-4 rounded-[2rem] border border-slate-200 bg-slate-50 p-5">
+                    <div class="rounded-[2rem] border border-slate-200 bg-white p-5 mb-5">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div class="rounded-2xl bg-slate-50 border border-slate-200 p-4">
+                                <div class="text-[11px] text-slate-400 font-black uppercase">ใช้ไปทั้งหมด</div>
+                                <div class="text-3xl font-black text-blue-600 mt-1">${Number(group.total_used_qty || 0)}</div>
+                                <div class="text-xs text-slate-400 font-bold">${window.escapeHtml(group.unit || 'ครั้ง')}</div>
+                            </div>
+
+                            <div class="rounded-2xl bg-slate-50 border border-slate-200 p-4">
+                                <div class="text-[11px] text-slate-400 font-black uppercase">จำนวนครั้งที่ใช้</div>
+                                <div class="text-3xl font-black text-emerald-600 mt-1">${detailRows.length}</div>
+                                <div class="text-xs text-slate-400 font-bold">รายการ</div>
+                            </div>
+
+                            <div class="rounded-2xl bg-slate-50 border border-slate-200 p-4">
+                                <div class="text-[11px] text-slate-400 font-black uppercase">ใช้ครั้งแรก</div>
+                                <div class="text-sm font-black text-slate-800 mt-2">
+                                    ${window.formatThaiDateTimeFull(group.first_used_date)}
+                                </div>
+                            </div>
+
+                            <div class="rounded-2xl bg-slate-50 border border-slate-200 p-4">
+                                <div class="text-[11px] text-slate-400 font-black uppercase">ใช้ครั้งล่าสุด</div>
+                                <div class="text-sm font-black text-slate-800 mt-2">
+                                    ${window.formatThaiDateTimeFull(group.last_used_date)}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="rounded-[2rem] border border-slate-200 bg-white p-5">
+                        <div class="text-lg font-black text-slate-900 mb-4">รายการใช้คอร์ส</div>
+
+                        ${detailRows.length > 0 ? detailRows.map((u, idx) => `
+                            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-3">
+                                <div class="flex items-start justify-between gap-4">
+                                    <div class="flex-1">
+                                        <div class="text-sm text-pink-500 font-black mb-2">
+                                            ครั้งที่ ${idx + 1}
+                                        </div>
+
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                                            <div>
+                                                <span class="text-slate-400 font-black">เลขที่อ้างอิง:</span>
+                                                <span class="font-bold text-slate-800">
+                                                    ${window.escapeHtml(u.bill_no || u.invoice_no || u.service_no || u.legacy_ref_no || '-')}
+                                                </span>
+                                            </div>
+
+                                            <div>
+                                                <span class="text-slate-400 font-black">ชื่อคอร์ส:</span>
+                                                <span class="font-bold text-slate-800">
+                                                    ${window.escapeHtml(u.item_name || group.item_name || '-')}
+                                                </span>
+                                            </div>
+
+                                            <div>
+                                                <span class="text-slate-400 font-black">วัน/เวลาที่ใช้:</span>
+                                                <span class="font-bold text-slate-800">
+                                                    ${window.formatThaiDateTimeFull(u.used_date || u.created_at)}
+                                                </span>
+                                            </div>
+
+                                            <div>
+                                                <span class="text-slate-400 font-black">สาขาที่ใช้บริการ:</span>
+                                                <span class="font-bold text-slate-800">
+                                                    ${window.escapeHtml(u.branch_name || u.branch || group.branch_name || '-')}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="text-right min-w-[70px]">
+                                        <div class="inline-flex px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[11px] font-black border border-emerald-100 mb-2">
+                                            USED
+                                        </div>
+                                        <div class="text-2xl font-black text-emerald-600">
+                                            ${Number(u.used_qty || 0)}
+                                        </div>
+                                        <div class="text-xs text-slate-400 font-black">
+                                            ${window.escapeHtml(u.unit || group.unit || 'ครั้ง')}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('') : `
+                            <div class="text-center text-slate-400 font-bold italic py-8">
+                                ยังไม่พบประวัติการใช้คอร์ส
+                            </div>
+                        `}
+                    </div>
+                </div>
+            `;
+        }
+
+        usageCardHtml.push(`
+            <div class="rounded-[2rem] border-2 ${isExpanded ? 'border-pink-200 bg-pink-50/30' : 'border-slate-100 bg-white'} shadow-sm hover:shadow-md transition-all overflow-hidden">
+                <div
+                    onclick="window.toggleUsageCourseRow('${encoded}')"
+                    class="grid grid-cols-12 gap-3 items-center px-6 py-5 cursor-pointer"
+                >
+                    <div class="col-span-12 md:col-span-5 text-left">
+                        <div class="text-[11px] text-[#D48197] font-black uppercase mb-1">
+                            ใช้ล่าสุด ${formatThaiDate(group.last_used_date)}
+                        </div>
+                        <div class="font-black text-slate-900 text-lg italic underline decoration-pink-100 underline-offset-4">
+                            ${window.escapeHtml(group.item_name || '-')}
+                        </div>
+                        <div class="text-[11px] text-slate-400 font-bold mt-1">
+                            ใช้ไปทั้งหมด ${Number(group.total_used_qty || 0)} ${window.escapeHtml(group.unit || 'ครั้ง')}
+                        </div>
+                    </div>
+
+                    <div class="col-span-6 md:col-span-2 text-center">
+                        <div class="text-3xl font-black text-blue-600 leading-none">
+                            ${Number(group.total_used_qty || 0)}
+                        </div>
+                        <div class="text-[11px] text-slate-400 font-bold">ใช้ไป</div>
+                    </div>
+
+                    <div class="col-span-6 md:col-span-2 text-center">
+                        <div class="text-sm font-black text-slate-700 break-all">
+                            ${window.escapeHtml(group.bill_no || '-')}
+                        </div>
+                        <div class="text-[11px] text-slate-400 font-bold">เลขบิล</div>
+                    </div>
+
+                    <div class="col-span-6 md:col-span-1 text-center">
+                        <div class="inline-flex px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[11px] font-black border border-emerald-100">
+                            USED
+                        </div>
+                    </div>
+
+                    <div class="col-span-6 md:col-span-2 text-right">
+                        <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full ${isExpanded ? 'bg-pink-100 text-pink-700' : 'bg-slate-100 text-slate-600'} text-xs font-black">
+                            ${isExpanded ? 'ซ่อนรายละเอียด' : 'ดูรายละเอียด'}
+                            <span>${isExpanded ? '▲' : '▼'}</span>
+                        </div>
+                    </div>
+                </div>
+
+                ${isExpanded ? `<div class="px-6 pb-6">${expandedHtml}</div>` : ''}
+            </div>
+        `);
+    }
+
+    container.innerHTML = `
+        <div class="space-y-4 relative z-10">
+            ${usageCardHtml.join('')}
+        </div>
+    `;
+};
+
 window.switchCustomerTab = async function(tabName, customerId) {
     const container = document.getElementById('tabContentInner');
     if (!container) return;
@@ -12877,7 +13330,7 @@ window.switchCustomerTab = async function(tabName, customerId) {
         activeBtn.classList.remove('text-slate-500');
     }
 
-    container.innerHTML = `<div class="py-12 text-center text-slate-300 font-bold italic">กำลังโหลดข้อมูล...</div>`;
+    container.innerHTML = '';
 
     const customerIdStr = String(customerId || '').trim();
 
@@ -13019,31 +13472,36 @@ window.switchCustomerTab = async function(tabName, customerId) {
     const pushUnique = (arr) => {
         (arr || []).forEach(item => {
             const key = [
+                normalizeText(item.id),
                 normalizeText(item.customer_id),
                 normalizeText(item.hn),
-                normalizeText(item.bill_no),
-                normalizeText(item.sale_item_id),
-                normalizeText(item.item_code),
-                normalizeText(item.item_name),
-                normalizeText(item.old_course_code)
+                normalizeText(item.invoice_no),
+                normalizeText(item.course_code),
+                normalizeText(item.course_name)
             ].join('|');
 
             if (!rows.some(x =>
                 [
+                    normalizeText(x.id),
                     normalizeText(x.customer_id),
                     normalizeText(x.hn),
-                    normalizeText(x.bill_no),
-                    normalizeText(x.sale_item_id),
-                    normalizeText(x.item_code),
-                    normalizeText(x.item_name),
-                    normalizeText(x.old_course_code)
+                    normalizeText(x.invoice_no),
+                    normalizeText(x.course_code),
+                    normalizeText(x.course_name)
                 ].join('|') === key
             )) {
+                const totalQty = Number(item.total_qty || 0) || 0;
+                const remainingQty = Number(item.remaining_qty || 0) || 0;
+
                 rows.push({
                     ...item,
-                    total_qty: Number(item.total_qty ?? item.purchased_qty ?? 0) || 0,
-                    used_qty: Number(item.used_qty ?? 0) || 0,
-                    remaining_qty: Number(item.remaining_qty ?? 0) || 0
+                    bill_no: item.invoice_no || '',
+                    item_name: item.course_name || '',
+                    item_code: item.course_code || '',
+                    old_course_code: item.course_code || '',
+                    total_qty: totalQty,
+                    remaining_qty: remainingQty,
+                    used_qty: Math.max(0, totalQty - remainingQty)
                 });
             }
         });
@@ -13053,29 +13511,32 @@ window.switchCustomerTab = async function(tabName, customerId) {
         pushUnique(cached.remaining);
     } else {
         const q1 = await window.supabaseClient
-            .from('customer_course_balance_view')
+            .from('customer_course_balance')
             .select('*')
             .eq('customer_id', customerIdStr)
-            .order('bill_date', { ascending: false });
+            .order('invoice_date', { ascending: false })
+            .order('created_at', { ascending: false });
 
         if (!q1.error) pushUnique(q1.data);
 
-        if (customerHN) {
+        if (rows.length === 0 && customerHN) {
             const q2 = await window.supabaseClient
-                .from('customer_course_balance_view')
+                .from('customer_course_balance')
                 .select('*')
                 .eq('hn', customerHN)
-                .order('bill_date', { ascending: false });
+                .order('invoice_date', { ascending: false })
+                .order('created_at', { ascending: false });
 
             if (!q2.error) pushUnique(q2.data);
         }
 
-        if (customerOldHN) {
+        if (rows.length === 0 && customerOldHN) {
             const q3 = await window.supabaseClient
-                .from('customer_course_balance_view')
+                .from('customer_course_balance')
                 .select('*')
-                .eq('hn', customerOldHN)
-                .order('bill_date', { ascending: false });
+                .eq('old_hn', customerOldHN)
+                .order('invoice_date', { ascending: false })
+                .order('created_at', { ascending: false });
 
             if (!q3.error) pushUnique(q3.data);
         }
@@ -13083,6 +13544,7 @@ window.switchCustomerTab = async function(tabName, customerId) {
         window.customerDetailCache[customerIdStr] = window.customerDetailCache[customerIdStr] || {};
         window.customerDetailCache[customerIdStr].remaining = rows;
     }
+
     if (customerBranch) {
         const sameBranchRows = rows.filter(x =>
             !normalizeText(x.branch_name) || normalizeText(x.branch_name) === customerBranch
@@ -13090,11 +13552,11 @@ window.switchCustomerTab = async function(tabName, customerId) {
         if (sameBranchRows.length > 0) rows = sameBranchRows;
     }
 
-    rows = rows.filter(item => Number(item.remaining_qty || 0) > 0);
+    rows = rows.filter(item => Number(item.total_qty || 0) > 0);
 
     rows.sort((a, b) => {
-        const db = String(b.bill_date || '');
-        const da = String(a.bill_date || '');
+        const db = String(b.invoice_date || b.created_at || '');
+        const da = String(a.invoice_date || a.created_at || '');
         return db.localeCompare(da);
     });
 
@@ -13113,17 +13575,17 @@ window.switchCustomerTab = async function(tabName, customerId) {
     for (const item of rows) {
         const rowKey = [
             String(item.customer_id || '').trim(),
-            String(item.bill_no || '').trim(),
-            String(item.sale_item_id || '').trim(),
-            String(item.item_code || '').trim(),
-            String(item.item_name || '').trim()
+            String(item.invoice_no || '').trim(),
+            String(item.course_code || '').trim(),
+            String(item.course_name || '').trim(),
+            String(item.id || '').trim()
         ].join('|');
 
-        const isExpanded = window.courseRowState.expandedKey === rowKey;
+        const isExpanded = window.courseRowState?.expandedKey === rowKey;
         const encoded = window.safeBase64Encode(item);
 
         let expandedHtml = '';
-        if (isExpanded) {
+        if (isExpanded && typeof window.renderRemainingCourseExpanded === 'function') {
             expandedHtml = await window.renderRemainingCourseExpanded(item);
         }
 
@@ -13134,9 +13596,9 @@ window.switchCustomerTab = async function(tabName, customerId) {
                     class="grid grid-cols-12 gap-3 items-center px-6 py-5 cursor-pointer"
                 >
                     <div class="col-span-12 md:col-span-4 text-left">
-                        <div class="font-black text-slate-900 text-lg italic">${window.escapeHtml(item.item_name || '-')}</div>
+                        <div class="font-black text-slate-900 text-lg italic">${window.escapeHtml(item.course_name || '-')}</div>
                         <div class="text-[11px] text-slate-400 font-bold mt-1">
-                            รหัสเก่า: ${window.escapeHtml(item.old_course_code || '-')}
+                            รหัสคอร์ส: ${window.escapeHtml(item.course_code || '-')}
                         </div>
                     </div>
 
@@ -13155,7 +13617,7 @@ window.switchCustomerTab = async function(tabName, customerId) {
                     </div>
 
                     <div class="col-span-6 md:col-span-2 text-center">
-                        <div class="font-black text-slate-700 text-lg">${window.escapeHtml(item.bill_no || '-')}</div>
+                        <div class="font-black text-slate-700 text-lg">${window.escapeHtml(item.invoice_no || '-')}</div>
                         <div class="text-[11px] text-slate-400 font-bold">เลขบิล</div>
                     </div>
 
@@ -13184,323 +13646,58 @@ window.switchCustomerTab = async function(tabName, customerId) {
     `;
 }
 
-     else if (tabName === 'usage') {
-    let usageRows = [];
-    const cached = window.getCustomerDetailCache(customerIdStr);
+   else if (tabName === 'usage') {
+    window.customerDetailCache = window.customerDetailCache || {};
+    window.customerDetailCache[customerIdStr] = window.customerDetailCache[customerIdStr] || {};
 
-    const pushUnique = (arr) => {
-        (arr || []).forEach(item => {
-            const key = [
-                normalizeText(item.id),
-                normalizeText(item.customer_id),
-                normalizeText(item.hn),
-                normalizeText(item.service_no),
-                normalizeText(item.bill_no),
-                normalizeText(item.item_code),
-                normalizeText(item.item_name),
-                normalizeText(item.used_date),
-                normalizeText(item.created_at)
-            ].join('|');
+    const cachedUsage = Array.isArray(window.customerDetailCache[customerIdStr].usage)
+        ? [...window.customerDetailCache[customerIdStr].usage]
+        : [];
 
-            if (!usageRows.some(x =>
-                [
-                    normalizeText(x.id),
-                    normalizeText(x.customer_id),
-                    normalizeText(x.hn),
-                    normalizeText(x.service_no),
-                    normalizeText(x.bill_no),
-                    normalizeText(x.item_code),
-                    normalizeText(x.item_name),
-                    normalizeText(x.used_date),
-                    normalizeText(x.created_at)
-                ].join('|') === key
-            )) {
-                usageRows.push({
-                    ...item,
-                    used_qty: Number(item.used_qty || 0) || 0
-                });
-            }
-        });
-    };
-
-    if (cached && Array.isArray(cached.usage) && cached.usage.length > 0) {
-        pushUnique(cached.usage);
+    // ✅ แสดง cache ก่อนทันที
+    if (cachedUsage.length > 0) {
+        window.renderUsageTabContent(container, cachedUsage, customerBranch, formatThaiDate);
     } else {
-        const q1 = await window.supabaseClient
-            .from('customer_usage_history_view')
-            .select('*')
-            .eq('customer_id', customerIdStr)
-            .order('used_date', { ascending: false })
-            .order('created_at', { ascending: false });
-
-        if (!q1.error) pushUnique(q1.data);
-
-        if (customerHN) {
-            const q2 = await window.supabaseClient
-                .from('customer_usage_history_view')
-                .select('*')
-                .eq('hn', customerHN)
-                .order('used_date', { ascending: false })
-                .order('created_at', { ascending: false });
-
-            if (!q2.error) pushUnique(q2.data);
-        }
-
-        if (customerOldHN) {
-            const q3 = await window.supabaseClient
-                .from('customer_usage_history_view')
-                .select('*')
-                .eq('hn', customerOldHN)
-                .order('used_date', { ascending: false })
-                .order('created_at', { ascending: false });
-
-            if (!q3.error) pushUnique(q3.data);
-        }
-
-        window.customerDetailCache[customerIdStr] = window.customerDetailCache[customerIdStr] || {};
-        window.customerDetailCache[customerIdStr].usage = usageRows;
-    }
-    if (customerBranch) {
-        const sameBranchRows = usageRows.filter(x =>
-            !normalizeText(x.branch_name) || normalizeText(x.branch_name) === customerBranch
-        );
-        if (sameBranchRows.length > 0) usageRows = sameBranchRows;
-    }
-
-    usageRows.sort((a, b) => {
-        const da = String(a.used_date || a.created_at || '');
-        const db = String(b.used_date || b.created_at || '');
-        return db.localeCompare(da);
-    });
-
-    // ---------- กลุ่มคอร์สให้เหลือชื่อเดียว ----------
-    const usageGroupMap = new Map();
-
-    usageRows.forEach(row => {
-        const key = [
-            normalizeText(row.customer_id),
-            normalizeText(row.bill_no),
-            normalizeText(row.old_course_code),
-            normalizeText(row.item_code),
-            normalizeText(row.item_name)
-        ].join('|');
-
-        if (!usageGroupMap.has(key)) {
-            usageGroupMap.set(key, {
-                key,
-                customer_id: row.customer_id || '',
-                hn: row.hn || '',
-                bill_no: row.bill_no || row.service_no || row.legacy_ref_no || '',
-                item_name: row.item_name || '-',
-                item_code: row.item_code || '',
-                old_course_code: row.old_course_code || '',
-                unit: row.unit || 'ครั้ง',
-                branch_name: row.branch_name || row.branch || '',
-                first_used_date: row.used_date || row.created_at || '',
-                last_used_date: row.used_date || row.created_at || '',
-                total_used_qty: Number(row.used_qty || 0) || 0,
-                rows: [row]
-            });
-        } else {
-            const old = usageGroupMap.get(key);
-            old.total_used_qty += Number(row.used_qty || 0) || 0;
-            old.rows.push(row);
-
-            const oldFirst = String(old.first_used_date || '');
-            const oldLast = String(old.last_used_date || '');
-            const newDate = String(row.used_date || row.created_at || '');
-
-            if (newDate && (!oldFirst || newDate < oldFirst)) old.first_used_date = newDate;
-            if (newDate && (!oldLast || newDate > oldLast)) old.last_used_date = newDate;
-        }
-    });
-
-    const groupedUsage = Array.from(usageGroupMap.values()).sort((a, b) => {
-        const da = String(b.last_used_date || '');
-        const db = String(a.last_used_date || '');
-        return da.localeCompare(db);
-    });
-
-    window.courseUsageRowState = window.courseUsageRowState || { expandedKey: null };
-
-    if (groupedUsage.length === 0) {
         container.innerHTML = `
             <div class="border-2 border-slate-100 bg-slate-50/50 rounded-[2.5rem] p-8 shadow-inner overflow-hidden mb-6 relative z-10">
                 <div class="p-16 text-center text-slate-300 italic font-bold rounded-3xl border-2 border-slate-100 bg-white">
-                    ยังไม่พบประวัติการใช้คอร์ส
+                    กำลังโหลดประวัติการใช้คอร์ส...
                 </div>
             </div>
         `;
-        return;
     }
 
-    const usageCardHtml = [];
+    // ✅ ดึงข้อมูลจริงแบบเบื้องหลัง แล้วค่อย render ทับ
+    window.loadCustomerUsageRows(customerIdStr, customerHN, customerOldHN)
+        .then(freshRows => {
+            window.customerDetailCache[customerIdStr] = window.customerDetailCache[customerIdStr] || {};
+            window.customerDetailCache[customerIdStr].usage = freshRows || [];
 
-    for (const group of groupedUsage) {
-        const encoded = window.safeBase64Encode(group);
-        const isExpanded = window.courseUsageRowState.expandedKey === group.key;
+            if (
+                String(document.querySelector('.cust-tab.active')?.dataset.tab || '') === 'usage' &&
+                String(window.activeCustomer?.id || '') === customerIdStr
+            ) {
+                window.renderUsageTabContent(
+                    container,
+                    [...(freshRows || [])],
+                    customerBranch,
+                    formatThaiDate
+                );
+            }
+        })
+        .catch(err => {
+            console.error('loadCustomerUsageRows error:', err);
 
-        let expandedHtml = '';
-        if (isExpanded) {
-            const detailRows = [...group.rows].sort((a, b) => {
-                const da = String(a.used_date || a.created_at || '');
-                const db = String(b.used_date || b.created_at || '');
-                return da.localeCompare(db);
-            });
-
-            expandedHtml = `
-                <div class="mt-4 rounded-[2rem] border border-slate-200 bg-slate-50 p-5">
-                    <div class="rounded-[2rem] border border-slate-200 bg-white p-5 mb-5">
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div class="rounded-2xl bg-slate-50 border border-slate-200 p-4">
-                                <div class="text-[11px] text-slate-400 font-black uppercase">ใช้ไปทั้งหมด</div>
-                                <div class="text-3xl font-black text-blue-600 mt-1">${Number(group.total_used_qty || 0)}</div>
-                                <div class="text-xs text-slate-400 font-bold">${window.escapeHtml(group.unit || 'ครั้ง')}</div>
-                            </div>
-
-                            <div class="rounded-2xl bg-slate-50 border border-slate-200 p-4">
-                                <div class="text-[11px] text-slate-400 font-black uppercase">จำนวนครั้งที่ใช้</div>
-                                <div class="text-3xl font-black text-emerald-600 mt-1">${detailRows.length}</div>
-                                <div class="text-xs text-slate-400 font-bold">รายการ</div>
-                            </div>
-
-                            <div class="rounded-2xl bg-slate-50 border border-slate-200 p-4">
-                                <div class="text-[11px] text-slate-400 font-black uppercase">ใช้ครั้งแรก</div>
-                                <div class="text-sm font-black text-slate-800 mt-2">
-                                    ${window.formatThaiDateTimeFull(group.first_used_date)}
-                                </div>
-                            </div>
-
-                            <div class="rounded-2xl bg-slate-50 border border-slate-200 p-4">
-                                <div class="text-[11px] text-slate-400 font-black uppercase">ใช้ครั้งล่าสุด</div>
-                                <div class="text-sm font-black text-slate-800 mt-2">
-                                    ${window.formatThaiDateTimeFull(group.last_used_date)}
-                                </div>
-                            </div>
+            if (cachedUsage.length === 0) {
+                container.innerHTML = `
+                    <div class="border-2 border-rose-100 bg-rose-50/50 rounded-[2.5rem] p-8 shadow-inner overflow-hidden mb-6 relative z-10">
+                        <div class="p-16 text-center text-rose-300 italic font-bold rounded-3xl border-2 border-rose-100 bg-white">
+                            โหลดประวัติการใช้คอร์สไม่สำเร็จ
                         </div>
                     </div>
-
-                    <div class="rounded-[2rem] border border-slate-200 bg-white p-5">
-                        <div class="text-lg font-black text-slate-900 mb-4">รายการใช้คอร์ส</div>
-
-                        ${detailRows.length > 0 ? detailRows.map((u, idx) => `
-                            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-3">
-                                <div class="flex items-start justify-between gap-4">
-                                    <div class="flex-1">
-                                        <div class="text-sm text-pink-500 font-black mb-2">
-                                            ครั้งที่ ${idx + 1}
-                                        </div>
-
-                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                                            <div>
-                                                <span class="text-slate-400 font-black">เลขที่ใบเสร็จ:</span>
-                                                <span class="font-bold text-slate-800">
-                                                    ${window.escapeHtml(u.bill_no || u.service_no || u.legacy_ref_no || '-')}
-                                                </span>
-                                            </div>
-
-                                            <div>
-                                                <span class="text-slate-400 font-black">ชื่อคอร์ส:</span>
-                                                <span class="font-bold text-slate-800">
-                                                    ${window.escapeHtml(u.item_name || group.item_name || '-')}
-                                                </span>
-                                            </div>
-
-                                            <div>
-                                                <span class="text-slate-400 font-black">วัน/เวลาที่ใช้:</span>
-                                                <span class="font-bold text-slate-800">
-                                                    ${window.formatThaiDateTimeFull(u.used_date || u.created_at)}
-                                                </span>
-                                            </div>
-
-                                            <div>
-                                                <span class="text-slate-400 font-black">สาขาที่ใช้บริการ:</span>
-                                                <span class="font-bold text-slate-800">
-                                                    ${window.escapeHtml(u.branch_name || u.branch || group.branch_name || '-')}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="text-right min-w-[70px]">
-                                        <div class="inline-flex px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[11px] font-black border border-emerald-100 mb-2">
-                                            USED
-                                        </div>
-                                        <div class="text-2xl font-black text-emerald-600">
-                                            ${Number(u.used_qty || 0)}
-                                        </div>
-                                        <div class="text-xs text-slate-400 font-black">
-                                            ${window.escapeHtml(u.unit || group.unit || 'ครั้ง')}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        `).join('') : `
-                            <div class="text-center text-slate-400 font-bold italic py-8">
-                                ยังไม่พบประวัติการใช้คอร์ส
-                            </div>
-                        `}
-                    </div>
-                </div>
-            `;
-        }
-
-        usageCardHtml.push(`
-            <div class="rounded-[2rem] border-2 ${isExpanded ? 'border-pink-200 bg-pink-50/30' : 'border-slate-100 bg-white'} shadow-sm hover:shadow-md transition-all overflow-hidden">
-                <div
-                    onclick="window.toggleUsageCourseRow('${encoded}')"
-                    class="grid grid-cols-12 gap-3 items-center px-6 py-5 cursor-pointer"
-                >
-                    <div class="col-span-12 md:col-span-5 text-left">
-                        <div class="text-[11px] text-[#D48197] font-black uppercase mb-1">
-                            ใช้ล่าสุด ${formatThaiDate(group.last_used_date)}
-                        </div>
-                        <div class="font-black text-slate-900 text-lg italic">
-                            ${window.escapeHtml(group.item_name || '-')}
-                        </div>
-                        <div class="text-[11px] text-slate-400 font-bold mt-1">
-                            เลขบิล ${window.escapeHtml(group.bill_no || '-')}
-                        </div>
-                    </div>
-
-                    <div class="col-span-6 md:col-span-2 text-center">
-                        <div class="text-3xl font-black text-blue-600 leading-none">
-                            ${Number(group.total_used_qty || 0)}
-                        </div>
-                        <div class="text-[11px] text-slate-400 font-bold">ใช้ไป</div>
-                    </div>
-
-                    <div class="col-span-6 md:col-span-2 text-center">
-                        <div class="text-lg font-black text-slate-700">
-                            ${window.escapeHtml(group.bill_no || '-')}
-                        </div>
-                        <div class="text-[11px] text-slate-400 font-bold">เลขบิล</div>
-                    </div>
-
-                    <div class="col-span-6 md:col-span-1 text-center">
-                        <div class="inline-flex px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[11px] font-black border border-emerald-100">
-                            USED
-                        </div>
-                    </div>
-
-                    <div class="col-span-6 md:col-span-2 text-right">
-                        <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full ${isExpanded ? 'bg-pink-100 text-pink-700' : 'bg-slate-100 text-slate-600'} text-xs font-black">
-                            ${isExpanded ? 'ซ่อนรายละเอียด' : 'ดูรายละเอียด'}
-                            <span>${isExpanded ? '▲' : '▼'}</span>
-                        </div>
-                    </div>
-                </div>
-
-                ${isExpanded ? `<div class="px-6 pb-6">${expandedHtml}</div>` : ''}
-            </div>
-        `);
-    }
-
-    container.innerHTML = `
-        <div class="space-y-4 relative z-10">
-            ${usageCardHtml.join('')}
-        </div>
-    `;
+                `;
+            }
+        });
 }
 
        else if (tabName === 'receipts') {

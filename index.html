@@ -12703,25 +12703,49 @@ window.openEditCourseRemainingModal = async function(customerId, encodedRow) {
         const row = window.__aceDecodeCourseRow(encodedRow);
         const customerIdStr = String(customerId || '').trim();
 
-        const totalQty = Number(row.total_qty || row.purchased_qty || 0);
+        const rowId = String(row.id || row.balance_id || '').trim();
+        const rowName = String(row.item_name || row.course_name || '-').trim();
+        const rowUnit = String(row.unit || 'ครั้ง').trim();
+
+        const totalQty = Number(row.total_qty || 0);
         const currentRemaining = Number(row.remaining_qty || 0);
+
+        if (!rowId) {
+            console.error('openEditCourseRemainingModal missing row id:', row);
+            return Swal.fire('ผิดพลาด', 'ไม่พบรหัสรายการคอร์ส', 'error');
+        }
 
         const result = await Swal.fire({
             title: 'แก้ไขจำนวนคอร์สคงเหลือ',
             html: `
                 <div class="text-center text-slate-700 font-bold mb-3">
-                    รายการ: ${window.escapeHtml(row.item_name || '-')}
+                    รายการ: ${window.escapeHtml(rowName)}
                 </div>
-                <input id="swal-remaining-input"
-                    type="number"
-                    min="0"
-                    max="${totalQty}"
-                    step="1"
-                    value="${currentRemaining}"
-                    class="swal2-input"
-                    placeholder="ใส่จำนวนคงเหลือใหม่">
-                <div class="text-xs text-slate-400 font-bold mt-2">
-                    จำนวนทั้งหมด ${totalQty} ${window.escapeHtml(row.unit || 'ครั้ง')}
+
+                <div class="text-left mb-2">
+                    <label class="text-xs text-slate-500 font-bold block mb-1">จำนวนทั้งหมด</label>
+                    <input id="swal-total-input"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value="${totalQty}"
+                        class="swal2-input"
+                        placeholder="ใส่จำนวนทั้งหมด">
+                </div>
+
+                <div class="text-left">
+                    <label class="text-xs text-slate-500 font-bold block mb-1">จำนวนคงเหลือ</label>
+                    <input id="swal-remaining-input"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value="${currentRemaining}"
+                        class="swal2-input"
+                        placeholder="ใส่จำนวนคงเหลือใหม่">
+                </div>
+
+                <div class="text-xs text-slate-400 font-bold mt-3">
+                    หน่วย ${window.escapeHtml(rowUnit)}
                 </div>
             `,
             focusConfirm: false,
@@ -12731,79 +12755,86 @@ window.openEditCourseRemainingModal = async function(customerId, encodedRow) {
             confirmButtonColor: '#2563eb',
             cancelButtonColor: '#6b7280',
             preConfirm: () => {
-                const input = document.getElementById('swal-remaining-input');
-                const newRemaining = Number(input?.value);
+                const totalInput = document.getElementById('swal-total-input');
+                const remainingInput = document.getElementById('swal-remaining-input');
+
+                const newTotal = Number(totalInput?.value);
+                const newRemaining = Number(remainingInput?.value);
+
+                if (Number.isNaN(newTotal) || newTotal < 0) {
+                    Swal.showValidationMessage('กรุณาใส่จำนวนทั้งหมดให้ถูกต้อง');
+                    return false;
+                }
 
                 if (Number.isNaN(newRemaining) || newRemaining < 0) {
                     Swal.showValidationMessage('กรุณาใส่จำนวนคงเหลือให้ถูกต้อง');
                     return false;
                 }
-                if (newRemaining > totalQty) {
-                    Swal.showValidationMessage(`จำนวนคงเหลือต้องไม่เกิน ${totalQty}`);
+
+                if (newRemaining > newTotal) {
+                    Swal.showValidationMessage('จำนวนคงเหลือต้องไม่มากกว่าจำนวนทั้งหมด');
                     return false;
                 }
-                return newRemaining;
+
+                return {
+                    total_qty: newTotal,
+                    remaining_qty: newRemaining
+                };
             }
         });
 
         if (!result.isConfirmed) return;
 
-        const newRemaining = Number(result.value);
-        const newUsedQty = Math.max(totalQty - newRemaining, 0);
-
-        const payload = {
-            customer_id: customerIdStr,
-            sale_item_id: row.sale_item_id || null,
-            bill_no: row.bill_no || null,
-            item_code: row.item_code || null,
-            item_name: row.item_name || null,
-            old_course_code: row.old_course_code || null,
-            total_qty: totalQty,
-            override_remaining_qty: newRemaining,
-            override_used_qty: newUsedQty,
-            unit: row.unit || 'ครั้ง',
-            updated_at: new Date().toISOString()
-        };
+        const newTotalQty = Number(result.value.total_qty || 0);
+        const newRemainingQty = Number(result.value.remaining_qty || 0);
+        const newUsedQty = Math.max(newTotalQty - newRemainingQty, 0);
 
         const { error } = await window.supabaseClient
-            .from('course_balance_overrides')
-            .upsert(payload, {
-                onConflict: 'customer_id,sale_item_id'
-            });
+            .from('customer_course_balance')
+            .update({
+                total_qty: newTotalQty,
+                remaining_qty: newRemainingQty
+            })
+            .eq('id', rowId);
 
         if (error) {
-            console.error('save override error:', error);
-            Swal.fire('บันทึกไม่สำเร็จ', error.message || 'ไม่สามารถบันทึกได้', 'error');
-            return;
+            console.error('update customer_course_balance error:', error);
+            return Swal.fire('บันทึกไม่สำเร็จ', error.message || 'ไม่สามารถบันทึกได้', 'error');
         }
 
-       await Swal.fire('บันทึกสำเร็จ', `คงเหลือใหม่ ${newRemaining} ${row.unit || 'ครั้ง'}`, 'success');
+        window.customerDetailCache = window.customerDetailCache || {};
+        window.customerDetailCache[customerIdStr] = window.customerDetailCache[customerIdStr] || {};
 
-try {
-    if (window.courseRowState) {
-        window.courseRowState.expandedKey = null;
-    }
+        const cachedRows = window.customerDetailCache[customerIdStr]?.remaining || [];
+        const targetRow = cachedRows.find(x => String(x.id || x.balance_id || '').trim() === rowId);
 
-    if (typeof window.clearCustomerDetailCache === 'function') {
-        window.clearCustomerDetailCache(customerIdStr);
-    }
+        if (targetRow) {
+            targetRow.total_qty = newTotalQty;
+            targetRow.remaining_qty = newRemainingQty;
+            targetRow.used_qty = newUsedQty;
+        }
 
-    if (typeof window.initCustomerDetailCache === 'function') {
-        await window.initCustomerDetailCache(customerIdStr, window.activeCustomer);
-    }
+        await Swal.fire({
+            icon: 'success',
+            title: 'บันทึกสำเร็จ',
+            text: `คงเหลือใหม่ ${newRemainingQty} ${rowUnit}`,
+            timer: 1000,
+            showConfirmButton: false
+        });
 
-    await window.switchCustomerTab('remaining', customerIdStr);
+        if (window.courseRowState) {
+            window.courseRowState.expandedKey = null;
+        }
 
-    if (typeof window.refreshActiveCustomerDetailRealtime === 'function') {
-        await window.refreshActiveCustomerDetailRealtime(customerIdStr);
-    }
-} catch (refreshErr) {
-    console.error('refresh after save error:', refreshErr);
-}
+        if (typeof window.clearCustomerDetailCache === 'function') {
+            window.clearCustomerDetailCache(customerIdStr);
+        }
+
+        await window.switchCustomerTab('remaining', customerIdStr);
 
     } catch (e) {
         console.error('openEditCourseRemainingModal error:', e);
-        Swal.fire('ผิดพลาด', 'แก้ไขจำนวนคอร์สไม่สำเร็จ', 'error');
+        Swal.fire('ผิดพลาด', e.message || 'แก้ไขจำนวนคอร์สไม่สำเร็จ', 'error');
     }
 };
 
@@ -13465,14 +13496,16 @@ window.switchCustomerTab = async function(tabName, customerId) {
             `;
         }
 
-  else if (tabName === 'remaining') {
+ else if (tabName === 'remaining') {
     let rows = [];
     const cached = window.getCustomerDetailCache(customerIdStr);
 
     const pushUnique = (arr) => {
         (arr || []).forEach(item => {
+            const rowId = String(item.id || item.balance_id || '').trim();
+
             const key = [
-                normalizeText(item.id),
+                rowId,
                 normalizeText(item.customer_id),
                 normalizeText(item.hn),
                 normalizeText(item.invoice_no),
@@ -13482,7 +13515,7 @@ window.switchCustomerTab = async function(tabName, customerId) {
 
             if (!rows.some(x =>
                 [
-                    normalizeText(x.id),
+                    String(x.id || x.balance_id || '').trim(),
                     normalizeText(x.customer_id),
                     normalizeText(x.hn),
                     normalizeText(x.invoice_no),
@@ -13495,6 +13528,8 @@ window.switchCustomerTab = async function(tabName, customerId) {
 
                 rows.push({
                     ...item,
+                    id: rowId,
+                    balance_id: rowId,
                     bill_no: item.invoice_no || '',
                     item_name: item.course_name || '',
                     item_code: item.course_code || '',
@@ -13552,7 +13587,8 @@ window.switchCustomerTab = async function(tabName, customerId) {
         if (sameBranchRows.length > 0) rows = sameBranchRows;
     }
 
-    rows = rows.filter(item => Number(item.total_qty || 0) > 0);
+    // แสดงเฉพาะคอร์สที่ยังเหลือ
+    rows = rows.filter(item => Number(item.remaining_qty || 0) > 0);
 
     rows.sort((a, b) => {
         const db = String(b.invoice_date || b.created_at || '');
@@ -13572,29 +13608,13 @@ window.switchCustomerTab = async function(tabName, customerId) {
     }
 
     const rowHtml = [];
-    for (const item of rows) {
-        const rowKey = [
-            String(item.customer_id || '').trim(),
-            String(item.invoice_no || '').trim(),
-            String(item.course_code || '').trim(),
-            String(item.course_name || '').trim(),
-            String(item.id || '').trim()
-        ].join('|');
 
-        const isExpanded = window.courseRowState?.expandedKey === rowKey;
+    for (const item of rows) {
         const encoded = window.safeBase64Encode(item);
 
-        let expandedHtml = '';
-        if (isExpanded && typeof window.renderRemainingCourseExpanded === 'function') {
-            expandedHtml = await window.renderRemainingCourseExpanded(item);
-        }
-
         rowHtml.push(`
-            <div class="rounded-[2rem] border-2 ${isExpanded ? 'border-pink-200 bg-pink-50/30' : 'border-slate-100 bg-white'} shadow-sm hover:shadow-md transition-all overflow-hidden">
-                <div
-                    onclick="window.toggleRemainingCourseRow('${encoded}')"
-                    class="grid grid-cols-12 gap-3 items-center px-6 py-5 cursor-pointer"
-                >
+            <div class="rounded-[2rem] border-2 border-slate-100 bg-white shadow-sm hover:shadow-md transition-all overflow-hidden">
+                <div class="grid grid-cols-12 gap-3 items-center px-6 py-5">
                     <div class="col-span-12 md:col-span-4 text-left">
                         <div class="font-black text-slate-900 text-lg italic">${window.escapeHtml(item.course_name || '-')}</div>
                         <div class="text-[11px] text-slate-400 font-bold mt-1">
@@ -13627,14 +13647,16 @@ window.switchCustomerTab = async function(tabName, customerId) {
                     </div>
 
                     <div class="col-span-3 md:col-span-2 text-right">
-                        <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full ${isExpanded ? 'bg-pink-100 text-pink-700' : 'bg-slate-100 text-slate-600'} text-xs font-black">
-                            ${isExpanded ? 'ซ่อนรายละเอียด' : 'ดูรายละเอียด'}
-                            <span>${isExpanded ? '▲' : '▼'}</span>
-                        </div>
+                        <button
+                            type="button"
+                            onclick="event.stopPropagation(); window.openEditCourseRemainingModal('${customerIdStr}', '${encoded}')"
+                            class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 text-slate-700 text-xs font-black hover:bg-pink-100 hover:text-pink-700 transition-all"
+                        >
+                            แก้ไขคอร์ส
+                            <span>✏️</span>
+                        </button>
                     </div>
                 </div>
-
-                ${isExpanded ? `<div class="px-6 pb-6">${expandedHtml}</div>` : ''}
             </div>
         `);
     }

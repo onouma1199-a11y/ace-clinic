@@ -480,12 +480,12 @@ tbody tr:hover{background:#FAFAFF!important;}
 
           <div class="relative z-[9999] flex gap-2 pointer-events-auto">
     <button
-        type="button"
-        onclick="window.readIDCard()" 
-        class="bg-[#D48197] text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:brightness-110 transition-all uppercase shadow-md"
-    >
-        อ่านข้อมูลบัตร
-    </button>
+    type="button"
+    onclick="window.readIDCard()" 
+    class="bg-[#D48197] text-white px-6 py-2.5 rounded-xl text-xs font-bold hover:brightness-110 transition-all uppercase shadow-md"
+>
+    อ่านข้อมูลบัตร
+</button>
 
 
                 <button
@@ -1171,63 +1171,274 @@ window.getCustomers = function() {
 
 /* -------------------- อ่านบัตรประชาชน -------------------- */
 window.readIDCard = async function() {
-    // 1. แสดง Loading แจ้งเตือนพนักงาน
     Swal.fire({
         title: 'กำลังรอข้อมูลจากบัตร...',
         text: 'กรุณาเสียบบัตรประชาชนที่เครื่องอ่าน ZOWEETEK',
         allowOutsideClick: false,
+        allowEscapeKey: false,
         didOpen: () => { Swal.showLoading(); }
     });
 
+    const endpointList = [
+        'http://localhost:8008/read',
+        'http://127.0.0.1:8008/read',
+        'http://localhost:8008/read-card',
+        'http://127.0.0.1:8008/read-card',
+        'http://localhost:8008/',
+        'http://127.0.0.1:8008/'
+    ];
+
     try {
-        // 2. เรียกไปยังโปรแกรม Agent (ในที่นี้ใช้พอร์ตมาตรฐานของโปรแกรมอ่านบัตรไทยส่วนใหญ่คือ 8181)
-        // หมายเหตุ: ต้องเปิดโปรแกรม Agent ในเครื่อง Windows ไว้ด้วยนะครับ
-        const response = await fetch('http://localhost:8181/read'); 
-        const data = await response.json();
+        let raw = null;
+        let lastError = null;
 
-        if (data.status === 'success' || data.idCardNo) {
-            // 3. หยอดข้อมูลลงในช่อง Input ต่างๆ ใน Modal
-            // ** สำคัญ: เช็ค ID ของช่อง Input ใน HTML ของคุณให้ตรงกับที่ระบุด้านล่างนี้ **
-            
-            setInputValue('customer_hn', data.idCardNo);        // เลขบัตรประชาชน
-            setInputValue('customer_firstname', data.firstNameTH); // ชื่อจริง
-            setInputValue('customer_lastname', data.lastNameTH);  // นามสกุล
-            setInputValue('customer_nickname', data.nicknameTH);   // ชื่อเล่น (ถ้ามี)
-            setInputValue('customer_birthdate', data.birthDateISO); // วันเกิด (รูปแบบ YYYY-MM-DD)
-            setInputValue('customer_address', data.address);       // ที่อยู่เต็ม
+        for (const url of endpointList) {
+            try {
+                console.log('ลองเชื่อมต่อ card helper:', url);
 
-            Swal.fire({
-                icon: 'success',
-                title: 'อ่านข้อมูลสำเร็จ',
-                text: `ยินดีต้อนรับคุณ ${data.firstNameTH}`,
-                timer: 2000,
-                showConfirmButton: false
-            });
-        } else {
-            Swal.fire('แจ้งเตือน', 'ไม่พบข้อมูลบัตร กรุณาเสียบบัตรใหม่อีกครั้ง', 'warning');
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 5000);
+
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeout);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} @ ${url}`);
+                }
+
+                const text = await response.text();
+                if (!text) {
+                    throw new Error(`Empty response @ ${url}`);
+                }
+
+                try {
+                    raw = JSON.parse(text);
+                } catch (jsonErr) {
+                    throw new Error(`Response ไม่ใช่ JSON @ ${url}`);
+                }
+
+                console.log('CARD RAW RESPONSE =', raw);
+
+                if (raw) break;
+            } catch (err) {
+                console.warn('เชื่อมต่อไม่ได้:', url, err);
+                lastError = err;
+            }
         }
+
+        if (!raw) {
+            throw lastError || new Error('ไม่สามารถเชื่อมต่อโปรแกรมอ่านบัตรได้');
+        }
+
+        const card = window.normalizeThaiCardResponse(raw);
+
+        if (!card.success) {
+            Swal.fire(
+                'แจ้งเตือน',
+                card.message || 'ไม่พบข้อมูลบัตร กรุณาเสียบบัตรใหม่อีกครั้ง',
+                'warning'
+            );
+            return;
+        }
+
+        const firstName = String(card.first_name_th || '').trim();
+        const lastName = String(card.last_name_th || '').trim();
+        const fullName = `${firstName} ${lastName}`.trim();
+
+        // ✅ หยอดค่าลง input ตาม customers table
+        // citizen_id
+        setInputValueMulti([
+            'customerCitizenId',
+            'citizen_id',
+            'customer_citizen_id'
+        ], card.citizen_id);
+
+        // first_name
+        setInputValueMulti([
+            'customerFirstName',
+            'first_name',
+            'customer_firstname',
+            'customer_first_name'
+        ], firstName);
+
+        // last_name
+        setInputValueMulti([
+            'customerLastName',
+            'last_name',
+            'customer_lastname',
+            'customer_last_name'
+        ], lastName);
+
+        // fullname
+        setInputValueMulti([
+            'customerFullName',
+            'fullname',
+            'customer_fullname',
+            'full_name'
+        ], fullName);
+
+        // birth_date
+        setInputValueMulti([
+            'customerBirthDate',
+            'birth_date',
+            'customer_birthdate',
+            'customer_birth_date'
+        ], card.birth_date);
+
+        // address
+        setInputValueMulti([
+            'customerAddress',
+            'address',
+            'customer_address'
+        ], card.address);
+
+        Swal.fire({
+            icon: 'success',
+            title: 'อ่านข้อมูลสำเร็จ',
+            text: `ยินดีต้อนรับคุณ ${firstName || ''}`,
+            timer: 1800,
+            showConfirmButton: false
+        });
+
     } catch (error) {
         console.error('ID Card Error:', error);
-        // แสดง error กรณีไม่ได้เปิดโปรแกรม Agent
+
         Swal.fire({
             icon: 'error',
             title: 'การเชื่อมต่อผิดพลาด',
-            text: 'กรุณาตรวจสอบว่าได้เปิดโปรแกรม "Thai ID Card Agent" ใน Windows แล้วหรือยัง?',
+            html: `
+                <div style="text-align:left; line-height:1.8">
+                    <div>กรุณาตรวจสอบว่า</div>
+                    <div>1. เปิดโปรแกรมอ่านบัตรใน Windows แล้ว</div>
+                    <div>2. โปรแกรมขึ้นว่า <b>Server card reader started: http://localhost:8008</b></div>
+                    <div>3. เสียบเครื่องอ่าน ZOWEETEK แล้ว</div>
+                    <div>4. เสียบบัตรประชาชนแล้ว</div>
+                </div>
+            `,
             confirmButtonText: 'รับทราบ'
         });
     }
 };
 
-// ฟังก์ชันเสริมสำหรับหยอดค่าลง Input ป้องกัน Error กรณีหา ID ไม่เจอ
-function setInputValue(id, value) {
-    const el = document.getElementById(id);
-    if (el && value) {
-        el.value = value;
-        // ปรับให้ Tailwind/CSS รู้ว่ามีการเปลี่ยนแปลงค่า (ถ้ามี label ลอย)
-        el.dispatchEvent(new Event('input', { bubbles: true }));
+/* -------------------- แปลง response ให้เป็นรูปแบบกลาง -------------------- */
+window.normalizeThaiCardResponse = function(raw) {
+    if (!raw || typeof raw !== 'object') {
+        return { success: false, message: 'response ไม่ถูกต้อง' };
     }
+
+    // รองรับ helper แบบเดิม
+    const citizenId =
+        raw.idCardNo ||
+        raw.citizen_id ||
+        raw.citizenId ||
+        raw.pid ||
+        '';
+
+    const firstName =
+        raw.firstNameTH ||
+        raw.first_name_th ||
+        raw.firstName ||
+        raw.firstname ||
+        raw.th_first_name ||
+        '';
+
+    const lastName =
+        raw.lastNameTH ||
+        raw.last_name_th ||
+        raw.lastName ||
+        raw.lastname ||
+        raw.th_last_name ||
+        '';
+
+    const birthDate =
+        raw.birthDateISO ||
+        raw.birth_date ||
+        raw.birthDate ||
+        raw.birthday ||
+        '';
+
+    const address =
+        raw.address ||
+        raw.fullAddress ||
+        raw.addr ||
+        '';
+
+    const success =
+        raw.status === 'success' ||
+        raw.success === true ||
+        !!citizenId;
+
+    return {
+        success,
+        citizen_id: citizenId,
+        first_name_th: firstName,
+        last_name_th: lastName,
+        birth_date: normalizeDateToISO(birthDate),
+        address: address,
+        message: raw.message || ''
+    };
+};
+
+/* -------------------- แปลงวันที่เป็น YYYY-MM-DD -------------------- */
+function normalizeDateToISO(value) {
+    if (!value) return '';
+
+    const str = String(value).trim();
+
+    // กรณีเป็น YYYY-MM-DD อยู่แล้ว
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+        return str;
+    }
+
+    // กรณีเป็น YYYYMMDD
+    if (/^\d{8}$/.test(str)) {
+        return `${str.substring(0,4)}-${str.substring(4,6)}-${str.substring(6,8)}`;
+    }
+
+    // กรณีเป็น DD/MM/YYYY หรือ DD-MM-YYYY
+    const m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (m) {
+        const dd = m[1].padStart(2, '0');
+        const mm = m[2].padStart(2, '0');
+        let yyyy = parseInt(m[3], 10);
+
+        // ถ้าเป็น พ.ศ.
+        if (yyyy > 2400) yyyy -= 543;
+
+        return `${yyyy}-${mm}-${dd}`;
+    }
+
+    return str;
 }
 
+/* -------------------- หยอดค่าลง Input ตัวเดียว -------------------- */
+function setInputValue(id, value) {
+    const el = document.getElementById(id);
+    if (!el || value === undefined || value === null || value === '') return false;
+
+    el.value = value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+}
+
+/* -------------------- หยอดค่าลง Input หลายชื่อ เผื่อ id หน้า form ไม่ตรงกัน -------------------- */
+function setInputValueMulti(idList, value) {
+    if (!Array.isArray(idList)) return false;
+
+    for (const id of idList) {
+        const ok = setInputValue(id, value);
+        if (ok) return true;
+    }
+
+    console.warn('ไม่พบ input จากรายการ id =', idList, 'value =', value);
+    return false;
+}
 /* =======================================================
    🚀 ZONE 2: CORE SYSTEM (ระบบล็อกอิน & สลับหน้าเมนู)
    ======================================================= */

@@ -1326,7 +1326,7 @@ window.setInputValue = function(id, value) {
    ======================================================= */
 window.getCurrentUserSafe = function() {
     try {
-        return window.currentUser || JSON.parse(localStorage.getItem('currentUser') || '{}') || {};
+        return window.currentUser || {};
     } catch (e) {
         console.error('getCurrentUserSafe error:', e);
         return {};
@@ -6132,37 +6132,6 @@ window.getQueueDBByBranch = async function() {
     }
 };
 
-
-/* =====================
-    Permission Helper
-===================== */
-window.loadPermissionsFromSupabase = async function() {
-    if (!window.supabaseClient) return {};
-
-    const { data, error } = await window.supabaseClient
-        .from('role_menu_permissions')
-        .select('role, menu_id, allowed');
-
-    if (error) {
-        console.error('loadPermissionsFromSupabase error:', error);
-        return {};
-    }
-
-    const map = {};
-
-    (data || []).forEach(row => {
-        const role = row.role || '';
-        const menuId = String(row.menu_id || '');
-        const allowed = !!row.allowed;
-
-        if (!map[role]) map[role] = [];
-        if (allowed) map[role].push(menuId);
-    });
-
-    localStorage.setItem('ace_permissions', JSON.stringify(map));
-    return map;
-};
-
 window.getActionPermissions = function() {
     const user = window.getCurrentUserSafe();
     const role = user.role || '';
@@ -6212,6 +6181,20 @@ window.hasActionPermission = function(key) {
     const perms = window.getActionPermissions();
     return !!perms[key];
 };
+window.getPermissionValue = function(role = '', menuId = '') {
+    const safeRole = String(role || '').trim();
+    const safeMenuId = String(menuId || '').trim();
+
+    const roleMap = window.permissionMap?.[safeRole] || {};
+    return roleMap[safeMenuId] || { allowed: false, can_edit: false };
+};
+
+window.getRolePermissions = function(role = '') {
+    const safeRole = String(role || '').trim();
+    const roleMap = window.permissionMap?.[safeRole] || {};
+
+    return Object.keys(roleMap).filter(menuId => roleMap[menuId]?.allowed === true);
+};
 
 window.hasMenuPermission = function(menuId) {
     const user = window.getCurrentUserSafe();
@@ -6219,8 +6202,16 @@ window.hasMenuPermission = function(menuId) {
 
     if (role === 'แอดมินหลัก') return true;
 
-    const rolePerms = window.getRolePermissions(role);
-    return rolePerms.includes(String(menuId));
+    return window.getPermissionValue(role, String(menuId)).allowed === true;
+};
+
+window.canEditMenu = function(menuId) {
+    const user = window.getCurrentUserSafe();
+    const role = String(user.role || '').trim();
+
+    if (role === 'แอดมินหลัก') return true;
+
+    return window.getPermissionValue(role, String(menuId)).can_edit === true;
 };
 
 window.requirePermission = function(menuId, actionName = 'ทำรายการนี้') {
@@ -11564,7 +11555,7 @@ window.confirmFinalPayment = async function() {
         window.lastCalculatedNet = netTotal;
 
         const billId = crypto.randomUUID();
-        const billNo = `INV-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Date.now()).slice(-6)}`;
+        const billNo = `INV${Date.now().toString().slice(-6)}`;
 
         const itemsSnapshot = preparedItems.map(item => {
             const discountShare = subTotal > 0
@@ -19936,13 +19927,13 @@ window.getPermissionChecked = function(role, menuId) {
     return !!(perm && perm.allowed);
 };
 
-window.permissionMap = {};
+window.permissionMap = window.permissionMap || {};
 
 // โหลดสิทธิ์จาก Supabase
 window.loadPermissionsFromSupabase = async function() {
     if (!window.supabaseClient) {
         window.permissionMap = {};
-        return;
+        return {};
     }
 
     try {
@@ -19953,7 +19944,7 @@ window.loadPermissionsFromSupabase = async function() {
         if (error) {
             console.error('loadPermissionsFromSupabase error:', error);
             window.permissionMap = {};
-            return;
+            return {};
         }
 
         const map = {};
@@ -19973,10 +19964,12 @@ window.loadPermissionsFromSupabase = async function() {
         });
 
         window.permissionMap = map;
+        return map;
 
     } catch (e) {
         console.error('loadPermissionsFromSupabase exception:', e);
         window.permissionMap = {};
+        return {};
     }
 };
 
@@ -19997,24 +19990,6 @@ window.normalizeRoleName = function(role = '') {
     if (r === 'หมอ (Doctor)') return 'หมอ';
 
     return r;
-};
-
-// อ่านค่าสิทธิ์ 1 เมนู
-window.getPermissionValue = function(role, menuId) {
-    const safeRole = typeof window.normalizeRoleName === 'function'
-        ? window.normalizeRoleName(role)
-        : String(role || '').trim();
-
-    const safeMenuId = String(menuId || '').trim();
-
-    if (!window.permissionMap) {
-        return { allowed: false, can_edit: false };
-    }
-
-    return window.permissionMap[safeRole]?.[safeMenuId] || {
-        allowed: false,
-        can_edit: false
-    };
 };
 
 // เช็คสิทธิ์เข้าใช้
@@ -20168,20 +20143,6 @@ window.refreshPermissionMatrixUI = function() {
             cb.checked = true;
         }
     });
-};
-
-window.canEditMenu = function(menuId) {
-    const currentUser = typeof window.getCurrentUserSafe === 'function'
-        ? window.getCurrentUserSafe()
-        : (window.currentUser || {});
-
-    const role = String(currentUser.role || '').trim();
-
-    // แอดมินหลักแก้ได้ทุกเมนู
-    if (role === 'แอดมินหลัก') return true;
-
-    const perm = window.getPermissionValue(role, String(menuId));
-    return !!perm.can_edit;
 };
 
 window.guardEditAction = function(menuId, actionFn) {

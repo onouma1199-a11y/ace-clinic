@@ -2105,6 +2105,15 @@ window.processPasswordChange = async function(oldPass, newPass) {
 /* =======================================================
    ZONE 2.1: Dashboard FAST MODE
    ======================================================= */
+window.normalizeDashboardPeriod = function(period) {
+    const p = String(period || '').trim().toLowerCase();
+
+    if (p === 'day' || p === 'daily' || p === 'today' || p === 'รายวัน') return 'day';
+    if (p === 'month' || p === 'monthly' || p === 'รายเดือน') return 'month';
+    if (p === 'year' || p === 'yearly' || p === 'รายปี') return 'year';
+
+    return 'day';
+};
 
 window.normalizeDashboardBranch = function(branch) {
     const original = String(branch || '').trim();
@@ -2155,22 +2164,65 @@ window.__dashboardCache = window.__dashboardCache || {};
 window.__dashboardRenderToken = window.__dashboardRenderToken || 0;
 
 window.__getDashboardDateRange = function(period = 'day') {
+    const safePeriod = window.normalizeDashboardPeriod(period);
+
     const now = new Date();
     const today = now.toISOString().split('T')[0];
+
     const currentMonth = today.slice(0, 7);
     const currentYear = today.slice(0, 4);
 
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+        .toISOString()
+        .split('T')[0];
+
     return {
+        period: safePeriod,
         today,
         currentMonth,
-        currentYear
+        currentYear,
+        monthStart: `${currentMonth}-01`,
+        monthEnd,
+        yearStart: `${currentYear}-01-01`,
+        yearEnd: `${currentYear}-12-31`
     };
 };
 
 window.__branchEq = function(query, columnName, branch) {
     const safeBranch = window.normalizeDashboardBranch(branch);
+
     if (!safeBranch || safeBranch === 'ทุกสาขา') return query;
-    return query.eq(columnName, safeBranch);
+
+    const branchVariants = [
+        safeBranch,
+        `สาขา${safeBranch}`,
+        `ACE Clinic ${safeBranch}`,
+        `เอซคลินิก ${safeBranch}`
+    ];
+
+    return query.in(columnName, branchVariants);
+};
+
+window.normalizePaymentMethod = function(payment = '') {
+    const text = String(payment || '').trim();
+
+    if (!text) return '-';
+
+    if (text.includes('เงินสด')) return 'เงินสด';
+
+    // ✅ ต้องเช็คโอนบริษัทก่อนคำว่าโอน
+    if (text.includes('โอนบริษัท') || text.includes('บริษัท')) return 'โอนบริษัท';
+
+    if (text.includes('QR')) return 'โอน (QR)';
+
+    if (text.includes('บัตร') || text.includes('รูด')) return 'รูดบัตรเครดิต';
+
+    if (text.toLowerCase().includes('shopee')) return 'Shopee';
+    if (text.toLowerCase().includes('gowabi')) return 'Gowabi';
+
+    if (text.includes('ธนาคาร') || text.includes('โอน')) return 'โอน (QR)';
+
+    return text;
 };
 
 window.__sumSalesRows = function(rows = []) {
@@ -2200,7 +2252,13 @@ window.__buildDashboardHtml = function(state = {}, loadingCustomers = false) {
         customerMap = {}
     } = state;
 
-    const titleLabel = period === 'day' ? "วันนี้" : (period === 'month' ? "เดือนนี้" : "ปีนี้");
+    const titleLabel = period === 'day'
+    ? "วันนี้"
+    : (period === 'month' ? "เดือนนี้" : "ปีนี้");
+
+const listLabel = period === 'day'
+    ? "วันนี้"
+    : (period === 'month' ? "เดือนนี้" : "ปีนี้");
 
     return `
        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 font-black italic uppercase animate-in slide-in-from-bottom duration-300">
@@ -2232,7 +2290,7 @@ window.__buildDashboardHtml = function(state = {}, loadingCustomers = false) {
         </div>
 
         <div class="glass-card shadow-lg mb-8 border-t-4 border-blue-400">
-            <h3 class="text-lg font-black ace-pink mb-6 uppercase italic">รายการคิวนัดหมายวันนี้ (${appsToday.length} นัด)</h3>
+            <h3 class="text-lg font-black ace-pink mb-6 uppercase italic">รายการคิวนัดหมาย${listLabel} (${appsToday.length} นัด)</h3>
             <div class="overflow-x-auto">
                 <table class="w-full text-left text-[11px] font-black italic uppercase">
                     <thead class="bg-slate-50 text-gray-500 border-b">
@@ -2276,7 +2334,7 @@ window.__buildDashboardHtml = function(state = {}, loadingCustomers = false) {
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8 font-bold uppercase">
             <div class="glass-card shadow-lg border-t-4 border-[#C5A059] bg-white p-8">
-                <h3 class="text-lg font-bold ace-pink mb-6 border-b-2 border-dashed pb-2 text-center">รายรับวันนี้ (REAL-TIME)</h3>
+                <h3 class="text-lg font-bold ace-pink mb-6 border-b-2 border-dashed pb-2 text-center">รายรับ${listLabel}</h3>
                 <div class="space-y-3 text-sm font-bold text-slate-600">
                     ${['เงินสด', 'โอน (QR)', 'โอนบริษัท', 'รูดบัตรเครดิต', 'Shopee', 'Gowabi'].map(method => {
                         const amt = incomesToday
@@ -2293,7 +2351,7 @@ window.__buildDashboardHtml = function(state = {}, loadingCustomers = false) {
             </div>
 
             <div class="glass-card shadow-lg border-t-4 border-red-400 bg-slate-50/30 p-8">
-                <h3 class="text-lg font-bold text-red-500 mb-6 border-b-2 border-dashed pb-2 text-center">รายการหักรายจ่าย (วันนี้)</h3>
+                <h3 class="text-lg font-bold text-red-500 mb-6 border-b-2 border-dashed pb-2 text-center">รายการหักรายจ่าย (${listLabel})</h3>
                 <div class="space-y-4 mb-10 min-h-[120px]">
                     ${expensesToday.length > 0 ? expensesToday.map(ex => `
                         <div class="p-4 bg-white rounded-2xl border-2 border-dashed border-red-100 flex justify-between items-center shadow-sm">
@@ -2332,61 +2390,96 @@ window.loadDashboardSummaryData = async function(period = 'day', selectedBranch 
             incomesToday: [],
             expensesToday: [],
             appsToday: [],
+            statsApps: [],
+            netProfit: 0,
             customerMap: {}
         };
     }
 
-    const safeBranch = window.normalizeDashboardBranch(selectedBranch);
-    const isShowAll = safeBranch === 'ทุกสาขา';
-    const { today, currentMonth, currentYear } = window.__getDashboardDateRange(period);
+    period = window.normalizeDashboardPeriod(period);
 
-    const inPeriod = (dateStr) => {
-        const val = String(dateStr || '');
-        if (period === 'day') return val === today;
-        if (period === 'month') return val.startsWith(currentMonth);
-        if (period === 'year') return val.startsWith(currentYear);
-        return true;
-    };
+const safeBranch = window.normalizeDashboardBranch(selectedBranch);
 
+const {
+    today,
+    monthStart,
+    monthEnd,
+    yearStart,
+    yearEnd
+} = window.__getDashboardDateRange(period);
+
+const getPeriodRange = () => {
+    if (period === 'day') {
+        return { start: today, end: today };
+    }
+
+    if (period === 'month') {
+        return { start: monthStart, end: monthEnd };
+    }
+
+    if (period === 'year') {
+        return { start: yearStart, end: yearEnd };
+    }
+
+    return { start: today, end: today };
+};
+    const range = getPeriodRange();
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
 
-    // รายรับ
+    // ✅ รายรับตามช่วงที่เลือก
     let salesQuery = window.supabaseClient
         .from('sales_header')
-        .select('id, net_total, total, payment, bill_date, customer_id, customer_name, hn, branch_name, status')
-        .eq('status', 'เสร็จสิ้น');
+        .select('id, net_total, total, payment, bill_date, customer_id, customer_name, hn, branch_name, status, type')
+        .eq('status', 'เสร็จสิ้น')
+        .gte('bill_date', range.start)
+        .lte('bill_date', range.end);
 
     salesQuery = window.__branchEq(salesQuery, 'branch_name', safeBranch);
 
-    // รายจ่ายวันนี้/ช่วงเวลา
+    // ✅ รายรับเมื่อวาน
+    let yesterdaySalesQuery = window.supabaseClient
+        .from('sales_header')
+        .select('id, net_total, total, bill_date, branch_name, status, type')
+        .eq('status', 'เสร็จสิ้น')
+        .eq('bill_date', yesterday);
+
+    yesterdaySalesQuery = window.__branchEq(yesterdaySalesQuery, 'branch_name', safeBranch);
+
+    // ✅ รายจ่ายตามช่วงที่เลือก
     let expensesQuery = window.supabaseClient
         .from('expenses')
-        .select('id, amount, detail, account, expense_date, branch_name, category');
+        .select('id, amount, detail, account, expense_date, branch_name, category')
+        .gte('expense_date', range.start)
+        .lte('expense_date', range.end);
 
     expensesQuery = window.__branchEq(expensesQuery, 'branch_name', safeBranch);
 
-    // ลูกค้าสะสม
+    // ✅ ลูกค้าสะสม นับจริง ไม่ติด 1000
     let customerCountQuery = window.supabaseClient
         .from('customers')
-        .select('*', { count: 'exact', head: true });
+        .select('id', { count: 'exact', head: true });
 
     customerCountQuery = window.__branchEq(customerCountQuery, 'branch', safeBranch);
 
-    // ลูกค้าใหม่
-    let newCustomerQuery = window.supabaseClient
+    // ✅ ลูกค้าใหม่ตามช่วง นับจริง ไม่ดึง 1000 แถว
+    let newCustomerCountQuery = window.supabaseClient
         .from('customers')
-        .select('id, created_at, branch');
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', `${range.start}T00:00:00`)
+        .lte('created_at', `${range.end}T23:59:59`);
 
-    newCustomerQuery = window.__branchEq(newCustomerQuery, 'branch', safeBranch);
+    newCustomerCountQuery = window.__branchEq(newCustomerCountQuery, 'branch', safeBranch);
 
-    // นัดวันนี้
+    // ✅ นัดตามช่วง
     let appointmentsQuery = window.supabaseClient
-        .from('appointments')
-        .select('id, customer_id, date, time, phone, customerName, nickname, courseName, course, courseList, status, branch, hn');
+    .from('appointments')
+    .select('*');
 
-    appointmentsQuery = window.__branchEq(appointmentsQuery, 'branch', safeBranch);
+	let appsTodayQuery = window.supabaseClient
+    .from('appointments')
+    .select('*');
 
-    // customer map สำหรับโชว์ตารางนัดวันนี้
+    // ✅ ข้อมูลลูกค้าไว้ map ตารางนัด
     let customerMapQuery = window.supabaseClient
         .from('customers')
         .select('id, hn, phone, fullname, nickname, branch');
@@ -2395,39 +2488,45 @@ window.loadDashboardSummaryData = async function(period = 'day', selectedBranch 
 
     const [
         { data: salesRows, error: salesError },
+        { data: yesterdaySalesRows, error: yesterdaySalesError },
         { data: expenseRows, error: expenseError },
         { count: totalCustomersAllTime, error: customerCountError },
-        { data: newCustomerRows, error: newCustomerError },
+        { count: newCustomersCount, error: newCustomerCountError },
         { data: appointmentRows, error: appointmentError },
+        { data: appsTodayRows, error: appsTodayError },
         { data: customerMapRows, error: customerMapError }
     ] = await Promise.all([
         salesQuery,
+        yesterdaySalesQuery,
         expensesQuery,
         customerCountQuery,
-        newCustomerQuery,
+        newCustomerCountQuery,
         appointmentsQuery,
+        appsTodayQuery,
         customerMapQuery
     ]);
 
-    if (salesError) console.error('loadDashboardSummaryData salesError:', salesError);
-    if (expenseError) console.error('loadDashboardSummaryData expenseError:', expenseError);
-    if (customerCountError) console.error('loadDashboardSummaryData customerCountError:', customerCountError);
-    if (newCustomerError) console.error('loadDashboardSummaryData newCustomerError:', newCustomerError);
-    if (appointmentError) console.error('loadDashboardSummaryData appointmentError:', appointmentError);
-    if (customerMapError) console.error('loadDashboardSummaryData customerMapError:', customerMapError);
+    if (salesError) console.error('Dashboard salesError:', salesError);
+    if (yesterdaySalesError) console.error('Dashboard yesterdaySalesError:', yesterdaySalesError);
+    if (expenseError) console.error('Dashboard expenseError:', expenseError);
+    if (customerCountError) console.error('Dashboard customerCountError:', customerCountError);
+    if (newCustomerCountError) console.error('Dashboard newCustomerCountError:', newCustomerCountError);
+    if (appointmentError) console.error('Dashboard appointmentError:', appointmentError);
+    if (appsTodayError) console.error('Dashboard appsTodayError:', appsTodayError);
+    if (customerMapError) console.error('Dashboard customerMapError:', customerMapError);
 
     const incomes = (salesRows || []).map(row => ({
         id: row.id,
-        type: 'รายรับ',
+        type: String(row.type || '').trim(),
         status: row.status || 'เสร็จสิ้น',
         date: row.bill_date || '',
         total: Number(row.net_total ?? row.total ?? 0) || 0,
-        payment: row.payment || '-',
+        payment: window.normalizePaymentMethod(row.payment || '-'),
         branch: window.normalizeDashboardBranch(row.branch_name || ''),
         customer_id: row.customer_id || '',
         customerName: row.customer_name || '',
         hn: row.hn || ''
-    }));
+    })).filter(row => !row.type || row.type === 'รายรับ');
 
     const expenses = (expenseRows || []).map(row => ({
         id: row.id,
@@ -2440,56 +2539,103 @@ window.loadDashboardSummaryData = async function(period = 'day', selectedBranch 
         branch: window.normalizeDashboardBranch(row.branch_name || '')
     }));
 
-    const newCustomers = (newCustomerRows || []).filter(row => {
-        const created = String(row.created_at || '');
-        if (period === 'day') return created.startsWith(today);
-        if (period === 'month') return created.startsWith(currentMonth);
-        if (period === 'year') return created.startsWith(currentYear);
-        return true;
-    });
+const getAppDate = (row) => String(
+    row.date ||
+    row.appointment_date ||
+    row.app_date ||
+    row.booking_date ||
+    ''
+).split('T')[0];
 
-    const statsApps = (appointmentRows || []).filter(row => {
-        const val = String(row.date || '');
-        if (period === 'day') return val === today;
-        if (period === 'month') return val.startsWith(currentMonth);
-        if (period === 'year') return val.startsWith(currentYear);
-        return true;
-    });
+const getAppBranch = (row) => window.normalizeDashboardBranch(
+    row.branch ||
+    row.branch_name ||
+    row.clinic_branch ||
+    ''
+);
 
-    const appsToday = (appointmentRows || []).filter(row => String(row.date || '') === today);
+const matchDashboardBranch = (rowBranch) => {
+    if (!safeBranch || safeBranch === 'ทุกสาขา') return true;
+    return window.normalizeDashboardBranch(rowBranch) === safeBranch;
+};
 
-    const incomesToday = incomes.filter(i => i.date === today);
-    const expensesToday = expenses.filter(e => e.date === today);
+const rawAppointmentRows = Array.isArray(appointmentRows) ? appointmentRows : [];
 
-    const statsIncomes = incomes.filter(i => inPeriod(i.date));
-    const statsExpenses = expenses.filter(e => inPeriod(e.date));
+const filteredAppointmentRows = rawAppointmentRows.filter(row => {
+    const appDate = getAppDate(row);
+    const appBranch = getAppBranch(row);
 
-    const salesYesterday = incomes
-        .filter(i => i.date === yesterday)
-        .reduce((sum, item) => sum + (Number(item.total || 0) || 0), 0);
+    return (
+        appDate >= range.start &&
+        appDate <= range.end &&
+        matchDashboardBranch(appBranch)
+    );
+});
 
-    const totalSales = statsIncomes.reduce((sum, item) => sum + (Number(item.total || 0) || 0), 0);
-    const totalExp = statsExpenses.reduce((sum, item) => sum + (Number(item.amount || 0) || 0), 0);
+const filteredAppsTodayRows = rawAppointmentRows.filter(row => {
+    const appDate = getAppDate(row);
+    const appBranch = getAppBranch(row);
+
+    return (
+        appDate === today &&
+        matchDashboardBranch(appBranch)
+    );
+});
+
+    // ✅ รายการที่ใช้แสดงในกล่องล่าง ให้เปลี่ยนตาม period
+	const incomesForDisplay = incomes;
+	const expensesForDisplay = expenses;
+	const appsForDisplay = filteredAppointmentRows;
+
+	const incomesToday = incomesForDisplay;
+	const expensesToday = expensesForDisplay;
+
+    const totalSales = incomes.reduce((sum, item) => sum + Number(item.total || 0), 0);
+    const totalExp = expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const netProfit = totalSales - totalExp;
+
+    const salesYesterday = (yesterdaySalesRows || [])
+        .filter(row => !String(row.type || '').trim() || String(row.type || '').trim() === 'รายรับ')
+        .reduce((sum, row) => sum + (Number(row.net_total ?? row.total ?? 0) || 0), 0);
 
     const customerMap = {};
     (customerMapRows || []).forEach(c => {
         if (c?.id) customerMap[String(c.id)] = c;
     });
 
-    return {
+    console.log('Dashboard summary:', {
+        period,
+        safeBranch,
         totalSales,
-        salesYesterday,
-        totalCustomersAllTime: Number(totalCustomersAllTime || 0),
-        newCustomersCount: newCustomers.length,
-        appointmentsCount: statsApps.length,
         incomesToday,
         expensesToday,
-        appsToday,
-        statsApps,
-        netProfit,
-        customerMap
-    };
+        totalCustomersAllTime,
+        newCustomersCount,
+        appointments: (appointmentRows || []).length,
+        appsToday: (appsTodayRows || []).length
+    });
+
+    return {
+    totalSales,
+    salesYesterday,
+    totalCustomersAllTime: Number(totalCustomersAllTime || 0),
+    newCustomersCount: Number(newCustomersCount || 0),
+
+    // ✅ ใช้ข้อมูลนัดหมายที่กรองตาม วัน/เดือน/ปี + สาขา แล้ว
+    appointmentsCount: Number(filteredAppointmentRows?.length || 0),
+
+    incomesToday,
+    expensesToday,
+
+    // ✅ ตารางนัดหมายด้านล่าง
+    appsToday: filteredAppointmentRows || [],
+
+    // ✅ กล่องคิวนัดด้านบน
+    statsApps: filteredAppointmentRows || [],
+
+    netProfit,
+    customerMap
+};
 };
 
 // --- ฟังก์ชันสำหรับปุ่มกดสลับ รายวัน/รายเดือน/รายปี ---
@@ -2506,7 +2652,7 @@ window.changePeriod = function(period, btnElement) {
         btnElement.classList.add('active');
     }
 
-    window.currentPeriod = period || 'day';
+    window.currentPeriod = window.normalizeDashboardPeriod(period || 'day');
 
     const target = document.getElementById('dynamicContent');
 
@@ -2524,8 +2670,8 @@ window.renderDashboard = async function(target = null, period = 'day', forceRelo
     }
 
     const renderToken = ++window.__dashboardRenderToken;
-    const safePeriod = period || window.currentPeriod || 'day';
-    window.currentPeriod = safePeriod;
+    const safePeriod = window.normalizeDashboardPeriod(period || window.currentPeriod || 'day');
+	window.currentPeriod = safePeriod;
 
     const selectedBranch = window.getDashboardActiveBranch();
     const cacheKey = `${selectedBranch}__${safePeriod}`;
@@ -2588,10 +2734,13 @@ window.renderDashboard = async function(target = null, period = 'day', forceRelo
     } catch (err) {
         console.error('renderDashboard error:', err);
         target.innerHTML = `
-            <div class="p-8 text-center text-red-400 font-bold">
-                โหลด Dashboard ไม่สำเร็จค่ะ
-            </div>
-        `;
+    <div class="p-8 text-center text-red-500 font-bold">
+        โหลด Dashboard ไม่สำเร็จค่ะ<br>
+        <span class="text-xs text-slate-500">${window.escapeHtml(err.message || String(err))}</span>
+    </div>
+`;
+
+console.error('DASHBOARD REAL ERROR:', err);
     }
 };
 

@@ -891,13 +891,19 @@ window.generateUID = function(prefix = 'ID') {
 };
 
 /* -------------------- BRANCH HELPERS -------------------- */
-window.getBranchCode = function(branch) {
-    const map = {
-        'สาขาบางพลี': 'BP',
-        'สาขาชลบุรี': 'CB',
-        'สาขาอุดมสุข': 'UD'
-    };
-    return map[branch] || 'OT'; // OT = other
+window.getBranchCode = function(branch = '') {
+    const safe = String(branch || '')
+        .replace('เอซคลินิก', '')
+        .replace('ACE Clinic', '')
+        .replace('สาขา', '')
+        .replace(':', '')
+        .trim();
+
+    if (safe.includes('บางพลี')) return 'BP';
+    if (safe.includes('ชลบุรี')) return 'CB';
+    if (safe.includes('อุดมสุข')) return 'UD';
+
+    return 'OT';
 };
 
 /* -------------------- SUPABASE: CUSTOMER DATA LAYER -------------------- */
@@ -2485,25 +2491,32 @@ window.loadDashboardSummaryData = async function(period = 'day', selectedBranch 
         customerMap
     };
 };
+
 // --- ฟังก์ชันสำหรับปุ่มกดสลับ รายวัน/รายเดือน/รายปี ---
 window.changePeriod = function(period, btnElement) {
-    // 1. จัดการ UI: ลบ class active ออกจากทุกปุ่มในโซนนั้น
-    const parent = btnElement.closest('#dynamicPeriodZone');
-    if (parent) {
-        parent.querySelectorAll('.btn-period').forEach(btn => btn.classList.remove('active'));
-    }
-    
-    // 2. เติม class active ให้ปุ่มที่ถูกกด
-    btnElement.classList.add('active');
+    const parent = btnElement?.closest('#dynamicPeriodZone');
 
-    // 3. สั่งรันการคำนวณ Dashboard ใหม่ตามช่วงเวลาที่เลือก
+    if (parent) {
+        parent.querySelectorAll('.btn-period').forEach(btn => {
+            btn.classList.remove('active');
+        });
+    }
+
+    if (btnElement) {
+        btnElement.classList.add('active');
+    }
+
+    window.currentPeriod = period || 'day';
+
     const target = document.getElementById('dynamicContent');
+
     if (typeof window.renderDashboard === 'function') {
-        window.renderDashboard(target, period);
+        window.renderDashboard(target, window.currentPeriod, true);
     }
 };
 
-window.renderDashboard = async function(target, period = 'day') {
+window.renderDashboard = async function(target = null, period = 'day', forceReload = false) {
+    target = target || document.getElementById('dynamicContent');
     if (!target) return;
 
     if (typeof window.getCurrentViewingBranch === 'function') {
@@ -2511,7 +2524,7 @@ window.renderDashboard = async function(target, period = 'day') {
     }
 
     const renderToken = ++window.__dashboardRenderToken;
-    const safePeriod = period || 'day';
+    const safePeriod = period || window.currentPeriod || 'day';
     window.currentPeriod = safePeriod;
 
     const selectedBranch = window.getDashboardActiveBranch();
@@ -2533,46 +2546,53 @@ window.renderDashboard = async function(target, period = 'day') {
     };
 
     const cached = window.__dashboardCache[cacheKey];
-    if (cached && (Date.now() - cached.time < cacheAgeMs)) {
+
+    // ✅ ถ้าไม่ได้บังคับโหลดใหม่ ค่อยใช้ cache
+    if (!forceReload && cached && (Date.now() - cached.time < cacheAgeMs)) {
         target.innerHTML = cached.html;
         return;
     }
 
     target.innerHTML = window.__buildDashboardHtml(quickState, true);
 
-    setTimeout(async () => {
-        try {
-            const summary = await window.loadDashboardSummaryData(safePeriod, selectedBranch);
+    try {
+        const summary = await window.loadDashboardSummaryData(safePeriod, selectedBranch);
 
-            if (renderToken !== window.__dashboardRenderToken) return;
+        if (renderToken !== window.__dashboardRenderToken) return;
 
-            const finalState = {
-                period: safePeriod,
-                statsApps: summary.statsApps || [],
-                statsCustomers: Array(summary.newCustomersCount || 0).fill({}),
-                incomesToday: summary.incomesToday || [],
-                expensesToday: summary.expensesToday || [],
-                appsToday: summary.appsToday || [],
-                totalSales: summary.totalSales || 0,
-                netProfit: summary.netProfit || 0,
-                salesYesterday: summary.salesYesterday || 0,
-                totalCustomersAllTime: summary.totalCustomersAllTime || 0,
-                customerMap: summary.customerMap || {}
-            };
+        const finalState = {
+            period: safePeriod,
+            statsApps: summary.statsApps || [],
+            statsCustomers: Array(summary.newCustomersCount || 0).fill({}),
+            incomesToday: summary.incomesToday || [],
+            expensesToday: summary.expensesToday || [],
+            appsToday: summary.appsToday || [],
+            totalSales: summary.totalSales || 0,
+            netProfit: summary.netProfit || 0,
+            salesYesterday: summary.salesYesterday || 0,
+            totalCustomersAllTime: summary.totalCustomersAllTime || 0,
+            customerMap: summary.customerMap || {}
+        };
 
-            const finalHtml = window.__buildDashboardHtml(finalState, false);
+        const finalHtml = window.__buildDashboardHtml(finalState, false);
 
-            if (renderToken !== window.__dashboardRenderToken) return;
+        if (renderToken !== window.__dashboardRenderToken) return;
 
-            target.innerHTML = finalHtml;
-            window.__dashboardCache[cacheKey] = {
-                html: finalHtml,
-                time: Date.now()
-            };
-        } catch (err) {
-            console.error('renderDashboard error:', err);
-        }
-    }, 0);
+        target.innerHTML = finalHtml;
+
+        window.__dashboardCache[cacheKey] = {
+            html: finalHtml,
+            time: Date.now()
+        };
+
+    } catch (err) {
+        console.error('renderDashboard error:', err);
+        target.innerHTML = `
+            <div class="p-8 text-center text-red-400 font-bold">
+                โหลด Dashboard ไม่สำเร็จค่ะ
+            </div>
+        `;
+    }
 };
 
 /* =======================================================
@@ -3019,127 +3039,6 @@ window.getCustomersPageFromSupabase = async function ({
         total: Number(count || 0)
     };
 };
-
-
-// --- ฟังก์ชันหน้าจอเปิดบิล (ปรับปรุงให้ใช้ ID แทนชื่อในการอ้างอิง) ---
-window.openBillingTab = function(customerName, isStandalone = false, customerId = null) {
-    window.currentBillItems = [];
-    let body = document.getElementById('profileTabBody');
-    
-    // 💡 เช็คว่ากดมาจากหน้าไหน ถ้าไม่มี profileTabBody (กดจากเมนูหลัก) ให้ไปแสดงที่ dynamicContent
-    if (isStandalone || !body) {
-        body = document.getElementById('dynamicContent');
-        const titleEl = document.getElementById('pageTitle');
-        if (titleEl) titleEl.innerText = 'ออกใบเสร็จ / เปิดบิลใหม่';
-    } else {
-        document.querySelectorAll('.profile-tab').forEach(t => t.classList.remove('active'));
-    }
-
-    // ✅ กำหนดปุ่มย้อนกลับให้ถูกต้องโดยอิงตาม ID
-    const safeCustomerId = String(customerId || '');
-
-const backAction = (isStandalone || !document.getElementById('profileTabBody')) 
-    ? "loadPage(3, 'ตีบิลใบเสร็จ')" 
-    : `window.viewCustomerDetailById('${safeCustomerId}')`;
-
-body.innerHTML = `
-    <div class="animate-in fade-in duration-500 p-8 bg-white min-h-[600px] font-bold rounded-[2.5rem] shadow-sm border border-pink-100">
-        <div class="flex justify-between items-start mb-8">
-            <div>
-                <h4 class="text-3xl text-[#FF4B91] font-bold tracking-tighter">🧾 ออกใบเสร็จ / เปิดบิลใหม่</h4>
-                <p class="text-slate-400 text-xs mt-1 uppercase tracking-widest font-bold">ชื่อลูกค้า: ${customerName}</p>
-            </div>
-            <button onclick="${backAction}" 
-                class="bg-pink-50 text-[#FF4B91] px-5 py-2.5 rounded-2xl text-xs hover:bg-[#FF4B91] hover:text-white transition-all shadow-sm border border-pink-100 font-bold uppercase tracking-widest">
-                ✕ ยกเลิกการเปิดบิล
-            </button>
-        </div>
-
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 text-left">
-                <div class="space-y-2">
-                    <label class="text-xs text-[#FF4B91] font-bold ml-1 uppercase">📅 วันที่เปิดบิล</label>
-                    <input type="date" id="billDate" value="${new Date().toISOString().split('T')[0]}" 
-                        class="w-full bg-[#FFF0F5] border border-pink-100 rounded-2xl p-4 text-sm text-slate-700 outline-none font-bold focus:border-[#FF4B91]">
-                </div>
-                <div class="space-y-2 text-left">
-                    <label class="text-xs text-[#FF4B91] font-bold ml-1 uppercase">💳 ช่องทางการชำระเงิน</label>
-                    <select id="billPaymentMethod" onchange="window.selectedPaymentMethod = this.value"
-                        class="w-full bg-[#FFF0F5] border border-pink-100 rounded-2xl p-4 text-sm text-slate-700 outline-none font-bold focus:border-[#FF4B91] appearance-none cursor-pointer">
-                        <option value="">-- กรุณาเลือกช่องทาง --</option>
-                        <option value="เงินสด">เงินสด</option>
-                        <option value="โอน (QR)">โอน (QR)</option>
-                        <option value="โอนบริษัท">โอนบริษัท</option>
-                        <option value="รูดบัตรเครดิต">รูดบัตรเครดิต</option>
-                        <option value="Shopee">Shopee</option>
-                        <option value="Gowabi">Gowabi</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="bg-[#FFF0F5] rounded-[2.5rem] p-8 mb-8 relative border-2 border-dashed border-[#FF4B91]/20 text-left">
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-end">
-                    <div class="lg:col-span-5 space-y-2 relative">
-                        <label class="text-xs text-[#FF4B91] ml-1 font-bold uppercase">🔍 ค้นหาคอร์ส หรือ ยา</label>
-                        <input type="text" id="itemName" oninput="searchProduct(this.value)" placeholder="พิมพ์ชื่อรายการ..." 
-                            class="w-full bg-white border border-pink-100 rounded-2xl p-4 text-sm text-slate-700 outline-none shadow-sm font-bold focus:border-[#FF4B91]">
-                        <div id="searchResult" class="absolute z-50 w-full bg-white shadow-xl rounded-2xl mt-1 hidden border border-pink-50 max-h-48 overflow-y-auto font-bold"></div>
-                    </div>
-
-                    <div class="lg:col-span-3 space-y-2">
-                        <label class="text-xs text-[#FF4B91] ml-1 font-bold text-center block uppercase">ราคา/หน่วย (฿)</label>
-                        <input type="number" id="billPrice" placeholder="0.00" 
-                            class="w-full bg-white border border-pink-100 rounded-2xl p-4 text-sm text-[#FF4B91] font-black outline-none shadow-sm text-center">
-                    </div>
-
-                    <div class="lg:col-span-2 space-y-2">
-                        <label class="text-xs text-[#FF4B91] ml-1 font-bold text-center block uppercase">จำนวน</label>
-                        <input type="number" id="billQty" value="1" 
-                            class="w-full bg-white border border-pink-100 rounded-2xl p-4 text-sm text-[#FF4B91] font-black outline-none shadow-sm text-center">
-                    </div>
-
-                    <div class="lg:col-span-2">
-                        <button onclick="addItemToBill()" class="w-full bg-[#FF4B91] text-white py-4 rounded-2xl text-[11px] hover:bg-[#E63980] transition-all shadow-lg font-bold uppercase">
-                            + เพิ่มลงบิล
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="mb-8 overflow-hidden rounded-[1.5rem] border border-pink-50 shadow-sm">
-                <table class="w-full text-left font-bold">
-                    <thead class="bg-[#FFF0F5] text-[11px] text-[#FF4B91] uppercase tracking-wider">
-                        <tr>
-                            <th class="p-4">หมวด</th>
-                            <th class="p-4">ชื่อรายการบริการ / สินค้า</th>
-                            <th class="p-4 text-center">จำนวน</th>
-                            <th class="p-4 text-right">ราคา</th>
-                            <th class="p-4 text-right">รวม (฿)</th>
-                            <th class="p-4 text-center">จัดการ</th>
-                        </tr>
-                    </thead>
-                    <tbody id="billItemsList" class="text-[13px] text-slate-600 font-bold bg-white">
-                        <tr><td colspan="6" class="p-8 text-center text-slate-300 font-bold">ยังไม่มีรายการที่เลือก...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="flex flex-col md:flex-row justify-between items-end border-t border-pink-50 pt-8 gap-6">
-                <div class="text-right md:text-left">
-                    <p class="text-xs text-slate-400 font-bold uppercase">ยอดสุทธิที่ต้องชำระ</p>
-                    <h5 id="grandTotalDisplay" class="text-6xl text-[#FF4B91] font-black tracking-tighter">฿0.00</h5>
-                </div>
-                <button onclick="confirmFinalPayment()" 
-                    class="w-full md:w-auto bg-[#FF4B91] text-white px-16 py-5 rounded-[2rem] text-sm shadow-xl hover:bg-[#E63980] transition-all font-bold uppercase tracking-widest">
-                    ยืนยันการชำระเงิน
-                </button>
-            </div>
-        </div>
-    `;
-    
-    if(typeof renderBillItems === 'function') renderBillItems();
-};
-
 
 // --- ฟังก์ชันบันทึกข้อมูลลูกค้า (เชื่อมต่อ Supabase & ใช้ UUID) ---
 window.saveCustomer = async function () {
@@ -8456,7 +8355,8 @@ window.getQueueCustomerRemainingCourses = async function(customerId, hn = '') {
                 .from('customer_course_balance')
                 .select('*')
                 .eq('customer_id', String(customerId))
-                .gt('remaining_qty', 0);
+                .gt('remaining_qty', 0)
+                .order('created_at', { ascending: false });
 
             if (!error && Array.isArray(data)) rows = data;
         }
@@ -8466,12 +8366,60 @@ window.getQueueCustomerRemainingCourses = async function(customerId, hn = '') {
                 .from('customer_course_balance')
                 .select('*')
                 .eq('hn', String(hn))
-                .gt('remaining_qty', 0);
+                .gt('remaining_qty', 0)
+                .order('created_at', { ascending: false });
 
             if (!error && Array.isArray(data)) rows = data;
         }
 
         if (!rows.length) return [];
+
+// ✅ ตัดรายการคอร์สที่มาจากบิลที่ถูกยกเลิกออก
+const invoiceNos = [...new Set(
+    rows
+        .map(r => String(r.invoice_no || '').trim())
+        .filter(Boolean)
+)];
+
+if (invoiceNos.length > 0) {
+    const { data: billRows, error: billError } = await window.supabaseClient
+        .from('sales_header')
+        .select('bill_no, status')
+        .in('bill_no', invoiceNos);
+
+    if (!billError && Array.isArray(billRows)) {
+        const cancelledSet = new Set(
+            billRows
+                .filter(b => String(b.status || '').trim() === 'ยกเลิก')
+                .map(b => String(b.bill_no || '').trim())
+        );
+
+        rows = rows.filter(r => {
+            const inv = String(r.invoice_no || '').trim();
+            return !cancelledSet.has(inv);
+        });
+    }
+}
+
+// ✅ กันข้อมูลซ้ำก่อนส่งไปแสดงใน Modal
+const seenRows = new Set();
+
+rows = rows.filter(r => {
+    const key = [
+        String(r.id || '').trim(),
+        String(r.customer_id || '').trim(),
+        String(r.hn || '').trim(),
+        String(r.invoice_no || '').trim(),
+        String(r.course_code || '').trim(),
+        String(r.course_name || '').trim()
+    ].join('|');
+
+    if (seenRows.has(key)) return false;
+    seenRows.add(key);
+    return true;
+});
+
+if (!rows.length) return [];
 
         const { data: masterRows, error: masterError } = await window.supabaseClient
             .from('course_master')
@@ -8489,7 +8437,7 @@ window.getQueueCustomerRemainingCourses = async function(customerId, hn = '') {
             `)
             .eq('is_active', true);
 
-        const masterList = !masterError && Array.isArray(masterRows) ? masterRows : [];
+        const masterList = (!masterError && Array.isArray(masterRows)) ? masterRows : [];
 
         const normalizeText = (v) => String(v || '')
             .trim()
@@ -8502,12 +8450,15 @@ window.getQueueCustomerRemainingCourses = async function(customerId, hn = '') {
             .replace(/,/g, '')
             .replace(/\./g, '');
 
-        const normalizeCode = (v) => String(v || '')
-            .trim()
-            .toLowerCase()
-            .replace(/\s+/g, '')
-            .replace(/-/g, '')
-            .replace(/_/g, '');
+        const normalizeCode = (v) => {
+            const cleaned = String(v || '')
+                .trim()
+                .toLowerCase()
+                .replace(/\s+/g, '')
+                .replace(/-/g, '')
+                .replace(/_/g, '');
+            return cleaned.replace(/^0+/, '') || cleaned;
+        };
 
         const normalizeBranch = (v) => String(v || '')
             .replace('เอซคลินิก', '')
@@ -8517,82 +8468,86 @@ window.getQueueCustomerRemainingCourses = async function(customerId, hn = '') {
             .trim()
             .toLowerCase();
 
-        // ✅ แก้เฉพาะส่วนนี้: ล็อก match ตามสาขาจริง 100%
         const findMaster = (row) => {
-            const rowCode = normalizeCode(row.course_code || '');
-            const rowName = normalizeText(row.course_name || '');
-            const rowBranch = normalizeBranch(row.branch_name || '');
+    const rowCode = normalizeCode(row.course_code || '');
+    const rowName = normalizeText(row.course_name || '');
+    const rowBranch = normalizeBranch(row.branch_name || '');
 
-            let candidates = [...masterList];
+    if (!rowBranch) return null;
 
-            // ✅ ถ้าไม่มี branch ใน row = ไม่ให้ match ข้ามสาขา
-            if (!rowBranch) {
-                return null;
-            }
+    // ✅ ล็อกเฉพาะสาขาเดียวกัน
+    const candidates = masterList.filter(m =>
+        normalizeBranch(m.branch_name || '') === rowBranch
+    );
 
-            // ✅ กรองเฉพาะสาขาเดียวกันเท่านั้น
-            candidates = candidates.filter(m => {
-                const mb = normalizeBranch(m.branch_name || '');
-                return mb === rowBranch;
-            });
+    if (!candidates.length) return null;
 
-            if (!candidates.length) {
-                return null;
-            }
+    const getNames = (m) => [
+        normalizeText(m.course_name || ''),
+        normalizeText(m.old_course_name || ''),
+        normalizeText(m.old_course_name_acc || '')
+    ].filter(Boolean);
 
-            // 1) match code กับ old_course_code ตรง ๆ
-            let found = candidates.find(m =>
-                rowCode && normalizeCode(m.old_course_code) === rowCode
+    const getCodes = (m) => [
+        normalizeCode(m.old_course_code || ''),
+        normalizeCode(m.old_course_code_acc || '')
+    ].filter(Boolean);
+
+    // ✅ 1) ตรงที่สุด: code + ชื่อ ตรงกัน
+    let found = candidates.find(m => {
+        const codes = getCodes(m);
+        const names = getNames(m);
+
+        return rowCode &&
+            codes.includes(rowCode) &&
+            rowName &&
+            names.includes(rowName);
+    });
+    if (found) return found;
+
+    // ✅ 2) code + ชื่อแบบหลวม แต่ยังอยู่สาขาเดียวกัน
+    found = candidates.find(m => {
+        const codes = getCodes(m);
+        const names = getNames(m);
+
+        return rowCode &&
+            codes.includes(rowCode) &&
+            rowName &&
+            names.some(name =>
+                name.includes(rowName) || rowName.includes(name)
             );
-            if (found) return found;
+    });
+    if (found) return found;
 
-            // 2) match code กับ old_course_code_acc
-            found = candidates.find(m =>
-                rowCode && normalizeCode(m.old_course_code_acc) === rowCode
-            );
-            if (found) return found;
+    // ✅ 3) ชื่อตรงกัน
+    found = candidates.find(m =>
+        rowName && getNames(m).includes(rowName)
+    );
+    if (found) return found;
 
-            // 3) match ชื่อกับ course_name
-            found = candidates.find(m =>
-                rowName && normalizeText(m.course_name) === rowName
-            );
-            if (found) return found;
+    // ✅ 4) ชื่อแบบหลวม
+    found = candidates.find(m => {
+        const names = getNames(m);
+        return rowName && names.some(name =>
+            name.includes(rowName) || rowName.includes(name)
+        );
+    });
+    if (found) return found;
 
-            // 4) match ชื่อกับ old_course_name
-            found = candidates.find(m =>
-                rowName && normalizeText(m.old_course_name) === rowName
-            );
-            if (found) return found;
+    // ⚠️ 5) ใช้ code อย่างเดียวเป็นด่านสุดท้ายเท่านั้น
+    found = candidates.find(m =>
+        rowCode && getCodes(m).includes(rowCode)
+    );
+    if (found) return found;
 
-            // 5) match ชื่อกับ old_course_name_acc
-            found = candidates.find(m =>
-                rowName && normalizeText(m.old_course_name_acc) === rowName
-            );
-            if (found) return found;
-
-            // 6) includes แบบหลวม แต่ยังอยู่ในสาขาเดียวกันเท่านั้น
-            found = candidates.find(m => {
-                const names = [
-                    normalizeText(m.course_name),
-                    normalizeText(m.old_course_name),
-                    normalizeText(m.old_course_name_acc)
-                ].filter(Boolean);
-
-                return rowName && names.some(name =>
-                    name.includes(rowName) || rowName.includes(name)
-                );
-            });
-            if (found) return found;
-
-            // ✅ ไม่ fallback ข้ามสาขา
-            return null;
-        };
+    return null;
+};
 
         return rows.map((r, index) => {
             const rawName = String(r.course_name || '-').trim();
             const master = findMaster(r);
 
-            const mapped = {
+            return {
                 id: String(r.id || `${rawName}_${index}`),
                 course_id: master?.id ? String(master.id) : '',
                 course_name: rawName,
@@ -8607,18 +8562,18 @@ window.getQueueCustomerRemainingCourses = async function(customerId, hn = '') {
                 item_code: String(r.course_code || ''),
                 old_course_code: String(master?.old_course_code || r.course_code || ''),
                 item_name: rawName,
+
+                // ✅ จุดสำคัญ ค่ามือมาจาก course_master
                 staff_df: Number(master?.staff_df || 0),
                 doctor_df: Number(master?.doctor_df || 0),
+
                 branch_name: String(r.branch_name || ''),
                 master_found: !!master,
                 master_course_name: String(master?.course_name || ''),
                 display_label: `${rawName} คงเหลือ ${Number(r.remaining_qty || 0)} / ${Number(r.total_qty || 0)} ${String(r.unit || 'ครั้ง')}`
             };
-
-            console.log('queue course mapped =>', mapped);
-
-            return mapped;
         });
+
     } catch (e) {
         console.error('getQueueCustomerRemainingCourses error:', e);
         return [];
@@ -8808,8 +8763,8 @@ window.syncProcessCourseSelection = function() {
         const maxQty = Number(chk.getAttribute('data-remaining-qty') || 0);
         const unit = String(chk.getAttribute('data-unit') || 'ครั้ง').trim();
 
-        const staffDF = Number(chk.getAttribute('data-staff-df') || 0);
-        const doctorDF = Number(chk.getAttribute('data-doctor-df') || 0);
+        const staffDF = Number(chk.dataset.staffDf ?? 0);
+	const doctorDF = Number(chk.dataset.doctorDf ?? 0);
 
         let useQty = Number(qtyInput?.value || 1);
 
@@ -9829,11 +9784,13 @@ window.getDoctorOptionsForProcess = async function(selectedValue = '') {
 /* =======================================================
     💰 ZONE 5: BILLING & EXPENSE (ระบบตีบิลใบเสร็จ & รายจ่าย)
    ======================================================= */
-window.loadSalesHistory = async function() {
+window.loadSalesHistory = async function(options = {}) {
     if (!window.supabaseClient) {
         console.error('No supabase');
         return [];
     }
+
+    const dateFilter = String(options.dateFilter || '').trim();
 
     const currentUser = (typeof window.getCurrentUserSafe === 'function')
         ? window.getCurrentUserSafe()
@@ -9853,23 +9810,52 @@ window.loadSalesHistory = async function() {
         .replace(':', '')
         .trim();
 
-    let query = window.supabaseClient
-        .from('sales_header')
-        .select('*')
-        .order('created_at', { ascending: false });
+    let allRows = [];
+    let from = 0;
+    const pageSize = 1000;
 
-    if (!isAllBranches && safeViewingBranch) {
-        query = query.eq('branch_name', safeViewingBranch);
+    while (true) {
+        let query = window.supabaseClient
+            .from('sales_header')
+            .select(`
+                *,
+                sales_items (
+                    item_name,
+                    qty,
+                    unit,
+                    unit_price,
+                    total_price
+                )
+            `)
+            .order('bill_date', { ascending: false })
+            .order('created_at', { ascending: false })
+            .range(from, from + pageSize - 1);
+
+        if (dateFilter) {
+            query = query.eq('bill_date', dateFilter);
+        }
+
+        if (!isAllBranches && safeViewingBranch) {
+            query = query.eq('branch_name', safeViewingBranch);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            console.error('loadSalesHistory error:', error);
+            return allRows;
+        }
+
+        if (!data || data.length === 0) break;
+
+        allRows = allRows.concat(data);
+
+        if (data.length < pageSize) break;
+        from += pageSize;
     }
 
-    const { data, error } = await query;
-
-    if (error) {
-        console.error('loadSalesHistory error:', error);
-        return [];
-    }
-
-    return Array.isArray(data) ? data : [];
+    console.log('โหลดบิล:', allRows.length, 'วันที่:', dateFilter || 'ทั้งหมด', 'สาขา:', safeViewingBranch);
+    return allRows;
 };
 
 window.getCustomers = async function() {
@@ -9978,16 +9964,18 @@ window.renderSalesPage = async function() {
         const target = document.getElementById('dynamicContent');
         if (!target) return;
 
-        const rows = await window.loadSalesHistory();
         const today = new Date().toISOString().split('T')[0];
 
         const currentDateInput = document.getElementById('billDateFilter');
         const dateFilter = currentDateInput ? (currentDateInput.value || today) : today;
 
+        const rows = await window.loadSalesHistory({
+            dateFilter: dateFilter
+        });
+
         const currentSearch = document.getElementById('billSearchInput')?.value || "";
         const statusFilter = document.getElementById('billStatusFilter')?.value || "ทั้งหมด";
         const billPageSize = parseInt(document.getElementById('billPageSize')?.value || '10', 10);
-
         const rawViewingBranch = (typeof window.getCurrentViewingBranch === 'function')
             ? window.getCurrentViewingBranch()
             : 'ทุกสาขา';
@@ -10012,7 +10000,9 @@ window.renderSalesPage = async function() {
             // ❌ ห้าม fallback created_at เด็ดขาด เพราะจะทำให้วันที่เพี้ยน
             date: row.bill_date ? String(row.bill_date).split('T')[0] : '',
 
-            items: Array.isArray(row.items_snapshot) ? row.items_snapshot : [],
+            items: (Array.isArray(row.items_snapshot) && row.items_snapshot.length > 0)
+   		 ? row.items_snapshot
+    		: (Array.isArray(row.sales_items) ? row.sales_items : []),
             total: Number(row.net_total ?? row.total ?? 0) || 0,
             subtotal: Number(row.total ?? 0) || 0,
             discount: Number(row.discount_amount ?? 0) || 0,
@@ -10048,6 +10038,15 @@ window.renderSalesPage = async function() {
 
             return matchType && matchSearch && matchStatus && matchDate;
         });
+
+	console.log('บิลหลังกรอง:', filteredData.map(x => ({
+   	 billId: x.billId,
+    	date: x.date,
+    	branch: x.branch,
+   	 status: x.status,
+   	 type: x.type,
+   	 customer: x.customer
+	})));
 
         filteredData.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
@@ -10104,9 +10103,7 @@ window.renderSalesPage = async function() {
                     </button>
                 </div>
 
-                <div class="mt-3 text-[11px] text-slate-400">
-                    สาขาที่กำลังดู: <span class="font-bold text-slate-600">${safeViewingBranch || 'ทุกสาขา'}</span>
-                </div>
+                
             </div>
 
             <div class="bg-white rounded-[3rem] shadow-2xl border border-pink-100 p-8 min-h-[400px]" style="overflow: visible !important;">
@@ -10842,6 +10839,7 @@ window.openNewBillProcess = function() {
         console.error('openNewBillProcess error:', e);
     }
 };
+
 // 2. ฟังก์ชันหลักสำหรับเปิดหน้าตีบิล
 window.openBillingTab = async function(customerName = '', isStandalone = false, customerId = '') {
     window.currentBillItems = [];
@@ -10850,7 +10848,7 @@ window.openBillingTab = async function(customerName = '', isStandalone = false, 
     window.lastCalculatedDiscount = 0;
 
     let body = document.getElementById('profileTabBody');
-    const isInsideProfile = (body && !isStandalone);
+    const isInsideProfile = !!(body && !isStandalone);
 
     if (!isInsideProfile) {
         body = document.getElementById('dynamicContent');
@@ -10861,26 +10859,33 @@ window.openBillingTab = async function(customerName = '', isStandalone = false, 
         document.getElementById('tab-3')?.classList.add('active');
     }
 
+    if (!body) return;
+
     const safeCustomerId = String(customerId || window.activeCustomer?.id || '');
     const backAction = !isInsideProfile
         ? "loadPage(3, 'ตีบิลใบเสร็จ')"
         : `window.viewCustomerDetailById('${safeCustomerId}')`;
 
     const today = new Date().toISOString().split('T')[0];
-    const isCustomerSelected = !!(customerName && customerName !== '' && customerName !== 'ลูกค้าทั่วไป');
-
-    if (!body) return;
+    const isCustomerSelected = !!(customerName && customerName !== 'ลูกค้าทั่วไป');
 
     body.innerHTML = `
         <div class="animate-in fade-in duration-500 bg-white min-h-[800px] pb-32 text-left font-sans overflow-visible ${isStandalone ? 'p-8 rounded-[2rem] shadow-sm border-2 border-pink-100' : 'p-4'}">
             <div class="flex justify-between items-start mb-6 pb-2">
                 <div>
                     <h2 class="text-2xl font-black text-slate-800 mb-1 italic uppercase">BILLING SYSTEM</h2>
-                    <p class="text-[10px] text-slate-400 font-bold uppercase">วันที่ทำรายการ: <input type="date" id="billDate" value="${today}" class="outline-none bg-transparent cursor-pointer ml-1 text-slate-600 font-black"></p>
+                    <p class="text-[10px] text-slate-400 font-bold uppercase">
+                        วันที่ทำรายการ:
+                        <input type="date" id="billDate" value="${today}" class="outline-none bg-transparent cursor-pointer ml-1 text-slate-600 font-black">
+                    </p>
                 </div>
                 <div class="flex gap-2">
-                    <button onclick="confirmFinalPayment()" class="bg-[#D48197] text-white px-10 py-2.5 rounded-full text-xs font-black shadow-lg hover:bg-pink-600 transition-all uppercase italic">💾 บันทึกบิล</button>
-                    <button onclick="${backAction}" class="bg-slate-800 text-white w-10 h-10 rounded-full text-xs font-bold shadow-md hover:bg-black transition-all flex items-center justify-center">✕</button>
+                    <button onclick="confirmFinalPayment()" class="bg-[#D48197] text-white px-10 py-2.5 rounded-full text-xs font-black shadow-lg hover:bg-pink-600 transition-all uppercase italic">
+                        💾 บันทึกบิล
+                    </button>
+                    <button onclick="${backAction}" class="bg-slate-800 text-white w-10 h-10 rounded-full text-xs font-bold shadow-md hover:bg-black transition-all flex items-center justify-center">
+                        ✕
+                    </button>
                 </div>
             </div>
 
@@ -10898,10 +10903,10 @@ window.openBillingTab = async function(customerName = '', isStandalone = false, 
                         <div class="relative">
                             <span class="absolute left-4 top-3 text-slate-400">🔍</span>
                             <input type="text" id="custSearchForBillInp"
-                                   value="${customerName === 'ลูกค้าทั่วไป' ? '' : customerName}"
-                                   oninput="searchCustomerForBill(this.value)"
-                                   placeholder="พิมพ์เพื่อค้นหา..."
-                                   class="w-full border-2 border-pink-50 pl-10 pr-4 py-3 rounded-2xl outline-none text-sm bg-slate-50/50 text-slate-800 font-bold focus:border-[#FF4B91] shadow-inner transition-all">
+                                value="${customerName === 'ลูกค้าทั่วไป' ? '' : customerName}"
+                                oninput="searchCustomerForBill(this.value)"
+                                placeholder="พิมพ์เพื่อค้นหา..."
+                                class="w-full border-2 border-pink-50 pl-10 pr-4 py-3 rounded-2xl outline-none text-sm bg-slate-50/50 text-slate-800 font-bold focus:border-[#FF4B91] shadow-inner transition-all">
                         </div>
                         <div id="customerSearchResult" class="absolute z-[100] w-full bg-white shadow-2xl rounded-2xl mt-1 hidden border border-pink-50 max-h-48 overflow-y-auto"></div>
                     </div>
@@ -10912,11 +10917,13 @@ window.openBillingTab = async function(customerName = '', isStandalone = false, 
                             <p class="flex justify-between border-b border-cyan-50 pb-1"><span>ชื่อ-สกุล:</span> <span id="billFullName" class="font-black text-slate-700">-</span></p>
                             <p class="flex justify-between"><span>ชื่อเล่น:</span> <span id="billNickName" class="font-black text-slate-700">-</span></p>
                         </div>
+
                         <div class="border-2 border-cyan-100 bg-cyan-50/20 rounded-2xl p-4 text-[11px] text-cyan-600 space-y-2 shadow-sm font-normal">
                             <p class="flex justify-between border-b border-cyan-50 pb-1"><span>สัญชาติ:</span> <span id="billNationality" class="font-black text-slate-700">-</span></p>
                             <p class="flex justify-between border-b border-cyan-50 pb-1"><span>เบอร์โทร:</span> <span id="billPhone" class="font-black text-slate-700">-</span></p>
                             <p class="flex justify-between"><span>สิทธิรักษา:</span> <span id="billRight" class="font-black text-slate-700">ทั่วไป</span></p>
                         </div>
+
                         <div class="border-2 border-cyan-100 bg-cyan-50/20 rounded-2xl p-4 text-[11px] text-cyan-600 space-y-2 shadow-sm font-normal">
                             <p class="flex justify-between border-b border-cyan-50 pb-1"><span>วงเงิน:</span> <span id="billCredit" class="font-black text-slate-700">0</span></p>
                             <div class="mt-1">
@@ -10929,21 +10936,39 @@ window.openBillingTab = async function(customerName = '', isStandalone = false, 
             </div>
 
             <div id="billingFormArea" class="${isCustomerSelected ? '' : 'hidden opacity-0'} transition-all duration-500">
-                <div class="border-2 border-dashed border-pink-200 bg-pink-50/30 rounded-[2.5rem] p-6 mb-6 flex flex-wrap md:flex-nowrap gap-4 items-end shadow-sm relative">
-                    <div class="flex-1 relative min-w-[200px]">
+                <div class="border-2 border-dashed border-pink-200 bg-pink-50/30 rounded-[2.5rem] p-6 mb-6 grid grid-cols-1 lg:grid-cols-12 gap-4 items-end shadow-sm relative">
+                    <div class="lg:col-span-4 relative min-w-[200px]">
                         <label class="text-[10px] text-slate-400 ml-2 mb-1 block font-black uppercase italic">รายการคอร์ส หรือ ยา</label>
-                        <input type="text" id="itemName" oninput="searchProduct(this.value)" placeholder="พิมพ์ชื่อคอร์ส..." class="w-full border-2 border-white bg-white p-3.5 rounded-full outline-none text-sm shadow-sm focus:ring-2 focus:ring-pink-200 font-bold text-slate-700">
+                        <input type="text" id="itemName" oninput="searchProduct(this.value)" placeholder="พิมพ์ชื่อคอร์ส..."
+                            class="w-full border-2 border-white bg-white p-3.5 rounded-full outline-none text-sm shadow-sm focus:ring-2 focus:ring-pink-200 font-bold text-slate-700">
                         <div id="searchResult" class="absolute z-50 w-full bg-white shadow-2xl rounded-2xl mt-1 hidden max-h-48 overflow-y-auto border border-pink-50"></div>
                     </div>
-                    <div class="w-32">
+
+                    <div class="lg:col-span-2">
                         <label class="text-[10px] text-slate-400 mb-1 block text-center font-black uppercase italic">ราคา (฿)</label>
-                        <input type="number" id="billPrice" placeholder="0" class="w-full border-2 border-white bg-white p-3.5 rounded-full outline-none text-sm text-center shadow-sm font-black text-[#FF4B91]">
+                        <input type="number" id="billPrice" placeholder="0" oninput="window.updateBillLinePreview?.()"
+                            class="w-full border-2 border-white bg-white p-3.5 rounded-full outline-none text-sm text-center shadow-sm font-black text-[#FF4B91]">
                     </div>
-                    <div class="w-24">
+
+                    <div class="lg:col-span-2">
                         <label class="text-[10px] text-slate-400 mb-1 block text-center font-black uppercase italic">จำนวน</label>
-                        <input type="number" id="billQty" value="1" class="w-full border-2 border-white bg-white p-3.5 rounded-full outline-none text-sm text-center shadow-sm font-black text-slate-700">
+                        <input type="number" id="billQty" value="1" min="1" oninput="window.updateBillLinePreview?.()"
+                            class="w-full border-2 border-white bg-white p-3.5 rounded-full outline-none text-sm text-center shadow-sm font-black text-slate-700">
                     </div>
-                    <button onclick="addItemToBill()" class="bg-[#FF4B91] text-white px-10 py-4 rounded-full text-[11px] font-black shadow-xl hover:bg-black transition-all uppercase italic">+ เพิ่มลงบิล</button>
+
+                    <div class="lg:col-span-2">
+                        <label class="text-[10px] text-slate-400 mb-1 block text-center font-black uppercase italic">รวมก่อนเพิ่ม</label>
+                        <div id="billLinePreview"
+                            class="w-full border-2 border-white bg-white p-3.5 rounded-full text-sm text-center shadow-sm font-black text-[#FF4B91]">
+                            ฿0.00
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2">
+                        <button onclick="addItemToBill()" class="w-full bg-[#FF4B91] text-white px-6 py-4 rounded-full text-[11px] font-black shadow-xl hover:bg-black transition-all uppercase italic">
+                            + เพิ่มลงบิล
+                        </button>
+                    </div>
                 </div>
 
                 <div class="border border-slate-100 bg-slate-50/50 rounded-[2.5rem] p-8 shadow-inner overflow-x-auto mb-8">
@@ -10976,10 +11001,10 @@ window.openBillingTab = async function(customerName = '', isStandalone = false, 
                     <div class="text-right w-full lg:w-auto space-y-4">
                         <div class="flex items-center justify-end gap-3 bg-slate-50 p-4 rounded-3xl border border-slate-100 shadow-inner">
                             <label class="text-[12px] font-black text-slate-500 uppercase italic tracking-tighter">ส่วนลดพิเศษ (฿):</label>
-                            <input type="number" id="billDiscount" oninput="window.renderBillItems()" value="0" 
+                            <input type="number" id="billDiscount" oninput="window.renderBillItems?.()" value="0"
                                 class="w-36 border-2 border-pink-200 bg-white p-2.5 rounded-2xl text-right font-black text-rose-600 text-lg outline-none focus:border-[#FF4B91] shadow-sm">
                         </div>
-                        
+
                         <div class="pr-4">
                             <p class="text-[11px] text-slate-400 font-black uppercase tracking-[0.3em] mb-1 italic">ยอดชำระสุทธิ (NET TOTAL)</p>
                             <h5 id="grandTotalDisplay" class="text-7xl text-[#FF4B91] font-black tracking-tighter italic drop-shadow-sm">฿0.00</h5>
@@ -10992,7 +11017,10 @@ window.openBillingTab = async function(customerName = '', isStandalone = false, 
 
     if (window.lucide) lucide.createIcons();
 
-    // ✅ ถ้ามี customerId ส่งมา ให้ดึงข้อมูลมาแสดงทันที
+    if (typeof window.updateBillLinePreview === 'function') {
+        window.updateBillLinePreview();
+    }
+
     if (isCustomerSelected && safeCustomerId) {
         setTimeout(() => {
             window.selectCustomerToBill(safeCustomerId);
@@ -11207,7 +11235,7 @@ window.selectProductToBill = function(courseId) {
     const resDiv = document.getElementById('searchResult');
 
     const pickPrice = (row) => {
-        const vals = [row.course_opd, row.course_ipd, row.course_fee, row.price];
+    const vals = [row.price, row.course_fee, row.course_opd, row.course_ipd];
         for (const v of vals) {
             const n = parseFloat(v);
             if (!Number.isNaN(n) && n > 0) return n;
@@ -11236,6 +11264,25 @@ window.selectProductToBill = function(courseId) {
     if (resDiv) {
         resDiv.innerHTML = '';
         resDiv.classList.add('hidden');
+    }
+};
+
+window.money2 = function(value) {
+    const n = Number(value || 0);
+    return Math.round((n + Number.EPSILON) * 100) / 100;
+};
+
+window.updateBillLinePreview = function() {
+    const price = Number(document.getElementById('billPrice')?.value || 0);
+    const qty = Number(document.getElementById('billQty')?.value || 0);
+    const total = window.money2(price * qty);
+
+    const box = document.getElementById('billLinePreview');
+    if (box) {
+        box.innerText = '฿' + total.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
     }
 };
 
@@ -11424,6 +11471,17 @@ window.removeItemFromBill = function(index) {
 };
 
 window.confirmFinalPayment = async function() {
+    if (window.__confirmFinalPaymentLoading) return;
+    window.__confirmFinalPaymentLoading = true;
+	const saveBtn = [...document.querySelectorAll('button')]
+    		.find(btn => String(btn.getAttribute('onclick') || '').includes('confirmFinalPayment'));
+
+if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.dataset.oldText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '⏳ กำลังบันทึก...';
+}
+
     try {
         if (!window.supabaseClient) {
             return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
@@ -11541,60 +11599,67 @@ window.confirmFinalPayment = async function() {
 
         const subTotal = preparedItems.reduce((sum, item) => sum + item.gross_total, 0);
 
-        const discountInputEl = document.getElementById('billDiscount');
-        const discountInputValue = toNumber(discountInputEl?.value || 0);
+const discountInputEl = document.getElementById('billDiscount');
+const discountInputValue = toNumber(discountInputEl?.value || 0);
 
-        const discountAmount = Math.min(
-            Math.max(0, discountInputValue),
-            subTotal
-        );
+const discountAmount = Math.min(
+    Math.max(0, discountInputValue),
+    subTotal
+);
 
-        const netTotal = Math.max(0, subTotal - discountAmount);
+const netTotal = Math.max(0, subTotal - discountAmount);
 
-        window.lastCalculatedDiscount = discountAmount;
-        window.lastCalculatedNet = netTotal;
+window.lastCalculatedDiscount = discountAmount;
+window.lastCalculatedNet = netTotal;
 
-        const billId = crypto.randomUUID();
-        const billNo = `INV${Date.now().toString().slice(-6)}`;
+const billId = crypto.randomUUID();
+const branchCode = window.getBranchCode(safeViewingBranch);
 
-        const itemsSnapshot = preparedItems.map(item => {
-            const discountShare = subTotal > 0
-                ? (item.gross_total / subTotal) * discountAmount
-                : 0;
+const now = new Date();
+const datePart = now.toISOString().slice(2, 10).replace(/-/g, ''); // 260423
+const timePart = now.getTime().toString().slice(-5);
+const randomPart = Math.floor(Math.random() * 90 + 10);
 
-            const itemNet = Math.max(0, item.gross_total - discountShare);
+const billNo = `${branchCode}-${datePart}-${timePart}${randomPart}`;
 
-            return {
-                id: item.id,
-                sales_header_id: billId,
-                sale_id: billId,
-                bill_no: billNo,
-                bill_date: billDate,
-                customer_id: customerId || null,
-                hn: customerHN,
-                customer_name: customerName,
-                course_id: item.course_id,
-                old_course_code: item.old_course_code,
-                item_code: item.item_code,
-                name: item.item_name,
-                item_name: item.item_name,
-                qty: item.qty,
-                unit: item.unit,
-                price: item.unit_price,
-                unit_price: item.unit_price,
-                total: item.gross_total,
-                line_total: item.gross_total,
-                total_price: item.gross_total,
-                discount_amount: discountShare,
-                net_total: itemNet,
-                category_name: item.category_name,
-                item_type: item.item_type,
-                staff_df: item.staff_df,
-                doctor_df: item.doctor_df,
-                totalAmount: item.qty,
-                remainAmount: item.item_type === 'course' ? item.qty : 0
-            };
-        });
+const itemsSnapshot = preparedItems.map(item => {
+    const discountShare = subTotal > 0
+        ? (item.gross_total / subTotal) * discountAmount
+        : 0;
+
+    const itemNet = Math.max(0, item.gross_total - discountShare);
+
+    return {
+        id: item.id,
+        sales_header_id: billId,
+        sale_id: billId,
+        bill_no: billNo,
+        bill_date: billDate,
+        customer_id: customerId || null,
+        hn: customerHN,
+        customer_name: customerName,
+        course_id: item.course_id,
+        old_course_code: item.old_course_code,
+        item_code: item.item_code,
+        name: item.item_name,
+        item_name: item.item_name,
+        qty: item.qty,
+        unit: item.unit,
+        price: item.unit_price,
+        unit_price: item.unit_price,
+        total: item.gross_total,
+        line_total: item.gross_total,
+        total_price: item.gross_total,
+        discount_amount: discountShare,
+        net_total: itemNet,
+        category_name: item.category_name,
+        item_type: item.item_type,
+        staff_df: item.staff_df,
+        doctor_df: item.doctor_df,
+        totalAmount: item.qty,
+        remainAmount: item.item_type === 'course' ? item.qty : 0
+    };
+});
 
         const headerPayload = {
             id: billId,
@@ -11614,7 +11679,8 @@ window.confirmFinalPayment = async function() {
             note: null,
             items_snapshot: itemsSnapshot,
             course_restored: false,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+		updated_at: new Date().toISOString()
         };
 
         const { error: headerError } = await window.supabaseClient
@@ -11676,9 +11742,6 @@ window.confirmFinalPayment = async function() {
 
         const courseItems = preparedItems.filter(item => isCourseLikeItem(item));
 
-        console.log('preparedItems =', preparedItems);
-        console.log('courseItems for balance =', courseItems);
-
         const balancePayload = courseItems.map(item => {
             const discountShare = subTotal > 0
                 ? (item.gross_total / subTotal) * discountAmount
@@ -11708,13 +11771,12 @@ window.confirmFinalPayment = async function() {
             };
         });
 
-        console.log('balancePayload =', balancePayload);
+        
 
         if (balancePayload.length > 0) {
-            const { data: balanceData, error: balanceError } = await window.supabaseClient
+            const { error: balanceError } = await window.supabaseClient
                 .from('customer_course_balance')
-                .insert(balancePayload)
-                .select();
+                .insert(balancePayload);
 
             if (balanceError) {
                 console.error('customer_course_balance insert error:', balanceError);
@@ -11736,51 +11798,67 @@ window.confirmFinalPayment = async function() {
                 );
             }
 
-            console.log('customer_course_balance inserted =', balanceData);
+            
         }
 
         Swal.fire({
-            icon: 'success',
-            title: 'บันทึกบิลสำเร็จ!',
-            text: 'ยอดเงิน รายการขาย และคอร์สคงเหลือ ถูกบันทึกเรียบร้อยค่ะ',
-            timer: 1800,
-            showConfirmButton: false
-        }).then(async () => {
-            window.currentBillItems = [];
-            window.selectedPaymentMethod = '';
-            window.lastCalculatedNet = 0;
-            window.lastCalculatedDiscount = 0;
+    icon: 'success',
+    title: 'บันทึกบิลสำเร็จ!',
+    text: 'บันทึกข้อมูลเรียบร้อยค่ะ',
+    timer: 1000,
+    showConfirmButton: false
+});
 
-            const discountInput = document.getElementById('billDiscount');
-            if (discountInput) discountInput.value = '';
+// ✅ เคลียร์หน้าจอทันที ไม่ต้องรอ Swal
+window.currentBillItems = [];
+window.selectedPaymentMethod = '';
+window.lastCalculatedNet = 0;
+window.lastCalculatedDiscount = 0;
 
-            const totalDisplay = document.getElementById('grandTotalDisplay');
-            if (totalDisplay) totalDisplay.innerText = '฿0.00';
+const discountInput = document.getElementById('billDiscount');
+if (discountInput) discountInput.value = '0';
 
-            if (typeof window.renderBillItems === 'function') {
-                window.renderBillItems();
-            }
+const totalDisplay = document.getElementById('grandTotalDisplay');
+if (totalDisplay) totalDisplay.innerText = '฿0.00';
 
-            if (typeof window.refreshActiveCustomerDetailRealtime === 'function' && customerId) {
-                await window.refreshActiveCustomerDetailRealtime(customerId);
-            }
+const itemName = document.getElementById('itemName');
+const billPrice = document.getElementById('billPrice');
+const billQty = document.getElementById('billQty');
 
-            if (typeof window.searchCourseForApp === 'function') {
-                await window.searchCourseForApp();
-            }
+if (itemName) itemName.value = '';
+if (billPrice) billPrice.value = '';
+if (billQty) billQty.value = '1';
 
-            if (typeof window.renderRemainingCoursesPreview === 'function') {
-                await window.renderRemainingCoursesPreview();
-            }
+if (typeof window.renderBillItems === 'function') {
+    window.renderBillItems();
+}
 
-            if (typeof window.renderSalesPage === 'function') {
-                await window.renderSalesPage();
-            }
-        });
+if (typeof window.updateBillLinePreview === 'function') {
+    window.updateBillLinePreview();
+}
+
+// ✅ refresh เบื้องหลัง ไม่ await จะไม่หน่วงหน้าจอ
+setTimeout(() => {
+    if (typeof window.refreshActiveCustomerDetailRealtime === 'function' && customerId) {
+        window.refreshActiveCustomerDetailRealtime(customerId);
+    }
+
+    if (typeof window.renderSalesPage === 'function') {
+        window.renderSalesPage();
+    }
+}, 100);
 
     } catch (e) {
         console.error('confirmFinalPayment error:', e);
         Swal.fire('Error', 'เกิดข้อผิดพลาด: ' + (e.message || e), 'error');
+
+    } finally {
+        window.__confirmFinalPaymentLoading = false;
+
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = saveBtn.dataset.oldText || '💾 บันทึกบิล';
+        }
     }
 };
 
@@ -13531,63 +13609,81 @@ window.switchCustomerTab = async function(tabName, customerId) {
 
     const rowHtml = [];
 
-    for (const item of rows) {
-        const encoded = window.safeBase64Encode(item);
+for (const item of rows) {
+    const encoded = window.safeBase64Encode(item);
 
-        rowHtml.push(`
-            <div class="rounded-[2rem] border-2 border-slate-100 bg-white shadow-sm hover:shadow-md transition-all overflow-hidden">
-                <div class="grid grid-cols-12 gap-3 items-center px-6 py-5">
-                    <div class="col-span-12 md:col-span-4 text-left">
-                        <div class="font-black text-slate-900 text-lg italic">${window.escapeHtml(item.course_name || '-')}</div>
-                        <div class="text-[11px] text-slate-400 font-bold mt-1">
-                            รหัสคอร์ส: ${window.escapeHtml(item.course_code || '-')}
-                        </div>
+    rowHtml.push(`
+        <div class="rounded-[2rem] border-2 border-slate-100 bg-white shadow-sm hover:shadow-md transition-all overflow-hidden">
+            <div class="grid grid-cols-12 gap-3 items-center px-5 py-4 text-center">
+
+                <div class="col-span-6 md:col-span-2">
+                    <div class="font-black text-slate-800 text-sm">
+                        ${window.escapeHtml(item.invoice_no || '-')}
                     </div>
+                    <div class="text-[10px] text-slate-400 font-bold">เลขใบเสร็จ</div>
+                </div>
 
-                    <div class="col-span-6 md:col-span-2 text-center">
-                        <div class="text-3xl font-black text-blue-600 leading-none">
-                            ${Number(item.used_qty || 0)}/${Number(item.total_qty || 0)}
-                        </div>
-                        <div class="text-[11px] text-slate-400 font-bold">ใช้ไป / ทั้งหมด</div>
+                <div class="col-span-6 md:col-span-1">
+                    <div class="font-black text-[#D48197] text-sm">
+                        ${window.escapeHtml(item.course_code || '-')}
                     </div>
+                    <div class="text-[10px] text-slate-400 font-bold">รหัสคอร์ส</div>
+                </div>
 
-                    <div class="col-span-6 md:col-span-1 text-center">
-                        <div class="text-3xl font-black text-[#D48197] leading-none">
-                            ${Number(item.remaining_qty || 0)}
-                        </div>
-                        <div class="text-[11px] text-slate-400 font-bold">คงเหลือ</div>
-                    </div>
-
-                    <div class="col-span-6 md:col-span-2 text-center">
-                        <div class="font-black text-slate-700 text-lg">${window.escapeHtml(item.invoice_no || '-')}</div>
-                        <div class="text-[11px] text-slate-400 font-bold">เลขบิล</div>
-                    </div>
-
-                    <div class="col-span-3 md:col-span-1 text-center">
-                        <div class="font-black text-slate-500">${window.escapeHtml(item.unit || 'ครั้ง')}</div>
-                        <div class="text-[11px] text-slate-400 font-bold">หน่วย</div>
-                    </div>
-
-                    <div class="col-span-3 md:col-span-2 text-right">
-                        <button
-                            type="button"
-                            onclick="event.stopPropagation(); window.openEditCourseRemainingModal('${customerIdStr}', '${encoded}')"
-                            class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 text-slate-700 text-xs font-black hover:bg-pink-100 hover:text-pink-700 transition-all"
-                        >
-                            แก้ไขคอร์ส
-                            <span>✏️</span>
-                        </button>
+                <div class="col-span-12 md:col-span-3 text-left">
+                    <div class="font-black text-slate-900 text-base italic">
+                        ${window.escapeHtml(item.course_name || '-')}
                     </div>
                 </div>
-            </div>
-        `);
-    }
 
-    container.innerHTML = `
-        <div class="space-y-4 relative z-10">
-            ${rowHtml.join('')}
+                <div class="col-span-6 md:col-span-2">
+                    <div class="font-black text-slate-600 text-sm">
+                        ${window.escapeHtml(item.invoice_date || item.created_at?.split?.('T')?.[0] || '-')}
+                    </div>
+                    <div class="text-[10px] text-slate-400 font-bold">วันที่ซื้อ</div>
+                </div>
+
+                <div class="col-span-3 md:col-span-1">
+                    <div class="font-black text-slate-500">
+                        ${Number(item.total_qty || 0)}
+                    </div>
+                    <div class="text-[10px] text-slate-400 font-bold">จำนวน</div>
+                </div>
+
+                <div class="col-span-3 md:col-span-1">
+                    <div class="font-black text-blue-600">
+                        ${Number(item.used_qty || 0)}
+                    </div>
+                    <div class="text-[10px] text-slate-400 font-bold">ใช้ไป</div>
+                </div>
+
+                <div class="col-span-3 md:col-span-1">
+                    <div class="font-black text-[#D48197]">
+                        ${Number(item.remaining_qty || 0)}
+                    </div>
+                    <div class="text-[10px] text-slate-400 font-bold">คงเหลือ</div>
+                </div>
+
+                <div class="col-span-9 md:col-span-1 text-right">
+                    <button
+                        type="button"
+                        onclick="event.stopPropagation(); window.openEditCourseRemainingModal('${customerIdStr}', '${encoded}')"
+                        class="inline-flex items-center gap-1 px-3 py-2 rounded-full bg-slate-100 text-slate-700 text-[11px] font-black hover:bg-pink-100 hover:text-pink-700 transition-all"
+                    >
+                        แก้ไข ✏️
+                    </button>
+                </div>
+
+            </div>
         </div>
-    `;
+    `);
+}
+
+container.innerHTML = `
+    <div class="space-y-3 relative z-10">
+        ${rowHtml.join('')}
+    </div>
+`;
 }
 
    else if (tabName === 'usage') {
@@ -13823,49 +13919,6 @@ window.refreshRemainingTabOnly = async function() {
 /* =======================================================
     💰 ZONE 5.5: BILLING & EXPENSE (ส่วนของรายจ่าย OUTGOING)
    ======================================================= */
-window.loadSalesHistory = async function() {
-    if (!window.supabaseClient) {
-        console.error('No supabase');
-        return [];
-    }
-
-    const currentUser = (typeof window.getCurrentUserSafe === 'function')
-        ? window.getCurrentUserSafe()
-        : (JSON.parse(localStorage.getItem('currentUser')) || {});
-
-    const rawViewingBranch = (typeof window.getCurrentViewingBranch === 'function')
-        ? window.getCurrentViewingBranch()
-        : (currentUser.viewingBranch || currentUser.homeBranch || currentUser.branch || 'ทุกสาขา');
-
-    const rawBranchText = String(rawViewingBranch || '').trim();
-    const isAllBranches = rawBranchText === 'ทุกสาขา';
-
-    const safeViewingBranch = rawBranchText
-        .replace('เอซคลินิก', '')
-        .replace('ACE Clinic', '')
-        .replace('สาขา', '')
-        .replace(':', '')
-        .trim();
-
-    let query = window.supabaseClient
-        .from('sales_header')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-    if (!isAllBranches && safeViewingBranch) {
-        query = query.eq('branch_name', safeViewingBranch);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-        console.error('loadSalesHistory error:', error);
-        return [];
-    }
-
-    return Array.isArray(data) ? data : [];
-};
-
 window.renderExpensePage = async function() {
     const target =
         document.getElementById('dynamicContent') ||
@@ -14495,7 +14548,8 @@ window.editMasterCourseById = async function(courseId) {
 
     document.getElementById('newCourseName').value = course.course_name || '';
     document.getElementById('newCourseCat').value = course.category_name || '';
-    document.getElementById('newCoursePrice').value = String(course.price || '').replace(/,/g, '');
+    const editPrice = Number(course.price || course.course_fee || course.course_opd || course.course_ipd || 0);
+document.getElementById('newCoursePrice').value = String(editPrice || '').replace(/,/g, '');
     document.getElementById('newCourseAmount').value = course.amount || 1;
     document.getElementById('newCourseUnit').value = course.unit || 'ครั้ง';
     document.getElementById('newCourseDF').value = String(course.staff_df || '').replace(/,/g, '');
@@ -14551,12 +14605,17 @@ window.editMasterCourseById = async function(courseId) {
 
         window.closeCourseModal();
 
-        if (typeof window.loadCourseMaster === 'function') {
-            window.courseMasterCache = await window.loadCourseMaster();
-        }
-        if (typeof window.updateCourseMasterTable === 'function') {
-            window.updateCourseMasterTable();
-        }
+	// ✅ ล้าง cache เก่าก่อน เพื่อให้หน้าตีบิลดึงราคาใหม่
+	window.courseMasterCache = [];
+	window.courseMasterCacheLoadedAt = 0;
+
+	if (typeof window.loadCourseMaster === 'function') {
+    window.courseMasterCache = await window.loadCourseMaster();
+	}
+
+	if (typeof window.updateCourseMasterTable === 'function') {
+    window.updateCourseMasterTable();
+	}
     };
 };
 
@@ -14886,7 +14945,7 @@ window.updateCourseMasterTable = function() {
             : '-';
 
         const displayCategory = mapCategoryName(c);
-        const displayPrice = pickNum(c.course_opd, c.course_ipd, c.course_fee, c.price);
+        const displayPrice = pickNum(c.price, c.course_opd, c.course_ipd, c.course_fee);
         const displayAmount = pickNum(c.amount, 1);
         const displayUnit = pickText(c.unit, 'ครั้ง');
 

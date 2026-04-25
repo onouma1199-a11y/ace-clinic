@@ -5366,74 +5366,60 @@ window.importLegacyCustomersToSupabase = async function(rows, selectedBranch) {
     const possibleBranches = [branch, `สาขา${branch}`];
 
     Swal.fire({
-        title: 'กำลังตรวจสอบข้อมูลเดิม',
-        text: 'กรุณารอสักครู่นะคะ...',
+        title: 'กำลังกู้ข้อมูลลูกค้าเดิม',
+        text: 'ระบบจะอัปเดตเฉพาะลูกค้าที่มี old_hn + สาขาตรงกันเท่านั้น',
         allowOutsideClick: false,
-        didOpen: () => { Swal.showLoading(); }
+        didOpen: () => Swal.showLoading()
     });
 
-    const oldHNMap = {};
-    const existingHNSet = new Set();
+    const customerMap = {};
     let from = 0;
     const step = 1000;
     let hasMore = true;
 
     while (hasMore) {
-        const { data: existingRows, error: existingError } = await window.supabaseClient
+        const { data, error } = await window.supabaseClient
             .from('customers')
-            .select('id, hn, old_hn, branch')
+            .select('id, old_hn, branch')
             .in('branch', possibleBranches)
             .range(from, from + step - 1);
 
-        if (existingError) {
+        if (error) {
             Swal.close();
-            console.error('load existing customers error:', existingError);
             return Swal.fire('Error', 'โหลดข้อมูลลูกค้าเดิมไม่สำเร็จ', 'error');
         }
 
-        const rowsInPage = Array.isArray(existingRows) ? existingRows : [];
-        if (rowsInPage.length < step) hasMore = false;
+        const pageRows = Array.isArray(data) ? data : [];
+        if (pageRows.length < step) hasMore = false;
 
-        rowsInPage.forEach(item => {
-            const normalizedBranch = window.normalizeImportBranch(item.branch);
-            const oldHNKey = `${String(item.old_hn || '').trim().toUpperCase()}|${normalizedBranch}`;
-            const hnOnly = String(item.hn || '').trim().toUpperCase();
-
-            if (String(item.old_hn || '').trim()) {
-                oldHNMap[oldHNKey] = item;
-            }
-
-            if (hnOnly) {
-                existingHNSet.add(hnOnly);
-            }
+        pageRows.forEach(c => {
+            const oldHN = String(c.old_hn || '').trim().toUpperCase();
+            const b = window.normalizeImportBranch(c.branch);
+            if (oldHN) customerMap[`${oldHN}|${b}`] = c;
         });
 
         from += step;
     }
 
-    let nextRunningNo = await window.getNextCustomerHNRunning(branch);
-
-    const payload = [];
+    const updates = [];
     const skipped = [];
-    const usedHNSet = new Set();
-    const uniqueOldHNInFile = new Set();
 
     rows.forEach((row, index) => {
-        const oldHNRaw = String(
-            window.pickImportField(row, ['รหัสลูกค้า', 'hn', 'old_hn']) || ''
+        const oldHN = String(
+            window.pickImportField(row, ['รหัสลูกค้า', 'hn', 'old_hn'])
         ).trim().toUpperCase();
 
-        if (!oldHNRaw) {
-            skipped.push(`แถว ${index + 2}: ไม่มีรหัสลูกค้าเก่า`);
+        if (!oldHN) {
+            skipped.push(`แถว ${index + 2}: ไม่มีรหัสลูกค้า`);
             return;
         }
 
-        const fileKey = `${oldHNRaw}|${branch}`;
-        if (uniqueOldHNInFile.has(fileKey)) {
-            skipped.push(`แถว ${index + 2}: old_hn ซ้ำในไฟล์`);
+        const found = customerMap[`${oldHN}|${branch}`];
+
+        if (!found) {
+            skipped.push(`แถว ${index + 2}: ไม่พบลูกค้า old_hn ${oldHN}`);
             return;
         }
-        uniqueOldHNInFile.add(fileKey);
 
         let fName = window.cleanImportText(window.pickImportField(row, ['ชื่อ', 'ชื่อจริง']));
         let lName = window.cleanImportText(window.pickImportField(row, ['นามสกุล']));
@@ -5444,140 +5430,65 @@ window.importLegacyCustomersToSupabase = async function(rows, selectedBranch) {
             lName = parts.slice(1).join(' ') || '';
         }
 
-        const finalFullname = [fName, lName].filter(Boolean).join(' ').trim();
+        const fullname = [fName, lName].filter(Boolean).join(' ').trim();
 
-        const phone = window.cleanImportPhone(window.pickImportField(row, ['โทร', 'เบอร์โทร']));
-        const citizenId = window.cleanImportCitizenId(window.pickImportField(row, ['เลขบัตรประชาชน', 'เลขประชาชน']));
-        const nickname = window.cleanImportText(window.pickImportField(row, ['ชื่อเล่น']));
-
-        const birthDate = window.parseImportBirthDate(
-            window.pickImportField(row, ['วันเกิด', 'birth_date', 'dob'])
-        );
-
-        const addressBase = window.cleanImportText(window.pickImportField(row, ['ที่อยู่']));
-        const subDistrict = window.cleanImportText(window.pickImportField(row, ['ตำบล/แขวง']));
-        const district = window.cleanImportText(window.pickImportField(row, ['อำเภอ/เขต']));
-        const province = window.cleanImportText(window.pickImportField(row, ['จังหวัด']));
-        const zipCode = window.cleanImportText(window.pickImportField(row, ['รหัสไปรษณีย์']));
-
-        const fullAddress = [addressBase, subDistrict, district, province, zipCode]
-            .filter(v => v && String(v).trim() !== '' && v !== 'ไม่ระบุ')
-            .join(' ')
-            .trim();
-
-        const existingCustomer = oldHNMap[fileKey];
-        let targetHN = existingCustomer?.hn ? String(existingCustomer.hn).trim().toUpperCase() : '';
-
-        if (!targetHN) {
-            while (true) {
-                const candidateHN = window.buildNewCustomerHN(branch, nextRunningNo).toUpperCase();
-
-                if (!existingHNSet.has(candidateHN) && !usedHNSet.has(candidateHN)) {
-                    targetHN = candidateHN;
-                    existingHNSet.add(candidateHN);
-                    usedHNSet.add(candidateHN);
-                    nextRunningNo += 1;
-                    break;
-                }
-
-                nextRunningNo += 1;
-            }
-        }
-
-        payload.push({
-            hn: targetHN,
-            old_hn: oldHNRaw,
+        updates.push({
+            id: found.id,
             first_name: fName || null,
             last_name: lName || null,
-            fullname: finalFullname || null,
-            nickname: nickname || null,
-            phone: phone || null,
-            citizen_id: citizenId || null,
-            birth_date: birthDate || null,
-            address: fullAddress || null,
-            branch: branch,
-            status: 'ปกติ',
-            allergy: window.cleanImportText(window.pickImportField(row, ['แพ้ยา'])) || 'ไม่มี',
-            chronic: window.cleanImportText(window.pickImportField(row, ['โรคประจำตัว'])) || null,
-            seller: window.cleanImportText(window.pickImportField(row, ['เซลล์'])) || null,
+            fullname: fullname || null,
+            nickname: window.cleanImportText(window.pickImportField(row, ['ชื่อเล่น'])) || null,
+            phone: window.cleanImportPhone(window.pickImportField(row, ['โทร', 'เบอร์โทร'])) || null,
+            birth_date: window.parseImportBirthDate(window.pickImportField(row, ['วันเกิด', 'birth_date', 'dob'])) || null,
+            address: window.buildImportAddress(row) || null,
+            citizen_id: window.cleanImportCitizenId(window.pickImportField(row, ['เลขบัตรประชาชน', 'เลขประชาชน'])) || null,
             updated_at: new Date().toISOString()
         });
     });
 
-    if (!payload.length) {
+    if (!updates.length) {
         Swal.close();
-        return Swal.fire(
-            'ไม่พบข้อมูลที่นำเข้าได้',
-            skipped.slice(0, 10).join('\n') || 'ไม่มีข้อมูล',
-            'warning'
-        );
+        return Swal.fire('ไม่พบข้อมูลที่กู้ได้', skipped.slice(0, 20).join('\n'), 'warning');
     }
 
     let successCount = 0;
     const chunkSize = 50;
 
-    Swal.fire({
-        title: 'กำลังนำเข้าข้อมูลลูกค้า',
-        html: `กำลังบันทึก: <b id="import-proc" class="text-pink-500">0</b> จาก ${payload.length} รายการ`,
-        allowOutsideClick: false,
-        didOpen: () => { Swal.showLoading(); }
-    });
-
     try {
-        for (let i = 0; i < payload.length; i += chunkSize) {
-            const chunk = payload.slice(i, i + chunkSize);
+        for (let i = 0; i < updates.length; i += chunkSize) {
+            const chunk = updates.slice(i, i + chunkSize);
 
             const { error } = await window.supabaseClient
                 .from('customers')
                 .upsert(chunk, {
-                    onConflict: 'old_hn,branch',
+                    onConflict: 'id',
                     ignoreDuplicates: false
                 });
 
-            if (error) {
-                if (String(error.message || '').includes('customers_hn_branch_unique')) {
-                    throw new Error(`เลข HN ใหม่ที่ระบบเจนให้ซ้ำในฐานข้อมูล (ช่วงแถวประมาณ ${i + 1})`);
-                }
-                throw error;
-            }
+            if (error) throw error;
 
             successCount += chunk.length;
-
-            const procEl = document.getElementById('import-proc');
-            if (procEl) procEl.innerText = successCount;
-
-            await new Promise(r => setTimeout(r, 150));
         }
 
         Swal.close();
 
-        const msg = [
-            `นำเข้า/อัปเดตสำเร็จ ${successCount} รายการ`,
-            skipped.length ? `ข้าม ${skipped.length} รายการ` : ''
-        ].filter(Boolean).join('\n');
-
         await Swal.fire({
             icon: 'success',
-            title: 'นำเข้าเรียบร้อยค่ะ',
-            text: msg,
+            title: 'กู้ข้อมูลสำเร็จ',
+            text: `อัปเดตลูกค้าเดิม ${successCount} รายการ / ข้าม ${skipped.length} รายการ`,
             confirmButtonColor: '#D48197'
         });
 
+        window.clearCustomerCache?.();
+
+        if (typeof window.applyCustomerFilter === 'function') {
+            await window.applyCustomerFilter();
+        }
+
     } catch (err) {
-        console.error('Import Error:', err);
-        Swal.fire({
-            icon: 'error',
-            title: 'การนำเข้าหยุดชะงัก',
-            text: err.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล',
-            confirmButtonColor: '#ef4444'
-        });
+        console.error('restore customers error:', err);
+        Swal.fire('ผิดพลาด', err.message || 'กู้ข้อมูลไม่สำเร็จ', 'error');
     }
-
-    window.clearCustomerCache();
-
-if (typeof window.applyCustomerFilter === 'function') {
-    await window.applyCustomerFilter();
-}
 };
 /* =======================================================
    📅 ZONE 4: APPOINTMENT & QUEUE (ระบบนัดหมาย & จัดการคิว)
@@ -14819,6 +14730,60 @@ window.saveNewMasterCourse = async function() {
         return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
     }
 
+    const toNumber = (v, fallback = 0) => {
+        const n = Number(String(v ?? '').replace(/,/g, ''));
+        return Number.isFinite(n) ? n : fallback;
+    };
+
+    const normalizeBranch = (value) => String(value || '')
+        .replace('เอซคลินิก', '')
+        .replace('ACE Clinic', '')
+        .replace('สาขา', '')
+        .replace(':', '')
+        .trim();
+
+    const getCourseBranchCode = (branch) => {
+        const b = normalizeBranch(branch);
+        if (b.includes('บางพลี')) return 'BP';
+        if (b.includes('อุดมสุข')) return 'US';
+        if (b.includes('ชลบุรี')) return 'CB';
+        return (b || 'GEN').slice(0, 2).toUpperCase();
+    };
+
+    const generateNextCourseCode = async (branchName) => {
+        const branchCode = getCourseBranchCode(branchName);
+        const prefix = `${branchCode}-C-`;
+
+        const { data, error } = await window.supabaseClient
+            .from('course_master')
+            .select('old_course_code, old_course_code_acc, course_code, item_code, code')
+            .eq('branch_name', branchName);
+
+        if (error) {
+            console.error('generateNextCourseCode error:', error);
+            return `${prefix}0001`;
+        }
+
+        let maxNo = 0;
+
+        (data || []).forEach(row => {
+            const code = String(
+                row.old_course_code ||
+                row.old_course_code_acc ||
+                row.course_code ||
+                row.item_code ||
+                row.code ||
+                ''
+            ).trim();
+
+            const match = code.match(new RegExp(`^${prefix}(\\d+)$`));
+            const num = match ? parseInt(match[1], 10) : 0;
+            maxNo = Math.max(maxNo, num);
+        });
+
+        return `${prefix}${String(maxNo + 1).padStart(4, '0')}`;
+    };
+
     const name = document.getElementById('newCourseName')?.value.trim() || '';
     const cat = document.getElementById('newCourseCat')?.value.trim() || '';
     const price = document.getElementById('newCoursePrice')?.value || 0;
@@ -14835,19 +14800,12 @@ window.saveNewMasterCourse = async function() {
         ? window.getCurrentUserSafe()
         : (JSON.parse(localStorage.getItem('currentUser')) || {});
 
-    // ✅ ใช้สาขาที่กำลังเปิดดูอยู่ ไม่ใช่สาขาประจำ user
     const viewingBranch = (typeof window.getCurrentViewingBranch === 'function')
         ? window.getCurrentViewingBranch()
         : (user.viewingBranch || user.homeBranch || user.branch || '');
 
-    const safeViewingBranch = String(viewingBranch || '')
-        .replace('เอซคลินิก', '')
-        .replace('ACE Clinic', '')
-        .replace('สาขา', '')
-        .replace(':', '')
-        .trim();
+    const safeViewingBranch = normalizeBranch(viewingBranch);
 
-    // ✅ ถ้าอยู่หน้า "ทุกสาขา" ห้ามเพิ่ม
     if (!safeViewingBranch || safeViewingBranch === 'ทุกสาขา') {
         return Swal.fire(
             'กรุณาเลือกสาขาก่อน',
@@ -14856,28 +14814,37 @@ window.saveNewMasterCourse = async function() {
         );
     }
 
+    // ✅ ใช้รหัสจากช่องใน modal ถ้ามี / ถ้าไม่มีให้รันใหม่
+    const codeInput = document.getElementById('newCourseCode');
+    const newCourseCode = String(codeInput?.value || '').trim()
+        || await generateNextCourseCode(safeViewingBranch);
+
     const payload = {
-        old_course_code: null,
+        old_course_code: newCourseCode,
         old_course_name_acc: null,
-        old_course_code_acc: null,
+        old_course_code_acc: newCourseCode,
+
         category_name: cat,
         course_name: name,
         unit: unit,
-        amount: parseFloat(amount) || 1,
-        price: parseFloat(price) || 0,
-        staff_df: parseFloat(staffDF) || 0,
-        doctor_df: parseFloat(doctorDF) || 0,
+        amount: toNumber(amount, 1) || 1,
+        price: toNumber(price, 0),
+        staff_df: toNumber(staffDF, 0),
+        doctor_df: toNumber(doctorDF, 0),
+
         course_opd: null,
         course_ipd: null,
         course_use_date: null,
         course_cost: 0,
-        course_fee: parseFloat(price) || 0,
+        course_fee: toNumber(price, 0),
         category_type_id: null,
         course_lock_drug: null,
         course_fee_nr: 0,
-        course_fee_tr: parseFloat(doctorDF) || 0,
+        course_fee_tr: toNumber(doctorDF, 0),
+
         branch_name: safeViewingBranch,
         is_active: true,
+        created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
     };
 
@@ -14893,16 +14860,21 @@ window.saveNewMasterCourse = async function() {
 
         Swal.fire({
             icon: 'success',
-            title: `บันทึกคอร์ส "${name}" ลงสาขา ${safeViewingBranch} เรียบร้อยแล้วค่ะ!`,
-            timer: 1400,
+            title: `บันทึกคอร์ส "${name}" เรียบร้อยแล้วค่ะ`,
+            text: `รหัสคอร์ส: ${newCourseCode}`,
+            timer: 1600,
             showConfirmButton: false
         });
 
         window.closeCourseModal();
 
+        window.courseMasterCache = [];
+        window.courseMasterCacheLoadedAt = 0;
+
         if (typeof window.loadCourseMaster === 'function') {
             window.courseMasterCache = await window.loadCourseMaster();
         }
+
         if (typeof window.updateCourseMasterTable === 'function') {
             window.updateCourseMasterTable();
         }
@@ -14912,6 +14884,130 @@ window.saveNewMasterCourse = async function() {
         Swal.fire('เกิดข้อผิดพลาด', e.message || 'บันทึกคอร์สไม่สำเร็จ', 'error');
     }
 };
+
+/* ✅ สร้างรหัสคอร์สแบบ BP-C-0001 / US-C-0001 / CB-C-0001 */
+window.generateCourseCode = async function(branchName) {
+    try {
+        if (!window.supabaseClient) return '';
+
+        const normalizeBranch = (value) => String(value || '')
+            .replace('เอซคลินิก', '')
+            .replace('ACE Clinic', '')
+            .replace('สาขา', '')
+            .replace(':', '')
+            .trim();
+
+        const getBranchCode = (branch) => {
+            const b = normalizeBranch(branch);
+            if (b.includes('บางพลี')) return 'BP';
+            if (b.includes('อุดมสุข')) return 'US';
+            if (b.includes('ชลบุรี')) return 'CB';
+            return (b || 'GEN').slice(0, 2).toUpperCase();
+        };
+
+        const safeBranch = normalizeBranch(branchName);
+        const branchCode = getBranchCode(safeBranch);
+        const prefix = `${branchCode}-C-`;
+
+        const { data, error } = await window.supabaseClient
+            .from('course_master')
+            .select('old_course_code, old_course_code_acc, course_code, item_code, code')
+            .eq('branch_name', safeBranch);
+
+        if (error) {
+            console.error('generateCourseCode error:', error);
+            return `${prefix}0001`;
+        }
+
+        let maxNo = 0;
+
+        (data || []).forEach(row => {
+            const code = String(
+                row.old_course_code ||
+                row.course_code ||
+                row.item_code ||
+                row.code ||
+                row.old_course_code_acc ||
+                ''
+            ).trim();
+
+            const match = code.match(new RegExp(`^${prefix}(\\d{4,})$`));
+            if (match) {
+                maxNo = Math.max(maxNo, parseInt(match[1], 10));
+            }
+        });
+
+        return `${prefix}${String(maxNo + 1).padStart(4, '0')}`;
+
+    } catch (e) {
+        console.error('generateCourseCode exception:', e);
+        return '';
+    }
+};
+
+
+/* ✅ เพิ่มช่องรหัสคอร์สใน Modal ทั้งตอนเพิ่มใหม่และแก้ไข */
+window.ensureCourseCodeField = async function(defaultCode = '') {
+    const nameInput = document.getElementById('newCourseName');
+    if (!nameInput) return;
+
+    let codeInput = document.getElementById('newCourseCode');
+
+    if (!codeInput) {
+        const codeBox = document.createElement('div');
+        codeBox.innerHTML = `
+            <label class="text-[11px] text-[#D48197] ml-2 block font-bold mb-1 uppercase tracking-wider">
+                รหัสคอร์ส
+            </label>
+            <input id="newCourseCode"
+                class="${nameInput.className}"
+                placeholder="ระบบสร้างให้อัตโนมัติ เช่น BP-C-0001"
+                readonly>
+        `;
+
+        const nameBox = nameInput.parentElement;
+        if (nameBox && nameBox.parentElement) {
+            nameBox.parentElement.insertBefore(codeBox, nameBox);
+        }
+    }
+
+    codeInput = document.getElementById('newCourseCode');
+
+    if (codeInput) {
+        if (defaultCode) {
+            codeInput.value = defaultCode;
+        } else {
+            const viewingBranch = typeof window.getCurrentViewingBranch === 'function'
+                ? window.getCurrentViewingBranch()
+                : '';
+
+            codeInput.value = await window.generateCourseCode(viewingBranch);
+        }
+    }
+};
+
+
+/* ✅ ครอบ openAddCourseModal เดิม ให้กดเพิ่มคอร์สแล้วมีช่องรหัสทันที */
+if (typeof window.openAddCourseModal === 'function' && !window.__openAddCourseModalPatched) {
+    window.__openAddCourseModalOriginal = window.openAddCourseModal;
+
+    window.openAddCourseModal = async function(...args) {
+        const result = window.__openAddCourseModalOriginal.apply(this, args);
+
+        setTimeout(async () => {
+            const titleText = document.querySelector('#courseModal h3')?.innerText || '';
+
+            // ถ้าเป็นเพิ่มใหม่ ให้สร้างรหัสใหม่
+            if (!titleText.includes('แก้ไข')) {
+                await window.ensureCourseCodeField('');
+            }
+        }, 80);
+
+        return result;
+    };
+
+    window.__openAddCourseModalPatched = true;
+}
 
 window.editMasterCourseById = async function(courseId) {
     if (!window.supabaseClient) {
@@ -14938,6 +15034,25 @@ window.editMasterCourseById = async function(courseId) {
     const titleEl = document.querySelector('#courseModal h3');
     if (titleEl) titleEl.innerText = "📝 แก้ไขรายการคอร์ส";
 
+    // ✅ เพิ่มช่องรหัสคอร์ส ถ้ายังไม่มีใน Modal
+    const nameInput = document.getElementById('newCourseName');
+    if (nameInput && !document.getElementById('newCourseCode')) {
+        const codeBox = document.createElement('div');
+        codeBox.innerHTML = `
+            <label class="text-[11px] text-[#D48197] ml-2 block font-bold mb-1 uppercase tracking-wider">
+                รหัสคอร์ส
+            </label>
+            <input id="newCourseCode"
+                class="${nameInput.className}"
+                placeholder="เช่น BP-C-0001">
+        `;
+
+        const parent = nameInput.parentElement;
+        if (parent) {
+            parent.parentElement.insertBefore(codeBox, parent);
+        }
+    }
+
     const saveBtn = document.querySelector('#courseModal button[onclick="window.saveNewMasterCourse()"]')
         || document.querySelector('#courseModal button[onclick="saveNewMasterCourse()"]');
 
@@ -14945,21 +15060,35 @@ window.editMasterCourseById = async function(courseId) {
 
     saveBtn.innerText = "อัปเดตข้อมูล";
 
+    const courseCode =
+        course.old_course_code ||
+        course.course_code ||
+        course.item_code ||
+        course.code ||
+        course.old_course_code_acc ||
+        '';
+
+    if (!courseCode) {
+    const { safeViewingBranch } = window.getSafeViewingBranch();
+    document.getElementById('newCourseCode').value =
+        await window.generateCourseCode(safeViewingBranch);
+} else {
+    document.getElementById('newCourseCode').value = courseCode;
+}
     document.getElementById('newCourseName').value = course.course_name || '';
     document.getElementById('newCourseCat').value = course.category_name || '';
+
     const editPrice = Number(course.price || course.course_fee || course.course_opd || course.course_ipd || 0);
-document.getElementById('newCoursePrice').value = String(editPrice || '').replace(/,/g, '');
+    document.getElementById('newCoursePrice').value = String(editPrice || '').replace(/,/g, '');
     document.getElementById('newCourseAmount').value = course.amount || 1;
     document.getElementById('newCourseUnit').value = course.unit || 'ครั้ง';
     document.getElementById('newCourseDF').value = String(course.staff_df || '').replace(/,/g, '');
     document.getElementById('newCourseDoctorDF').value = String(course.doctor_df || '').replace(/,/g, '');
 
     saveBtn.removeAttribute('onclick');
-    saveBtn.onclick = async function() {
-        if (!window.supabaseClient) {
-            return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
-        }
 
+    saveBtn.onclick = async function() {
+        const code = document.getElementById('newCourseCode')?.value.trim() || '';
         const name = document.getElementById('newCourseName')?.value.trim() || '';
         const cat = document.getElementById('newCourseCat')?.value.trim() || '';
         const price = document.getElementById('newCoursePrice')?.value || 0;
@@ -14973,6 +15102,7 @@ document.getElementById('newCoursePrice').value = String(editPrice || '').replac
         }
 
         const payload = {
+            old_course_code: code || null,
             course_name: name,
             category_name: cat,
             price: parseFloat(price) || 0,
@@ -15004,17 +15134,16 @@ document.getElementById('newCoursePrice').value = String(editPrice || '').replac
 
         window.closeCourseModal();
 
-	// ✅ ล้าง cache เก่าก่อน เพื่อให้หน้าตีบิลดึงราคาใหม่
-	window.courseMasterCache = [];
-	window.courseMasterCacheLoadedAt = 0;
+        window.courseMasterCache = [];
+        window.courseMasterCacheLoadedAt = 0;
 
-	if (typeof window.loadCourseMaster === 'function') {
-    window.courseMasterCache = await window.loadCourseMaster();
-	}
+        if (typeof window.loadCourseMaster === 'function') {
+            window.courseMasterCache = await window.loadCourseMaster();
+        }
 
-	if (typeof window.updateCourseMasterTable === 'function') {
-    window.updateCourseMasterTable();
-	}
+        if (typeof window.updateCourseMasterTable === 'function') {
+            window.updateCourseMasterTable();
+        }
     };
 };
 
@@ -15228,40 +15357,51 @@ const uniqueCats = [...new Set(
     window.updateCourseMasterTable();
 };
 
-window.currentCoursePage = 1;
+window.currentCoursePage = window.currentCoursePage || 1;
 
 window.updateCourseMasterTable = function() {
     const tbody = document.getElementById('courseMasterTableBody');
     if (!tbody) return;
 
-    const pageSize = parseInt(document.getElementById('coursePageSize')?.value) || 10;
+    const pageSize = parseInt(document.getElementById('coursePageSize')?.value || '10', 10) || 10;
     const branchFilter = document.getElementById('courseBranchFilter')?.value || 'ทั้งหมด';
     const catFilter = document.getElementById('courseCatFilter')?.value || 'ทั้งหมด';
-    const searchTerm = (document.getElementById('searchCourseInput')?.value || '').toLowerCase().trim();
+    const searchTerm = String(document.getElementById('searchCourseInput')?.value || '').toLowerCase().trim();
 
-    let masterDB = Array.isArray(window.courseMasterCache) ? [...window.courseMasterCache] : [];
-	masterDB.sort((a, b) => {
-    const dateA = new Date(a.updated_at || a.created_at || 0);
-    const dateB = new Date(b.updated_at || b.created_at || 0);
-    return dateB - dateA;
-});
+    const escapeHtml = window.escapeHtml || function(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    };
 
     const pickText = (...vals) => {
         for (const v of vals) {
-            if (String(v ?? '').trim() !== '') return String(v).trim();
+            const text = String(v ?? '').trim();
+            if (text) return text;
         }
         return '';
     };
 
     const pickNum = (...vals) => {
         for (const v of vals) {
-            const n = parseFloat(v);
-            if (!Number.isNaN(n) && n > 0) return n;
+            if (v === 0 || v === '0') return 0;
+            const n = Number(String(v ?? '').replace(/,/g, ''));
+            if (Number.isFinite(n) && n > 0) return n;
         }
         return 0;
     };
 
-    const normalizeBranch = (value) => String(value || '').replace('สาขา', '').replace(':', '').trim();
+    const normalizeBranch = (value) => {
+        return String(value || '')
+            .replace('เอซคลินิก', '')
+            .replace('ACE Clinic', '')
+            .replace('สาขา', '')
+            .replace(':', '')
+            .trim();
+    };
 
     const mapCategoryName = (row) => {
         const direct = String(row.category_name || '').trim();
@@ -15270,10 +15410,6 @@ window.updateCourseMasterTable = function() {
         const typeId = String(row.category_type_id || '').trim();
         const courseName = String(row.course_name || '').toLowerCase();
 
-        // ถ้ามีชื่อหมวดอยู่แล้วให้ใช้ก่อน
-        if (direct) return direct;
-
-        // map จาก category_type_id
         const categoryMap = {
             '1': 'โบท็อก',
             '2': 'คอร์ส/บริการ',
@@ -15284,16 +15420,18 @@ window.updateCourseMasterTable = function() {
 
         if (categoryMap[typeId]) return categoryMap[typeId];
 
-        // fallback เดาจากชื่อคอร์ส
         if (courseName.includes('botox') || courseName.includes('nabota') || courseName.includes('allergan') || courseName.includes('dysport')) {
             return 'โบท็อก';
         }
+
         if (courseName.includes('วิตามิน') || courseName.includes('drip') || courseName.includes('iv') || courseName.includes('gluta') || courseName.includes('pink glow')) {
             return 'ฉีดผิว/วิตามิน';
         }
+
         if (courseName.includes('laser') || courseName.includes('เลเซอร์') || courseName.includes('ipl') || courseName.includes('co2')) {
             return 'เลเซอร์';
         }
+
         if (courseName.includes('treat') || courseName.includes('treatment') || courseName.includes('ทรีท') || courseName.includes('cooling') || courseName.includes('ionto')) {
             return 'ทรีทเม้นท์';
         }
@@ -15301,14 +15439,44 @@ window.updateCourseMasterTable = function() {
         return 'คอร์ส/บริการ';
     };
 
+    // ✅ ไม่เอา UUID มาแสดงเป็นรหัส
+    const getDisplayCode = (c) => {
+        const code = pickText(
+            c.old_course_code,
+            c.course_code,
+            c.item_code,
+            c.code,
+            c.old_course_code_acc
+        );
+
+        return code || 'ยังไม่มีรหัส';
+    };
+
+    let masterDB = Array.isArray(window.courseMasterCache) ? [...window.courseMasterCache] : [];
+
+    masterDB.sort((a, b) => {
+        const dateA = new Date(a.updated_at || a.created_at || 0).getTime() || 0;
+        const dateB = new Date(b.updated_at || b.created_at || 0).getTime() || 0;
+        return dateB - dateA;
+    });
+
     const filteredData = masterDB.filter(c => {
         const rowBranch = normalizeBranch(c.branch_name);
         const displayCategory = mapCategoryName(c);
+        const displayCode = getDisplayCode(c);
 
-        const matchSearch =
-            String(c.course_name || '').toLowerCase().includes(searchTerm) ||
-            String(c.old_course_code || '').toLowerCase().includes(searchTerm) ||
-            String(c.id || '').toLowerCase().includes(searchTerm);
+        const searchableText = [
+            c.course_name,
+            c.category_name,
+            c.old_course_code,
+            c.course_code,
+            c.item_code,
+            c.code,
+            c.old_course_code_acc,
+            displayCode
+        ].map(v => String(v || '').toLowerCase()).join(' ');
+
+        const matchSearch = !searchTerm || searchableText.includes(searchTerm);
 
         const matchCat =
             catFilter === 'ทั้งหมด' ||
@@ -15316,20 +15484,27 @@ window.updateCourseMasterTable = function() {
 
         const matchBranch =
             branchFilter === 'ทั้งหมด' ||
+            normalizeBranch(branchFilter) === 'ทั้งหมด' ||
             rowBranch === normalizeBranch(branchFilter);
 
         return matchSearch && matchCat && matchBranch;
     });
 
     const totalPages = Math.ceil(filteredData.length / pageSize) || 1;
-    if (window.currentCoursePage > totalPages) window.currentCoursePage = totalPages;
-    if (window.currentCoursePage < 1) window.currentCoursePage = 1;
+    window.currentCoursePage = Math.min(Math.max(window.currentCoursePage || 1, 1), totalPages);
 
     const startIndex = (window.currentCoursePage - 1) * pageSize;
     const paginatedData = filteredData.slice(startIndex, startIndex + pageSize);
 
     if (paginatedData.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="p-20 text-center italic text-slate-400 font-normal">📭 ไม่พบข้อมูลคอร์สที่ต้องการค้นหาค่ะ</td></tr>`;
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" class="p-20 text-center italic text-slate-400 font-normal">
+                    📭 ไม่พบข้อมูลคอร์สที่ต้องการค้นหาค่ะ
+                </td>
+            </tr>
+        `;
+
         if (typeof window.renderCoursePagination === 'function') {
             window.renderCoursePagination(0, filteredData.length);
         }
@@ -15338,70 +15513,95 @@ window.updateCourseMasterTable = function() {
 
     tbody.innerHTML = paginatedData.map((c, idx) => {
         const displayIdx = startIndex + idx + 1;
-        const displayCode = c.old_course_code || '-';
+        const displayCode = getDisplayCode(c);
+
         const displayCreatedAt = c.created_at
             ? new Date(c.created_at).toLocaleDateString('th-TH')
             : '-';
 
         const displayCategory = mapCategoryName(c);
         const displayPrice = pickNum(c.price, c.course_opd, c.course_ipd, c.course_fee);
-        const displayAmount = pickNum(c.amount, 1);
-        const displayUnit = pickText(c.unit, 'ครั้ง');
-
-        // ค่ามือพนักงาน: ใช้ staff_df ก่อน ถ้าไม่มีค่อยใช้ course_fee_nr
+        const displayAmount = pickNum(c.amount, 1) || 1;
+        const displayUnit = pickText(c.unit, 'ครั้ง') || 'ครั้ง';
         const displayStaffDF = pickNum(c.staff_df, c.course_fee_nr);
-
-        // ค่ามือแพทย์: ใช้ doctor_df ก่อน ถ้าไม่มีค่อยใช้ course_fee_tr
         const displayDoctorDF = pickNum(c.doctor_df, c.course_fee_tr);
 
+        const codeClass = displayCode === 'ยังไม่มีรหัส'
+            ? 'text-slate-300 italic'
+            : 'text-pink-400';
+
         return `
-        <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all group" style="height: 60px;">
-            <td class="text-slate-400 font-normal w-16 text-center text-[10px]">${displayIdx}</td>
-            <td class="text-pink-300 font-mono w-24 text-center text-[10px] font-normal">${displayCode}</td>
-            <td class="text-left pl-10">
-                <div class="text-slate-600 text-[13.5px] font-normal leading-tight">${c.course_name || '-'}</div>
-                <div class="text-[8px] text-slate-400 uppercase italic mt-0.5">สร้างเมื่อ: ${displayCreatedAt}</div>
-            </td>
-            <td class="text-center w-32">
-                <span class="bg-pink-50/50 text-[#D48197] px-3 py-1 rounded-full text-[9px] font-normal border border-pink-100 uppercase italic">
-                    ${displayCategory}
-                </span>
-            </td>
-            <td class="text-right pr-10 w-32">
-                <div class="text-slate-500 text-[14px] font-normal">฿${displayPrice.toLocaleString()}</div>
-            </td>
-            <td class="text-center w-32">
-                <div class="text-slate-500 font-normal text-[13px] whitespace-nowrap">${displayAmount} ${displayUnit}</div>
-            </td>
-            <td class="text-[10px] text-left pl-10 leading-tight w-48 border-l border-slate-50 font-normal">
-                <div class="flex items-center gap-2 text-slate-400 mb-1">
-                    <span class="w-1.5 h-1.5 rounded-full bg-slate-200"></span>
-                    พนักงาน: <span class="text-slate-500">฿${displayStaffDF.toLocaleString()}</span>
-                </div>
-                <div class="flex items-center gap-2 text-slate-300">
-                    <span class="w-1.5 h-1.5 rounded-full bg-blue-100"></span>
-                    แพทย์: <span class="text-blue-400/70">฿${displayDoctorDF.toLocaleString()}</span>
-                </div>
-            </td>
-            <td class="text-center w-28 relative">
-                <div class="inline-flex items-center bg-[#D48197] text-white rounded-full p-1 shadow-sm relative">
-                    <button onclick="window.editMasterCourseById('${c.id}')"
-                        class="px-4 py-1.5 text-[10px] font-normal border-r border-white/30 hover:bg-white/10 rounded-l-full transition-all">แก้ไข</button>
-                    
-                    <button onclick="event.stopPropagation(); window.toggleCourseActionMenu(event, '${c.id}')" 
-                        class="px-2.5 py-1.5 text-[9px] hover:bg-white/10 rounded-r-full transition-all">▼</button>
-                    
-                    <div id="course-action-menu-${c.id}" 
-                        class="hidden absolute right-0 top-10 w-40 bg-white border border-pink-50 rounded-2xl shadow-2xl z-[999] overflow-hidden text-left animate-in fade-in slide-in-from-top-2">
-                        
-                        <button onclick="window.deleteMasterCourse('${c.id}')" 
-                            class="w-full p-3 text-[11px] text-red-400 hover:bg-red-50 flex items-center gap-3 font-normal transition-all">
-                            <span>🗑️</span> ลบรายการนี้
-                        </button>
+            <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all group" style="height: 60px;">
+                <td class="text-slate-400 font-normal w-16 text-center text-[10px]">
+                    ${displayIdx}
+                </td>
+
+                <td class="${codeClass} font-mono w-24 text-center text-[10px] font-normal break-words">
+                    ${escapeHtml(displayCode)}
+                </td>
+
+                <td class="text-left pl-10">
+                    <div class="text-slate-600 text-[13.5px] font-normal leading-tight">
+                        ${escapeHtml(c.course_name || '-')}
                     </div>
-                </div>
-            </td>
-        </tr>`;
+                    <div class="text-[8px] text-slate-400 uppercase italic mt-0.5">
+                        สร้างเมื่อ: ${escapeHtml(displayCreatedAt)}
+                    </div>
+                </td>
+
+                <td class="text-center w-32">
+                    <span class="bg-pink-50/50 text-[#D48197] px-3 py-1 rounded-full text-[9px] font-normal border border-pink-100 uppercase italic">
+                        ${escapeHtml(displayCategory)}
+                    </span>
+                </td>
+
+                <td class="text-right pr-10 w-32">
+                    <div class="text-slate-500 text-[14px] font-normal">
+                        ฿${Number(displayPrice || 0).toLocaleString()}
+                    </div>
+                </td>
+
+                <td class="text-center w-32">
+                    <div class="text-slate-500 font-normal text-[13px] whitespace-nowrap">
+                        ${Number(displayAmount || 1).toLocaleString()} ${escapeHtml(displayUnit)}
+                    </div>
+                </td>
+
+                <td class="text-[10px] text-left pl-10 leading-tight w-48 border-l border-slate-50 font-normal">
+                    <div class="flex items-center gap-2 text-slate-400 mb-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-slate-200"></span>
+                        พนักงาน: <span class="text-slate-500">฿${Number(displayStaffDF || 0).toLocaleString()}</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-slate-300">
+                        <span class="w-1.5 h-1.5 rounded-full bg-blue-100"></span>
+                        แพทย์: <span class="text-blue-400/70">฿${Number(displayDoctorDF || 0).toLocaleString()}</span>
+                    </div>
+                </td>
+
+                <td class="text-center w-28 relative">
+                    <div class="inline-flex items-center bg-[#D48197] text-white rounded-full p-1 shadow-sm relative">
+                        <button onclick="window.editMasterCourseById('${c.id}')"
+                            class="px-4 py-1.5 text-[10px] font-normal border-r border-white/30 hover:bg-white/10 rounded-l-full transition-all">
+                            แก้ไข
+                        </button>
+
+                        <button onclick="event.stopPropagation(); window.toggleCourseActionMenu(event, '${c.id}')"
+                            class="px-2.5 py-1.5 text-[9px] hover:bg-white/10 rounded-r-full transition-all">
+                            ▼
+                        </button>
+
+                        <div id="course-action-menu-${c.id}"
+                            class="hidden absolute right-0 top-10 w-40 bg-white border border-pink-50 rounded-2xl shadow-2xl z-[999] overflow-hidden text-left animate-in fade-in slide-in-from-top-2">
+
+                            <button onclick="window.deleteMasterCourse('${c.id}')"
+                                class="w-full p-3 text-[11px] text-red-400 hover:bg-red-50 flex items-center gap-3 font-normal transition-all">
+                                <span>🗑️</span> ลบรายการนี้
+                            </button>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        `;
     }).join('');
 
     if (typeof window.renderCoursePagination === 'function') {
@@ -20972,104 +21172,193 @@ window.linkToQueue = function(courseName) {
 };
 
 /* =======================================================
-   📊 ฟังก์ชันแสดงรายงานค่ามือพนักงาน (DF Report) 
+   📊 ฟังก์ชันแสดงรายงานค่ามือพนักงาน (DF Report)
    ======================================================= */
-window.renderDFReportPage = function() {
+window.renderDFReportPage = async function() {
     const target = document.getElementById('dynamicContent');
     if (!target) return;
 
-    // 1. ดึงข้อมูลดิบจากระบบ
-    const allQueue = JSON.parse(localStorage.getItem('todayQueueDB')) || [];
-    const finishedJobs = allQueue.filter(q => q.status === "เสร็จสิ้น");
+    const normalizeBranch = (v) => String(v || '')
+        .replace('เอซคลินิก', '')
+        .replace('ACE Clinic', '')
+        .replace('สาขา', '')
+        .replace(':', '')
+        .trim();
 
-    // สร้างรายชื่อพนักงานและแพทย์
-    const staffList = [...new Set(finishedJobs.map(q => q.staff).filter(Boolean))];
-    const doctorList = [...new Set(finishedJobs.map(q => q.doctor).filter(Boolean))];
+    const viewingBranch = (typeof window.getCurrentViewingBranch === 'function')
+        ? window.getCurrentViewingBranch()
+        : 'ทุกสาขา';
 
-    // กำหนดค่าเดือนปัจจุบัน
-    const now = new Date();
-    const currentMonthNum = String(now.getMonth() + 1).padStart(2, '0');
-    
-    // ดึงค่าที่เลือกจากหน้าจอ (เพิ่มรองรับค่า "ทั้งหมด")
-    const selMonth = document.getElementById('dfMonthFilter')?.value || currentMonthNum;
-    const selStaff = document.getElementById('dfStaffFilter')?.value || "ทั้งหมด";
+    const safeBranch = normalizeBranch(viewingBranch);
 
-   // 🔍 2. Logic การกรองข้อมูล (ฉบับสมบูรณ์เพื่อให้ปุ่ม "รายวัน" ทำงาน)
-const filteredJobs = finishedJobs.filter(q => {
-    if (!q.date) return false;
+    const branchVariants = [
+        safeBranch,
+        `สาขา${safeBranch}`,
+        `ACE Clinic ${safeBranch}`,
+        `เอซคลินิก ${safeBranch}`
+    ];
 
-    // 🚩 ส่วนที่ 1: ตรวจสอบการกรองแบบ "รายวัน" (ถ้ามีการเลือกวันที่เจาะจง)
-    if (window.currentDFDateFilter && window.currentDFDateFilter !== "") {
-        // ต้องตรงทั้งวันที่ และตรงตามพนักงานที่เลือก
-        const matchDate = q.date === window.currentDFDateFilter;
-        const matchStaff = (selStaff === "ทั้งหมด") || (q.staff === selStaff) || (q.doctor === selStaff);
-        return matchDate && matchStaff;
+    const getJobBranch = (q) => normalizeBranch(q.branch || q.branch_name || q.branchName || '');
+    const getJobDate = (q) => String(q.date || q.service_date || q.used_date || q.created_at || '').slice(0, 10);
+    const getJobMonth = (q) => {
+        const d = getJobDate(q);
+        if (d.includes('-')) return d.slice(5, 7);
+        if (d.includes('/')) return String(d.split('/')[1] || '').padStart(2, '0');
+        return '';
+    };
+
+    const getCustomerName = (q) =>
+        q.customer_name || q.customerName || q.name || q.fullname || q.customer_fullname || '-';
+
+    const getCourseName = (q) =>
+        q.course || q.courseName || q.course_name || q.item_name || q.service_name || '-';
+
+    const getStaffName = (q) =>
+        q.staff_nickname || q.staffNickname || q.staff || q.staff_name || q.staffName || '';
+
+    const getDoctorName = (q) =>
+        q.doctor_nickname || q.doctorNickname || q.doctor || q.doctor_name || q.doctorName || '';
+
+    const getStaffDF = (q) =>
+        Number(q.staffDF ?? q.staff_df ?? q.staff_fee ?? q.staffDf ?? q.staff_commission ?? 0) || 0;
+
+    const getDoctorDF = (q) =>
+        Number(q.doctorDF ?? q.doctor_df ?? q.doctor_fee ?? q.doctorDf ?? q.doctor_commission ?? 0) || 0;
+
+    let finishedJobs = [];
+
+    try {
+        let q = window.supabaseClient
+            .from('queues')
+            .select('*')
+            .eq('status', 'เสร็จสิ้น')
+            .order('created_at', { ascending: false });
+
+        if (safeBranch && safeBranch !== 'ทุกสาขา') {
+            q = q.in('branch', branchVariants);
+        }
+
+        const { data, error } = await q;
+
+        if (error) {
+            console.error('DF queues error:', error);
+        } else {
+            finishedJobs = Array.isArray(data) ? data : [];
+        }
+    } catch (e) {
+        console.error('load finishedJobs error:', e);
     }
 
-    // 🚩 ส่วนที่ 2: ตรวจสอบการกรองแบบ "รายเดือน" (ถ้าไม่ได้เลือกวันที่รายวัน)
-    const dateParts = q.date.split('/');
-    const jobMonth = String(dateParts[1]).padStart(2, '0');
-    
-    const matchMonth = (selMonth === "ทั้งหมด") || (jobMonth === selMonth);
-    const matchStaff = (selStaff === "ทั้งหมด") || (q.staff === selStaff) || (q.doctor === selStaff);
-    
-    return matchMonth && matchStaff;
-});
-    // 🎯 3. คำนวณยอดรวม Dashboard
+    let staffList = [];
+    let doctorList = [];
+
+    try {
+        let staffQuery = window.supabaseClient
+            .from('staff_profiles')
+            .select('full_name, nickname, role, branch, is_active, employment_status')
+            .eq('is_active', true)
+            .neq('employment_status', 'ลาออก');
+
+        if (safeBranch && safeBranch !== 'ทุกสาขา') {
+            staffQuery = staffQuery.in('branch', branchVariants);
+        }
+
+        const { data: profiles, error } = await staffQuery.order('nickname', { ascending: true });
+
+        if (error) console.error('DF staff_profiles error:', error);
+
+        const rows = Array.isArray(profiles) ? profiles : [];
+
+        staffList = rows
+            .filter(s => !String(s.role || '').includes('แพทย์'))
+            .map(s => s.nickname || s.full_name)
+            .filter(Boolean);
+
+        doctorList = rows
+            .filter(s => String(s.role || '').includes('แพทย์'))
+            .map(s => s.nickname || s.full_name)
+            .filter(Boolean);
+
+        staffList = [...new Set(staffList)];
+        doctorList = [...new Set(doctorList)];
+    } catch (e) {
+        console.error('load DF staff list error:', e);
+    }
+
+    const now = new Date();
+    const currentMonthNum = String(now.getMonth() + 1).padStart(2, '0');
+
+    const selMonth = document.getElementById('dfMonthFilter')?.value || currentMonthNum;
+    const selStaff = document.getElementById('dfStaffFilter')?.value || 'ทั้งหมด';
+
+    const filteredJobs = finishedJobs.filter(q => {
+        const matchBranch =
+            !safeBranch ||
+            safeBranch === 'ทุกสาขา' ||
+            getJobBranch(q) === safeBranch;
+
+        const matchStaff =
+            selStaff === 'ทั้งหมด' ||
+            getStaffName(q) === selStaff ||
+            getDoctorName(q) === selStaff;
+
+        const matchMonth =
+            selMonth === 'ทั้งหมด' ||
+            getJobMonth(q) === selMonth;
+
+        return matchBranch && matchStaff && matchMonth;
+    });
+
     let displayStaffTotal = 0;
     let displayDocTotal = 0;
 
-    if (selStaff === "ทั้งหมด") {
-        displayStaffTotal = filteredJobs.reduce((sum, q) => sum + (parseFloat(q.staffDF || 0)), 0);
-        displayDocTotal = filteredJobs.reduce((sum, q) => sum + (parseFloat(q.doctorDF || 0)), 0);
-    } else {
-        filteredJobs.forEach(q => {
-            if (q.staff === selStaff) displayStaffTotal += parseFloat(q.staffDF || 0);
-            if (q.doctor === selStaff) displayDocTotal += parseFloat(q.doctorDF || 0);
-        });
-    }
+    filteredJobs.forEach(q => {
+        if (selStaff === 'ทั้งหมด' || getStaffName(q) === selStaff) {
+            displayStaffTotal += getStaffDF(q);
+        }
+        if (selStaff === 'ทั้งหมด' || getDoctorName(q) === selStaff) {
+            displayDocTotal += getDoctorDF(q);
+        }
+    });
 
-   // 4. วาดหน้าจอใหม่ (ฉบับแก้ไข Layout ไม่ให้พัง)
-target.innerHTML = `
+    target.innerHTML = `
     <div class="animate-in fade-in duration-500 p-4 -mt-6 text-left pb-20 font-sans">
         <div class="bg-white p-5 md:p-6 rounded-[2.5rem] shadow-sm border border-pink-100 mb-6">
             <div class="flex flex-col xl:flex-row justify-between items-center gap-4">
-                
                 <div class="flex items-center gap-4 shrink-0">
                     <div class="w-12 h-12 bg-pink-500 rounded-2xl flex items-center justify-center shadow-lg shadow-pink-100">
                         <span class="text-xl">💰</span>
                     </div>
                     <div>
                         <h2 class="text-xl font-black ace-pink italic leading-none">DF & COMMISSION</h2>
-                        <p class="text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-widest italic">รายงานค่ามือรายบุคคล</p>
+                        <p class="text-[9px] text-slate-400 font-bold uppercase mt-1 tracking-widest italic">
+                            รายงานค่ามือรายบุคคล / ${safeBranch || '-'}
+                        </p>
                     </div>
                 </div>
-                
+
                 <div class="flex flex-wrap md:flex-nowrap items-end gap-2 w-full lg:w-auto">
-                    
-                   
                     <div class="flex flex-col gap-1 shrink-0">
                         <label class="text-[9px] font-black text-[#D48197] uppercase ml-2 italic">งวดเดือน</label>
                         <div class="relative w-[130px]">
-                            <select id="dfMonthFilter" onchange="window.currentDFDateFilter=''; renderDFReportPage()" 
-                                class="w-full border border-pink-100 rounded-xl px-3 py-2 text-[11px] outline-none bg-white h-[42px] appearance-none shadow-sm focus:border-pink-300 transition-all text-slate-600 cursor-pointer">
+                            <select id="dfMonthFilter" onchange="window.renderDFReportPage()" 
+                                class="w-full border border-pink-100 rounded-xl px-3 py-2 text-[11px] outline-none bg-white h-[42px] appearance-none shadow-sm text-slate-600 cursor-pointer">
                                 <option value="ทั้งหมด" ${selMonth === 'ทั้งหมด' ? 'selected' : ''}>ทุกเดือน</option>
                                 ${[...Array(12)].map((_, i) => {
                                     const m = String(i + 1).padStart(2, '0');
-                                    const mName = new Intl.DateTimeFormat('th-TH', {month: 'short'}).format(new Date(2026, i, 1));
+                                    const mName = new Intl.DateTimeFormat('th-TH', { month: 'short' }).format(new Date(2026, i, 1));
                                     return `<option value="${m}" ${selMonth === m ? 'selected' : ''}>${mName}</option>`;
                                 }).join('')}
                             </select>
-                            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[8px] text-pink-300 pointer-events-none">▼</span>
                         </div>
                     </div>
 
                     <div class="flex flex-col gap-1 shrink-0">
                         <label class="text-[9px] font-black text-[#D48197] uppercase ml-2 italic">พนักงาน / แพทย์</label>
-                        <div class="relative w-[160px]">
-                            <select id="dfStaffFilter" onchange="renderDFReportPage()" 
-                                class="w-full border border-pink-100 rounded-xl px-3 py-2 text-[11px] outline-none bg-white h-[42px] appearance-none shadow-sm focus:border-pink-300 transition-all text-slate-600 cursor-pointer">
-                                <option value="ทั้งหมด">👤 ทั้งหมด</option>
+                        <div class="relative w-[170px]">
+                            <select id="dfStaffFilter" onchange="window.renderDFReportPage()" 
+                                class="w-full border border-pink-100 rounded-xl px-3 py-2 text-[11px] outline-none bg-white h-[42px] appearance-none shadow-sm text-slate-600 cursor-pointer">
+                                <option value="ทั้งหมด" ${selStaff === 'ทั้งหมด' ? 'selected' : ''}>👤 ทั้งหมด</option>
                                 <optgroup label="พนักงาน">
                                     ${staffList.map(s => `<option value="${s}" ${selStaff === s ? 'selected' : ''}>${s}</option>`).join('')}
                                 </optgroup>
@@ -21077,7 +21366,6 @@ target.innerHTML = `
                                     ${doctorList.map(d => `<option value="${d}" ${selStaff === d ? 'selected' : ''}>${d}</option>`).join('')}
                                 </optgroup>
                             </select>
-                            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[8px] text-pink-300 pointer-events-none">▼</span>
                         </div>
                     </div>
 
@@ -21124,24 +21412,24 @@ target.innerHTML = `
                     </tr>
                 </thead>
                 <tbody>
-                    ${filteredJobs.length > 0 ? filteredJobs.map((q) => `
+                    ${filteredJobs.length > 0 ? filteredJobs.map(q => `
                         <tr class="border-b border-slate-50 hover:bg-pink-50/10 transition-all" style="height: 80px;">
-                            <td class="px-4 font-bold text-slate-400 text-[11px] italic">${q.date || '-'}</td>
+                            <td class="px-4 font-bold text-slate-400 text-[11px] italic">${getJobDate(q) || '-'}</td>
                             <td class="px-4">
-                                <div class="font-black text-slate-700 text-[13px] italic">${q.name || q.customerName}</div>
-                                <div class="text-[10px] text-pink-400 mt-0.5 font-bold uppercase">${q.course}</div>
+                                <div class="font-black text-slate-700 text-[13px] italic">${getCustomerName(q)}</div>
+                                <div class="text-[10px] text-pink-400 mt-0.5 font-bold uppercase">${getCourseName(q)}</div>
                             </td>
                             <td class="px-4 space-y-1">
                                 <div class="flex items-center gap-2 text-[11px] font-bold text-slate-600">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-pink-400"></span> ${q.staff || '-'}
+                                    <span class="w-1.5 h-1.5 rounded-full bg-pink-400"></span> ${getStaffName(q) || '-'}
                                 </div>
                                 <div class="flex items-center gap-2 text-[11px] font-bold text-blue-400">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span> ${q.doctor || '-'}
+                                    <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span> ${getDoctorName(q) || '-'}
                                 </div>
                             </td>
                             <td class="px-4 text-right">
-                                <div class="font-black text-slate-800 text-[12px]">฿${parseFloat(q.staffDF || 0).toLocaleString()}</div>
-                                <div class="font-black text-blue-500 text-[11px]">฿${parseFloat(q.doctorDF || 0).toLocaleString()}</div>
+                                <div class="font-black text-slate-800 text-[12px]">฿${getStaffDF(q).toLocaleString()}</div>
+                                <div class="font-black text-blue-500 text-[11px]">฿${getDoctorDF(q).toLocaleString()}</div>
                             </td>
                         </tr>
                     `).join('') : `
@@ -21150,9 +21438,96 @@ target.innerHTML = `
                 </tbody>
             </table>
         </div>
-    </div>
-`;
+    </div>`;
 };
+
+// 1. ฟังก์ชันระงับการใช้งานพนักงาน (Toggle Active)
+window.suspendStaff = async function(staffCode) {
+    if (!window.supabaseClient) {
+        return Swal.fire({
+            icon: 'error',
+            title: 'ยังไม่พบการเชื่อมต่อ Supabase',
+            confirmButtonColor: '#D48197'
+        });
+    }
+
+    try {
+        // 1) ดึงข้อมูลพนักงานปัจจุบัน
+        const { data: staff, error: fetchError } = await window.supabaseClient
+            .from('staff_profiles')
+            .select('id, staff_code, full_name, is_active')
+            .eq('staff_code', staffCode)
+            .single();
+
+        if (fetchError || !staff) {
+            console.error('suspendStaff fetch error:', fetchError);
+            return Swal.fire({
+                icon: 'error',
+                title: 'ไม่พบข้อมูลพนักงาน',
+                text: 'กรุณาลองใหม่อีกครั้ง',
+                confirmButtonColor: '#D48197'
+            });
+        }
+
+        const isActive = staff.is_active !== false;
+        const actionText = isActive ? 'ระงับการใช้งาน' : 'เปิดสิทธิ์ใช้งาน';
+        const nextIsActive = !isActive;
+
+        const result = await Swal.fire({
+            title: `ยืนยัน${actionText}?`,
+            text: `คุณต้องการ${actionText} คุณ ${staff.full_name || '-'} ใช่หรือไม่`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: isActive ? '#d33' : '#2ecc71',
+            confirmButtonText: 'ใช่, ดำเนินการ',
+            cancelButtonText: 'ยกเลิก',
+            customClass: { popup: 'rounded-[2rem]' }
+        });
+
+        if (!result.isConfirmed) return;
+
+        // 2) อัปเดต Supabase
+        const { error: updateError } = await window.supabaseClient
+            .from('staff_profiles')
+            .update({
+                is_active: nextIsActive
+            })
+            .eq('staff_code', staffCode);
+
+        if (updateError) {
+            console.error('suspendStaff update error:', updateError);
+            return Swal.fire({
+                icon: 'error',
+                title: 'อัปเดตไม่สำเร็จ',
+                text: updateError.message || 'กรุณาลองใหม่อีกครั้ง',
+                confirmButtonColor: '#D48197'
+            });
+        }
+
+        await Swal.fire({
+            icon: 'success',
+            title: 'สำเร็จ!',
+            text: `${actionText}เรียบร้อยแล้วค่ะ`,
+            timer: 1500,
+            showConfirmButton: false
+        });
+
+        // 3) รีเฟรชหน้าตาราง
+        if (typeof window.renderStaffProfileList === 'function') {
+            window.renderStaffProfileList();
+        }
+
+    } catch (e) {
+        console.error('suspendStaff exception:', e);
+        Swal.fire({
+            icon: 'error',
+            title: 'เกิดข้อผิดพลาด',
+            text: e.message || 'กรุณาลองใหม่อีกครั้ง',
+            confirmButtonColor: '#D48197'
+        });
+    }
+};
+
 
 // 1. ฟังก์ชันระงับการใช้งานพนักงาน (Toggle Active)
 window.suspendStaff = async function(staffCode) {

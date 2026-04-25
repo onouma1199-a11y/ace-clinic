@@ -4766,7 +4766,7 @@ window.renderCustomerList = function (target) {
     target.innerHTML = `
       <div class="animate-in fade-in duration-500 p-4 -mt-6 text-left">
           
-         <div class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-pink-100 mb-6 overflow-x-auto">
+         <div class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-pink-100 mb-6 overflow-x-auto relative z-20">
   <div class="flex items-end gap-4 min-w-max whitespace-nowrap">
 
     <div class="flex flex-col gap-1 flex-shrink-0">
@@ -4841,7 +4841,7 @@ window.renderCustomerList = function (target) {
 
   </div>
 </div>
-          <div class="bg-white rounded-[3rem] shadow-2xl border border-pink-100 overflow-hidden p-8">
+          <div class="bg-white rounded-[3rem] shadow-2xl border border-pink-100 overflow-visible p-8 relative z-10">
             <table class="w-full text-left text-xs border-collapse">
               <thead>
                 <tr class="text-slate-400 text-[11px] uppercase border-b-2 border-pink-50">
@@ -12582,74 +12582,193 @@ window.initCustomerDetailCache = async function(customerId, customerObj = null) 
     try {
         if (!window.supabaseClient || !customerId) return null;
 
-        const customerIdStr = String(customerId).trim();
-        const c = customerObj || window.activeCustomer;
-        if (!c) return null;
+        window.customerDetailCache = window.customerDetailCache || {};
+
+        const customerIdStr = String(customerId || '').trim();
+        const c = customerObj || window.activeCustomer || {};
+        if (!customerIdStr || !c) return null;
 
         const customerHN = String(c.hn || '').trim();
         const customerOldHN = String(c.old_hn || '').trim();
+
         const customerFullname = String(
-            c.fullname || [c.first_name, c.last_name].filter(Boolean).join(' ')
+            c.fullname ||
+            c.full_name ||
+            c.customer_name ||
+            c.customerName ||
+            [c.first_name, c.last_name].filter(Boolean).join(' ')
         ).trim();
 
-        const [
-            remainingRes,
-            usageRes,
-            receiptsRes,
-            appointsRes
-        ] = await Promise.all([
-            window.supabaseClient
-                .from('customer_course_balance')
-                .select('*')
-                .or([
-                    `customer_id.eq.${customerIdStr}`,
-                    customerHN ? `hn.eq.${customerHN}` : null,
-                    customerOldHN ? `hn.eq.${customerOldHN}` : null
-                ].filter(Boolean).join(',')),
+        const sortByDateDesc = (arr, dateFields = ['created_at']) => {
+            return (arr || []).sort((a, b) => {
+                const db = dateFields.map(f => b?.[f]).find(Boolean) || '';
+                const da = dateFields.map(f => a?.[f]).find(Boolean) || '';
+                return String(db).localeCompare(String(da));
+            });
+        };
 
-            window.supabaseClient
-                .from('customer_usage_history_view')
-                .select('*')
-                .or([
-                    `customer_id.eq.${customerIdStr}`,
-                    customerHN ? `hn.eq.${customerHN}` : null,
-                    customerOldHN ? `hn.eq.${customerOldHN}` : null
-                ].filter(Boolean).join(',')),
+        const uniqueById = (arr) => {
+            const seen = new Set();
+            return (arr || []).filter(row => {
+                const key = String(row.id || row.balance_id || row.usage_id || row.bill_no || JSON.stringify(row));
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+        };
 
-            window.supabaseClient
-                .from('customer_receipts_view')
-                .select('*')
-                .or([
-                    `customer_id.eq.${customerIdStr}`,
-                    customerHN ? `hn.eq.${customerHN}` : null,
-                    customerOldHN ? `hn.eq.${customerOldHN}` : null
-                ].filter(Boolean).join(',')),
+        // ✅ 1) คอร์สคงเหลือ: ดึงแบบทีละเงื่อนไข ไม่ใช้ .or()
+        const loadRemaining = async () => {
+            let result = [];
 
-            window.supabaseClient
-                .from('appointments')
-                .select('*')
-                .or([
-                    `customer_id.eq.${customerIdStr}`,
-                    customerHN ? `customerHn.eq.${customerHN}` : null,
-                    customerFullname ? `customer_name.eq.${customerFullname}` : null,
-                    customerFullname ? `customerName.eq.${customerFullname}` : null
-                ].filter(Boolean).join(','))
+            const tryQuery = async (field, value) => {
+                if (!value || result.length > 0) return;
+
+                const { data, error } = await window.supabaseClient
+                    .from('customer_course_balance')
+                    .select('*')
+                    .eq(field, value)
+                    .order('invoice_date', { ascending: false })
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    console.error(`load remaining ${field} error:`, error);
+                    return;
+                }
+
+                if (Array.isArray(data) && data.length > 0) {
+                    result = data;
+                }
+            };
+
+            await tryQuery('customer_id', customerIdStr);
+            await tryQuery('hn', customerHN);
+            await tryQuery('old_hn', customerOldHN);
+
+            return uniqueById(result);
+        };
+
+        // ✅ 2) ประวัติใช้คอร์ส: อ่านจากตารางจริง 
+        const loadUsage = async () => {
+            let result = [];
+
+            const tryQuery = async (field, value) => {
+                if (!value || result.length > 0) return;
+
+                const { data, error } = await window.supabaseClient
+                    .from('course_usage')
+                    .select('*')
+                    .eq(field, value)
+                    .order('used_date', { ascending: false })
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    console.error(`load usage ${field} error:`, error);
+                    return;
+                }
+
+                if (Array.isArray(data) && data.length > 0) {
+                    result = data;
+                }
+            };
+
+            await tryQuery('customer_id', customerIdStr);
+            await tryQuery('hn', customerHN);
+            await tryQuery('old_hn', customerOldHN);
+
+            return uniqueById(result);
+        };
+
+        // ✅ 3) ใบเสร็จ: อ่านจาก sales_header ตรง
+        const loadReceipts = async () => {
+            let result = [];
+
+            const tryQuery = async (field, value) => {
+                if (!value || result.length > 0) return;
+
+                const { data, error } = await window.supabaseClient
+                    .from('sales_header')
+                    .select('*')
+                    .eq(field, value)
+                    .neq('status', 'ยกเลิก')
+                    .order('bill_date', { ascending: false })
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    console.error(`load receipts ${field} error:`, error);
+                    return;
+                }
+
+                if (Array.isArray(data) && data.length > 0) {
+                    result = data;
+                }
+            };
+
+            await tryQuery('customer_id', customerIdStr);
+            await tryQuery('hn', customerHN);
+            await tryQuery('old_hn', customerOldHN);
+
+            return uniqueById(result);
+        };
+
+        // ✅ 4) นัดหมาย: อ่านจาก appointments ตรง
+        const loadAppointments = async () => {
+            let result = [];
+
+            const tryQuery = async (field, value) => {
+                if (!value || result.length > 0) return;
+
+                const { data, error } = await window.supabaseClient
+                    .from('appointments')
+                    .select('*')
+                    .eq(field, value)
+                    .order('date', { ascending: false })
+                    .order('time', { ascending: false });
+
+                if (error) {
+                    console.error(`load appointments ${field} error:`, error);
+                    return;
+                }
+
+                if (Array.isArray(data) && data.length > 0) {
+                    result = data;
+                }
+            };
+
+            await tryQuery('customer_id', customerIdStr);
+            await tryQuery('hn', customerHN);
+            await tryQuery('customer_hn', customerHN);
+            await tryQuery('customerHn', customerHN);
+            await tryQuery('old_hn', customerOldHN);
+            await tryQuery('customer_name', customerFullname);
+            await tryQuery('customerName', customerFullname);
+
+            return uniqueById(result);
+        };
+
+        const [remaining, usage, receipts, appoints] = await Promise.all([
+            loadRemaining(),
+            loadUsage(),
+            loadReceipts(),
+            loadAppointments()
         ]);
 
         window.customerDetailCache[customerIdStr] = {
-            remaining: remainingRes?.data || [],
-            usage: usageRes?.data || [],
-            receipts: receiptsRes?.data || [],
-            appoints: appointsRes?.data || [],
+            remaining: remaining || [],
+            usage: usage || [],
+            receipts: receipts || [],
+            appoints: appoints || [],
             loadedAt: Date.now()
         };
 
         return window.customerDetailCache[customerIdStr];
+
     } catch (e) {
         console.error('initCustomerDetailCache error:', e);
         return null;
     }
 };
+
 window.getCustomerDetailCache = function(customerId) {
     const customerIdStr = String(customerId || '').trim();
     return window.customerDetailCache[customerIdStr] || null;
@@ -12889,42 +13008,55 @@ window.openCourseRemainingDetail = async function(customerId, encodedRow) {
     try {
         const row = window.__aceDecodeCourseRow(encodedRow);
         const customerIdStr = String(customerId || '').trim();
-        const billNo = window.__aceNormalizeText(row.bill_no);
-        const itemName = window.__aceNormalizeText(row.item_name);
-        const oldCourseCode = window.__aceNormalizeText(row.old_course_code);
+
+        const norm = (v) => String(v || '').trim().toLowerCase().replace(/\s+/g, '');
+        const billNo = norm(row.bill_no || row.invoice_no);
+        const courseName = norm(row.item_name || row.course_name);
+        const courseCode = norm(row.old_course_code || row.course_code || row.item_code);
+
         const totalQty = Number(row.total_qty || row.purchased_qty || 0);
-        const usedQty = Number(row.used_qty || 0);
         const remainingQty = Number(row.remaining_qty || 0);
 
+        // ✅ อ่านประวัติใช้คอร์สจากตารางจริง ไม่ใช้ view แล้ว
         let usageRows = [];
+
         const { data: usageData, error: usageError } = await window.supabaseClient
-            .from('customer_usage_history_view')
+            .from('course_usage')
             .select('*')
             .eq('customer_id', customerIdStr)
             .order('used_date', { ascending: false })
             .order('created_at', { ascending: false });
 
-        if (!usageError && Array.isArray(usageData)) {
+        if (usageError) {
+            console.error('course_usage load error:', usageError);
+        }
+
+        if (Array.isArray(usageData)) {
             usageRows = usageData.filter(u => {
-                const uBill = window.__aceNormalizeText(u.bill_no || u.service_no || u.legacy_ref_no);
-                const uItem = window.__aceNormalizeText(u.item_name);
-                const uCode = window.__aceNormalizeText(u.old_course_code);
+                const uBill = norm(u.bill_no || u.invoice_no || u.service_no || u.legacy_ref_no);
+                const uName = norm(u.item_name || u.course_name || u.course);
+                const uCode = norm(u.old_course_code || u.course_code || u.item_code);
+
                 return (
-                    (billNo && uBill === billNo) ||
-                    (oldCourseCode && uCode === oldCourseCode) ||
-                    (itemName && uItem === itemName)
+                    (billNo && uBill && uBill === billNo) ||
+                    (courseCode && uCode && uCode === courseCode) ||
+                    (courseName && uName && uName === courseName)
                 );
             });
         }
+
+        const usedQty = usageRows.reduce((sum, u) => {
+            return sum + (Number(u.used_qty || u.qty || 1) || 0);
+        }, 0);
 
         const html = `
             <div class="text-left">
                 <div class="mb-5">
                     <h3 class="text-3xl font-black text-slate-900 italic leading-tight">
-                        ${itemName || '-'}
+                        ${row.item_name || row.course_name || '-'}
                     </h3>
                     <p class="text-xs font-bold text-slate-400 mt-1">
-                        เลขบิล: ${billNo || '-'}
+                        เลขบิล: ${row.bill_no || row.invoice_no || '-'}
                     </p>
                 </div>
 
@@ -12932,60 +13064,26 @@ window.openCourseRemainingDetail = async function(customerId, encodedRow) {
                     <div class="rounded-3xl border-2 border-slate-100 bg-slate-50 p-4">
                         <div class="text-xs text-slate-400 font-black uppercase">จำนวนทั้งหมด</div>
                         <div class="text-4xl font-black text-slate-900 mt-2">${totalQty}</div>
-                        <div class="text-xs text-slate-400 font-bold">ครั้ง</div>
+                        <div class="text-xs text-slate-400 font-bold">${row.unit || 'ครั้ง'}</div>
                     </div>
+
                     <div class="rounded-3xl border-2 border-slate-100 bg-slate-50 p-4">
                         <div class="text-xs text-slate-400 font-black uppercase">ใช้ไป</div>
                         <div class="text-4xl font-black text-blue-600 mt-2">${usedQty}</div>
-                        <div class="text-xs text-slate-400 font-bold">ครั้ง</div>
+                        <div class="text-xs text-slate-400 font-bold">${row.unit || 'ครั้ง'}</div>
                     </div>
+
                     <div class="rounded-3xl border-2 border-slate-100 bg-slate-50 p-4">
-                        <div class="text-xs text-slate-400 font-black uppercase">คงเหลือ</div>
+                        <div class="text-xs text-slate-400 font-black uppercase">คงเหลือในตาราง</div>
                         <div class="text-4xl font-black text-[#D48197] mt-2">${remainingQty}</div>
-                        <div class="text-xs text-slate-400 font-bold">ครั้ง</div>
+                        <div class="text-xs text-slate-400 font-bold">${row.unit || 'ครั้ง'}</div>
                     </div>
+
                     <div class="rounded-3xl border-2 border-slate-100 bg-slate-50 p-4">
-                        <div class="text-xs text-slate-400 font-black uppercase">ใช้ไป / ทั้งหมด</div>
-                        <div class="text-4xl font-black text-emerald-600 mt-2">${usedQty}/${totalQty}</div>
-                        <div class="text-xs text-slate-400 font-bold">สรุปการใช้งาน</div>
+                        <div class="text-xs text-slate-400 font-black uppercase">ตรวจสอบ</div>
+                        <div class="text-3xl font-black text-emerald-600 mt-2">${usedQty}/${totalQty}</div>
+                        <div class="text-xs text-slate-400 font-bold">ใช้จริงจาก course_usage</div>
                     </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
-                    <div class="rounded-3xl border-2 border-slate-100 bg-white p-4">
-                        <div class="text-xs text-slate-400 font-black uppercase mb-2">รายละเอียดคอร์ส</div>
-                        <div class="space-y-2 text-sm font-bold text-slate-700">
-                            <div><span class="text-slate-400">เลขบิล:</span> ${billNo || '-'}</div>
-                            <div><span class="text-slate-400">ชื่อบริการ:</span> ${itemName || '-'}</div>
-                            <div><span class="text-slate-400">วันที่เวลาซื้อ:</span> ${window.__aceFormatThaiDateTime(row.bill_date || row.purchase_datetime)}</div>
-                            <div><span class="text-slate-400">วันหมดอายุ:</span> ${window.__aceFormatThaiDateTime(row.expiry_date || row.expire_date || row.end_date)}</div>
-                        </div>
-                    </div>
-                    <div class="rounded-3xl border-2 border-slate-100 bg-white p-4">
-                        <div class="text-xs text-slate-400 font-black uppercase mb-2">ข้อมูลอ้างอิง</div>
-                        <div class="space-y-2 text-sm font-bold text-slate-700">
-                            <div><span class="text-slate-400">รหัสบริการ:</span> ${row.item_code || '-'}</div>
-                            <div><span class="text-slate-400">รหัสคอร์สเก่า:</span> ${row.old_course_code || '-'}</div>
-                            <div><span class="text-slate-400">หน่วย:</span> ${row.unit || 'ครั้ง'}</div>
-                            <div><span class="text-slate-400">จำนวน:</span> ${totalQty}</div>
-                            <div><span class="text-slate-400">ใช้ไป:</span> ${usedQty}</div>
-                            <div><span class="text-slate-400">คงเหลือ:</span> ${remainingQty}</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex flex-wrap gap-3 mb-6">
-                    <button
-                        onclick="window.openEditCourseRemainingModal('${customerIdStr}', '${encodedRow}')"
-                        class="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-3 rounded-2xl text-sm font-black shadow-lg">
-                        แก้ไขจำนวนคอร์สคงเหลือ
-                    </button>
-
-                    <button
-                        onclick="window.openCourseReceivedInfoModal('${customerIdStr}', '${encodedRow}')"
-                        class="bg-slate-800 hover:bg-black text-white px-5 py-3 rounded-2xl text-sm font-black shadow-lg">
-                        ดูข้อมูลคอร์สที่ได้ไป
-                    </button>
                 </div>
 
                 <div class="rounded-[2rem] border-2 border-slate-100 bg-slate-50 p-4">
@@ -12999,21 +13097,22 @@ window.openCourseRemainingDetail = async function(customerId, encodedRow) {
                                     <div>
                                         <div class="text-sm text-slate-400 font-black">ครั้งที่ ${idx + 1}</div>
                                         <div class="text-lg font-black text-slate-900 italic">
-                                            ${u.item_name || itemName || '-'}
+                                            ${u.item_name || u.course_name || row.item_name || row.course_name || '-'}
                                         </div>
                                         <div class="text-sm text-slate-500 font-bold mt-1">
-                                            วันที่: ${window.__aceFormatThaiDateTime(u.used_date || u.created_at)}
+                                            วันที่: ${window.__aceFormatThaiDateTime?.(u.used_date || u.created_at) || (u.used_date || u.created_at || '-')}
                                         </div>
                                         <div class="text-sm text-slate-500 font-bold">
-                                            อ้างอิง: ${u.bill_no || u.service_no || u.legacy_ref_no || '-'}
+                                            อ้างอิง: ${u.bill_no || u.invoice_no || u.service_no || '-'}
                                         </div>
                                         <div class="text-sm text-slate-500 font-bold">
                                             รายละเอียด: ${u.note || u.remark || '-'}
                                         </div>
                                     </div>
+
                                     <div class="text-right min-w-[70px]">
                                         <div class="text-3xl font-black text-emerald-600">
-                                            ${Number(u.used_qty || 1)}
+                                            ${Number(u.used_qty || u.qty || 1)}
                                         </div>
                                         <div class="text-xs text-slate-400 font-black">
                                             ${u.unit || row.unit || 'ครั้ง'}
@@ -13033,10 +13132,9 @@ window.openCourseRemainingDetail = async function(customerId, encodedRow) {
             showConfirmButton: false,
             showCloseButton: true,
             html,
-            customClass: {
-                popup: 'rounded-[2rem]'
-            }
+            customClass: { popup: 'rounded-[2rem]' }
         });
+
     } catch (e) {
         console.error('openCourseRemainingDetail error:', e);
         Swal.fire('ผิดพลาด', 'เปิดรายละเอียดคอร์สไม่สำเร็จ', 'error');
@@ -13048,38 +13146,40 @@ window.openCourseReceivedInfoModal = async function(customerId, encodedRow) {
         const row = window.__aceDecodeCourseRow(encodedRow);
         const customerIdStr = String(customerId || '').trim();
 
-        const targetBillNo = String(row.bill_no || '').trim();
-        const targetItemName = String(row.item_name || '').trim();
-        const targetOldCourseCode = String(row.old_course_code || '').trim();
-        const targetItemCode = String(row.item_code || '').trim();
+        const norm = (v) => String(v || '').trim().toLowerCase().replace(/\s+/g, '');
+
+        const targetBillNo = norm(row.bill_no || row.invoice_no);
+        const targetItemName = norm(row.item_name || row.course_name);
+        const targetOldCourseCode = norm(row.old_course_code || row.course_code);
+        const targetItemCode = norm(row.item_code || row.course_code);
 
         let usageRows = [];
 
         const { data, error } = await window.supabaseClient
-            .from('customer_usage_history_view')
+            .from('course_usage')
             .select('*')
             .eq('customer_id', customerIdStr)
             .order('used_date', { ascending: true })
             .order('created_at', { ascending: true });
 
         if (error) {
-            console.error('openCourseReceivedInfoModal error:', error);
+            console.error('openCourseReceivedInfoModal course_usage error:', error);
             Swal.fire('เกิดข้อผิดพลาด', error.message || 'โหลดข้อมูลไม่สำเร็จ', 'error');
             return;
         }
 
         if (Array.isArray(data)) {
             usageRows = data.filter(u => {
-                const uBillNo = String(u.bill_no || u.service_no || u.legacy_ref_no || '').trim();
-                const uItemName = String(u.item_name || '').trim();
-                const uOldCourseCode = String(u.old_course_code || '').trim();
-                const uItemCode = String(u.item_code || '').trim();
+                const uBillNo = norm(u.bill_no || u.invoice_no || u.service_no || u.legacy_ref_no);
+                const uItemName = norm(u.item_name || u.course_name || u.course);
+                const uOldCourseCode = norm(u.old_course_code || u.course_code);
+                const uItemCode = norm(u.item_code || u.course_code);
 
                 return (
-                    (targetBillNo && uBillNo === targetBillNo) ||
-                    (targetItemName && uItemName === targetItemName) ||
-                    (targetOldCourseCode && uOldCourseCode === targetOldCourseCode) ||
-                    (targetItemCode && uItemCode === targetItemCode)
+                    (targetBillNo && uBillNo && uBillNo === targetBillNo) ||
+                    (targetItemName && uItemName && uItemName === targetItemName) ||
+                    (targetOldCourseCode && uOldCourseCode && uOldCourseCode === targetOldCourseCode) ||
+                    (targetItemCode && uItemCode && uItemCode === targetItemCode)
                 );
             });
         }
@@ -13101,73 +13201,98 @@ window.openCourseReceivedInfoModal = async function(customerId, encodedRow) {
             }
         };
 
-      const html = `
-    <div class="text-left">
-        <h3 class="text-2xl font-black text-slate-900 italic mb-4">
-            รายการใช้คอร์ส
-        </h3>
+        const esc = (v) => {
+            if (typeof window.escapeHtml === 'function') return window.escapeHtml(v || '');
+            return String(v || '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        };
 
-        <div class="rounded-[2rem] border-2 border-slate-100 bg-slate-50 p-5">
-            ${
-                usageRows.length > 0
-                ? usageRows.map((u, idx) => `
-                    <div class="bg-white border border-slate-200 rounded-2xl p-4 mb-3 shadow-sm">
-                        <div class="text-sm text-pink-500 font-black mb-2">
-                            ครั้งที่ ${idx + 1}
-                        </div>
+        const html = `
+            <div class="text-left">
+                <h3 class="text-2xl font-black text-slate-900 italic mb-4">
+                    รายการใช้คอร์ส
+                </h3>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                            <div>
-                                <span class="text-slate-400 font-black">เลขที่ใบเสร็จ:</span>
-                                <span class="font-bold text-slate-800">
-                                    ${window.escapeHtml(u.bill_no || u.service_no || u.legacy_ref_no || '-')}
-                                </span>
+                <div class="rounded-[2rem] border-2 border-slate-100 bg-slate-50 p-5">
+                    ${
+                        usageRows.length > 0
+                        ? usageRows.map((u, idx) => `
+                            <div class="bg-white border border-slate-200 rounded-2xl p-4 mb-3 shadow-sm">
+                                <div class="text-sm text-pink-500 font-black mb-2">
+                                    ครั้งที่ ${idx + 1}
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                                    <div>
+                                        <span class="text-slate-400 font-black">เลขที่ใบเสร็จ:</span>
+                                        <span class="font-bold text-slate-800">
+                                            ${esc(u.bill_no || u.invoice_no || u.service_no || u.legacy_ref_no || '-')}
+                                        </span>
+                                    </div>
+
+                                    <div>
+                                        <span class="text-slate-400 font-black">ชื่อคอร์ส:</span>
+                                        <span class="font-bold text-slate-800">
+                                            ${esc(u.item_name || u.course_name || u.course || row.item_name || row.course_name || '-')}
+                                        </span>
+                                    </div>
+
+                                    <div>
+                                        <span class="text-slate-400 font-black">จำนวนที่ใช้:</span>
+                                        <span class="font-bold text-slate-800">
+                                            ${Number(u.used_qty || u.qty || 1)} ${esc(u.unit || row.unit || 'ครั้ง')}
+                                        </span>
+                                    </div>
+
+                                    <div>
+                                        <span class="text-slate-400 font-black">วัน/เวลาที่ใช้:</span>
+                                        <span class="font-bold text-slate-800">
+                                            ${formatDateTime(u.used_date || u.created_at)}
+                                        </span>
+                                    </div>
+
+                                    <div>
+                                        <span class="text-slate-400 font-black">สาขาที่ใช้บริการ:</span>
+                                        <span class="font-bold text-slate-800">
+                                            ${esc(u.branch_name || u.branch || row.branch_name || '-')}
+                                        </span>
+                                    </div>
+
+                                    <div>
+                                        <span class="text-slate-400 font-black">หมายเหตุ:</span>
+                                        <span class="font-bold text-slate-800">
+                                            ${esc(u.note || u.remark || '-')}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
-
-                            <div>
-                                <span class="text-slate-400 font-black">ชื่อคอร์ส:</span>
-                                <span class="font-bold text-slate-800">
-                                    ${window.escapeHtml(u.item_name || row.item_name || '-')}
-                                </span>
+                        `).join('')
+                        : `
+                            <div class="text-center text-slate-400 font-bold italic py-8">
+                                ยังไม่พบประวัติการใช้คอร์ส
                             </div>
+                        `
+                    }
+                </div>
+            </div>
+        `;
 
-                            <div>
-                                <span class="text-slate-400 font-black">วัน/เวลาที่ใช้:</span>
-                                <span class="font-bold text-slate-800">
-                                    ${formatDateTime(u.used_date || u.created_at)}
-                                </span>
-                            </div>
+        await Swal.fire({
+            width: 900,
+            showConfirmButton: false,
+            showCloseButton: true,
+            html,
+            customClass: { popup: 'rounded-[2rem]' }
+        });
 
-                            <div>
-                                <span class="text-slate-400 font-black">สาขาที่ใช้บริการ:</span>
-                                <span class="font-bold text-slate-800">
-                                    ${window.escapeHtml(u.branch_name || u.branch || row.branch_name || '-')}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                `).join('')
-                : `
-                    <div class="text-center text-slate-400 font-bold italic py-8">
-                        ยังไม่พบประวัติการใช้คอร์ส
-                    </div>
-                `
-            }
-        </div>
-    </div>
-`;
-
-await Swal.fire({
-    width: 900,
-    showConfirmButton: false,
-    showCloseButton: true,
-    html
-});
-
-} catch (e) {
-    console.error('openCourseReceivedInfoModal catch:', e);
-    Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถเปิดข้อมูลคอร์สที่ใช้ไปได้', 'error');
-	}
+    } catch (e) {
+        console.error('openCourseReceivedInfoModal catch:', e);
+        Swal.fire('เกิดข้อผิดพลาด', 'ไม่สามารถเปิดข้อมูลคอร์สที่ใช้ไปได้', 'error');
+    }
 };
 
 window.openEditCourseRemainingModal = async function(customerId, encodedRow) {
@@ -13974,12 +14099,11 @@ window.switchCustomerTab = async function(tabName, customerId) {
 
     const pushUnique = (arr) => {
         (arr || []).forEach(item => {
-            const rowId = String(item.id || item.balance_id || '').trim();
+            const rowId = String(item.id || '').trim();
 
             const key = [
                 rowId,
                 normalizeText(item.customer_id),
-                normalizeText(item.hn),
                 normalizeText(item.invoice_no),
                 normalizeText(item.course_code),
                 normalizeText(item.course_name)
@@ -13987,175 +14111,129 @@ window.switchCustomerTab = async function(tabName, customerId) {
 
             if (!rows.some(x =>
                 [
-                    String(x.id || x.balance_id || '').trim(),
+                    String(x.id || '').trim(),
                     normalizeText(x.customer_id),
-                    normalizeText(x.hn),
                     normalizeText(x.invoice_no),
                     normalizeText(x.course_code),
                     normalizeText(x.course_name)
                 ].join('|') === key
             )) {
-                const totalQty = Number(item.total_qty || 0) || 0;
-                const remainingQty = Number(item.remaining_qty || 0) || 0;
+
+                const totalQty = Number(item.total_qty || 0);
+                const remainingQty = Number(item.remaining_qty || 0);
 
                 rows.push({
                     ...item,
                     id: rowId,
-                    balance_id: rowId,
                     bill_no: item.invoice_no || '',
                     item_name: item.course_name || '',
                     item_code: item.course_code || '',
-                    old_course_code: item.course_code || '',
                     total_qty: totalQty,
                     remaining_qty: remainingQty,
+
+                    // ✅ คำนวณใช้จาก DB จริง (กันค่าพัง)
                     used_qty: Math.max(0, totalQty - remainingQty)
                 });
             }
         });
     };
 
+    // ✅ ใช้ cache ถ้ามี
     if (cached && Array.isArray(cached.remaining) && cached.remaining.length > 0) {
         pushUnique(cached.remaining);
     } else {
-        const q1 = await window.supabaseClient
+
+        // ✅ ดึงเฉพาะ customer_id เท่านั้น (สำคัญมาก)
+        const { data, error } = await window.supabaseClient
             .from('customer_course_balance')
             .select('*')
             .eq('customer_id', customerIdStr)
-            .order('invoice_date', { ascending: false })
-            .order('created_at', { ascending: false });
+            .order('invoice_date', { ascending: false });
 
-        if (!q1.error) pushUnique(q1.data);
-
-        if (rows.length === 0 && customerHN) {
-            const q2 = await window.supabaseClient
-                .from('customer_course_balance')
-                .select('*')
-                .eq('hn', customerHN)
-                .order('invoice_date', { ascending: false })
-                .order('created_at', { ascending: false });
-
-            if (!q2.error) pushUnique(q2.data);
+        if (error) {
+            console.error('remaining error:', error);
+        } else {
+            pushUnique(data);
         }
 
-        if (rows.length === 0 && customerOldHN) {
-            const q3 = await window.supabaseClient
-                .from('customer_course_balance')
-                .select('*')
-                .eq('old_hn', customerOldHN)
-                .order('invoice_date', { ascending: false })
-                .order('created_at', { ascending: false });
-
-            if (!q3.error) pushUnique(q3.data);
-        }
-
+        // ✅ cache ใหม่
         window.customerDetailCache[customerIdStr] = window.customerDetailCache[customerIdStr] || {};
         window.customerDetailCache[customerIdStr].remaining = rows;
     }
 
+    // ❌ ตัด fallback hn / old_hn ทิ้งทั้งหมด (ตัวปัญหา)
+    // ❌ ไม่ต้องมี q2 / q3 อีกต่อไป
+
+    // ✅ กรองสาขา (กัน cross-branch)
     if (customerBranch) {
-        const sameBranchRows = rows.filter(x =>
-            !normalizeText(x.branch_name) || normalizeText(x.branch_name) === customerBranch
+        rows = rows.filter(x =>
+            !normalizeText(x.branch_name) ||
+            normalizeText(x.branch_name) === customerBranch
         );
-        if (sameBranchRows.length > 0) rows = sameBranchRows;
     }
 
-    // แสดงเฉพาะคอร์สที่ยังเหลือ
-    rows = rows.filter(item => Number(item.remaining_qty || 0) > 0);
+    // ✅ แสดงเฉพาะที่เหลือจริง
+    rows = rows.filter(item => Number(item.remaining_qty) > 0);
 
-    rows.sort((a, b) => {
-        const db = String(b.invoice_date || b.created_at || '');
-        const da = String(a.invoice_date || a.created_at || '');
-        return db.localeCompare(da);
-    });
+    // ✅ sort ใหม่
+    rows.sort((a, b) =>
+        String(b.invoice_date || '').localeCompare(String(a.invoice_date || ''))
+    );
 
+    // ✅ ไม่มีข้อมูล
     if (rows.length === 0) {
         container.innerHTML = `
-            <div class="border-2 border-slate-100 bg-slate-50/50 rounded-[2.5rem] p-8 shadow-inner overflow-hidden mb-6 relative z-10">
-                <div class="p-16 text-center text-slate-300 italic font-bold rounded-3xl border-2 border-slate-100 bg-white">
-                    📭 ไม่พบรายการคอร์สคงเหลือ
-                </div>
+            <div class="border-2 border-slate-100 bg-slate-50/50 rounded-[2.5rem] p-8 text-center">
+                📭 ไม่มีคอร์สคงเหลือจริง
             </div>
         `;
         return;
     }
 
-    const rowHtml = [];
+    // ================= UI =================
+    const rowHtml = rows.map(item => {
+        const encoded = window.safeBase64Encode(item);
 
-for (const item of rows) {
-    const encoded = window.safeBase64Encode(item);
+        return `
+        <div class="rounded-[2rem] border-2 border-slate-100 bg-white shadow-sm p-4 grid grid-cols-12 text-center">
 
-    rowHtml.push(`
-        <div class="rounded-[2rem] border-2 border-slate-100 bg-white shadow-sm hover:shadow-md transition-all overflow-hidden">
-            <div class="grid grid-cols-12 gap-3 items-center px-5 py-4 text-center">
-
-                <div class="col-span-6 md:col-span-2">
-                    <div class="font-black text-slate-800 text-sm">
-                        ${window.escapeHtml(item.invoice_no || '-')}
-                    </div>
-                    <div class="text-[10px] text-slate-400 font-bold">เลขใบเสร็จ</div>
-                </div>
-
-                <div class="col-span-6 md:col-span-1">
-                    <div class="font-black text-[#D48197] text-sm">
-                        ${window.escapeHtml(item.course_code || '-')}
-                    </div>
-                    <div class="text-[10px] text-slate-400 font-bold">รหัสคอร์ส</div>
-                </div>
-
-                <div class="col-span-12 md:col-span-3 text-left">
-                    <div class="font-black text-slate-900 text-base italic">
-                        ${window.escapeHtml(item.course_name || '-')}
-                    </div>
-                </div>
-
-                <div class="col-span-6 md:col-span-2">
-                    <div class="font-black text-slate-600 text-sm">
-                        ${window.escapeHtml(item.invoice_date || item.created_at?.split?.('T')?.[0] || '-')}
-                    </div>
-                    <div class="text-[10px] text-slate-400 font-bold">วันที่ซื้อ</div>
-                </div>
-
-                <div class="col-span-3 md:col-span-1">
-                    <div class="font-black text-slate-500">
-                        ${Number(item.total_qty || 0)}
-                    </div>
-                    <div class="text-[10px] text-slate-400 font-bold">จำนวน</div>
-                </div>
-
-                <div class="col-span-3 md:col-span-1">
-                    <div class="font-black text-blue-600">
-                        ${Number(item.used_qty || 0)}
-                    </div>
-                    <div class="text-[10px] text-slate-400 font-bold">ใช้ไป</div>
-                </div>
-
-                <div class="col-span-3 md:col-span-1">
-                    <div class="font-black text-[#D48197]">
-                        ${Number(item.remaining_qty || 0)}
-                    </div>
-                    <div class="text-[10px] text-slate-400 font-bold">คงเหลือ</div>
-                </div>
-
-                <div class="col-span-9 md:col-span-1 text-right">
-                    <button
-                        type="button"
-                        onclick="event.stopPropagation(); window.openEditCourseRemainingModal('${customerIdStr}', '${encoded}')"
-                        class="inline-flex items-center gap-1 px-3 py-2 rounded-full bg-slate-100 text-slate-700 text-[11px] font-black hover:bg-pink-100 hover:text-pink-700 transition-all"
-                    >
-                        แก้ไข ✏️
-                    </button>
-                </div>
-
+            <div class="col-span-2">
+                <b>${item.invoice_no || '-'}</b>
+                <div class="text-xs text-slate-400">เลขบิล</div>
             </div>
-        </div>
-    `);
-}
 
-container.innerHTML = `
-    <div class="space-y-3 relative z-10">
-        ${rowHtml.join('')}
-    </div>
-`;
+            <div class="col-span-1 text-pink-500">
+                <b>${item.course_code || '-'}</b>
+                <div class="text-xs text-slate-400">รหัส</div>
+            </div>
+
+            <div class="col-span-3 text-left">
+                <b>${item.course_name || '-'}</b>
+            </div>
+
+            <div class="col-span-2">
+                ${item.invoice_date || '-'}
+                <div class="text-xs text-slate-400">วันที่ซื้อ</div>
+            </div>
+
+            <div class="col-span-1">${item.total_qty}</div>
+            <div class="col-span-1 text-blue-600">${item.used_qty}</div>
+            <div class="col-span-1 text-pink-500 font-bold">${item.remaining_qty}</div>
+
+           <div class="col-span-1">
+    <button 
+        onclick="window.openEditCourseRemainingModal('${customerIdStr}','${encoded}')"
+        class="px-3 py-1.5 text-[11px] font-bold rounded-full bg-pink-50 border border-pink-200 text-[#D48197] hover:bg-pink-100 transition-all"
+    >
+        แก้ไข
+    </button>
+</div>
+
+        </div>
+        `;
+    });
+
+    container.innerHTML = `<div class="space-y-2">${rowHtml.join('')}</div>`;
 }
 
    else if (tabName === 'usage') {
@@ -14212,7 +14290,7 @@ container.innerHTML = `
         });
 }
 
-       else if (tabName === 'receipts') {
+      else if (tabName === 'receipts') {
     let receipts = [];
     const cached = window.getCustomerDetailCache(customerIdStr);
 
@@ -14245,36 +14323,40 @@ container.innerHTML = `
     if (cached && Array.isArray(cached.receipts) && cached.receipts.length > 0) {
         pushUnique(cached.receipts);
     } else {
-        const q1 = await window.supabaseClient
-            .from('customer_receipts_view')
-            .select('*')
-            .eq('customer_id', customerIdStr)
-            .order('bill_date', { ascending: false });
+        const baseSelect = 'id, customer_id, hn, old_hn, bill_no, bill_date, net_total, total, payment, status, branch_name, type, created_at';
 
-        if (q1.error) {
-            console.error('receiptsError:', q1.error);
-        } else {
-            pushUnique(q1.data);
-        }
+        const q1 = await window.supabaseClient
+            .from('sales_header')
+            .select(baseSelect)
+            .eq('customer_id', customerIdStr)
+            .order('bill_date', { ascending: false })
+            .order('created_at', { ascending: false });
+
+        if (!q1.error) pushUnique(q1.data);
+        else console.error('receipts sales_header q1 error:', q1.error);
 
         if (customerHN) {
             const q2 = await window.supabaseClient
-                .from('customer_receipts_view')
-                .select('*')
+                .from('sales_header')
+                .select(baseSelect)
                 .eq('hn', customerHN)
-                .order('bill_date', { ascending: false });
+                .order('bill_date', { ascending: false })
+                .order('created_at', { ascending: false });
 
             if (!q2.error) pushUnique(q2.data);
+            else console.error('receipts sales_header q2 error:', q2.error);
         }
 
         if (customerOldHN) {
             const q3 = await window.supabaseClient
-                .from('customer_receipts_view')
-                .select('*')
-                .eq('hn', customerOldHN)
-                .order('bill_date', { ascending: false });
+                .from('sales_header')
+                .select(baseSelect)
+                .eq('old_hn', customerOldHN)
+                .order('bill_date', { ascending: false })
+                .order('created_at', { ascending: false });
 
             if (!q3.error) pushUnique(q3.data);
+            else console.error('receipts sales_header q3 error:', q3.error);
         }
 
         window.customerDetailCache[customerIdStr] = window.customerDetailCache[customerIdStr] || {};
@@ -14290,21 +14372,40 @@ container.innerHTML = `
 
     receipts = receipts.filter(x => {
         const status = normalizeText(x.status).toLowerCase();
-        return status !== 'ยกเลิก' && status !== 'cancelled' && status !== 'canceled';
+        const type = normalizeText(x.type);
+        return (
+            status !== 'ยกเลิก' &&
+            status !== 'cancelled' &&
+            status !== 'canceled' &&
+            (!type || type === 'รายรับ')
+        );
     });
 
-    receipts.sort((a, b) => String(b.bill_date || '').localeCompare(String(a.bill_date || '')));
+    receipts.sort((a, b) => {
+        const db = String(b.bill_date || b.created_at || '');
+        const da = String(a.bill_date || a.created_at || '');
+        return db.localeCompare(da);
+    });
 
     container.innerHTML = `
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 relative z-10">
             ${receipts.length > 0 ? receipts.map(item => `
                 <div class="p-8 bg-white rounded-[2.5rem] border-2 border-slate-100 flex justify-between items-center shadow-xl hover:border-[#D48197] transition-all group">
                     <div class="text-left">
-                        <p class="text-[10px] text-slate-400 font-black uppercase mb-1">RECEIPT DATE: ${formatThaiDate(item.bill_date)}</p>
-                        <p class="font-black text-slate-900 text-2xl italic">฿${formatMoney(item.net_total ?? item.total ?? 0)}</p>
-                        <p class="text-[10px] text-[#D48197] font-black uppercase mt-1 italic tracking-widest">💳 ${item.payment || '-'}</p>
-                        <p class="text-[10px] text-slate-300 font-black uppercase mt-1 italic tracking-widest">${item.bill_no || '-'}</p>
+                        <p class="text-[10px] text-slate-400 font-black uppercase mb-1">
+                            RECEIPT DATE: ${formatThaiDate(item.bill_date)}
+                        </p>
+                        <p class="font-black text-slate-900 text-2xl italic">
+                            ฿${formatMoney(item.net_total ?? item.total ?? 0)}
+                        </p>
+                        <p class="text-[10px] text-[#D48197] font-black uppercase mt-1 italic tracking-widest">
+                            💳 ${item.payment || '-'}
+                        </p>
+                        <p class="text-[10px] text-slate-300 font-black uppercase mt-1 italic tracking-widest">
+                            ${item.bill_no || '-'}
+                        </p>
                     </div>
+
                     <button onclick="window.printReceipt('${item.id}', '${item.hn || c.hn || ''}', 'A5')" 
                         class="w-14 h-14 rounded-2xl bg-[#D48197] text-white flex items-center justify-center shadow-lg hover:bg-pink-600 transition-all scale-100 hover:scale-110 border-b-4 border-pink-800/30">
                         🖨️
@@ -20077,723 +20178,481 @@ window.reportAttendance = () => Swal.fire('Coming Soon', 'ระบบราย�
     ZONE 8.1: ระบบรายงานคอร์สคงเหลือ customer_course_balance
    ======================================================= */
 window.reportRemainingCourse = async function() {
-    try {
-        if (!window.supabaseClient) {
-            Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
-            return;
-        }
+    const target = document.getElementById('dynamicContent') || document.getElementById('pageContent');
+    if (!target) return;
 
-        const target = document.getElementById('dynamicContent');
-        if (!target) return;
+    window.currentRemainReportPage = window.currentRemainReportPage || 1;
 
-        target.innerHTML = `
-            <div id="remainingCourseReport" class="animate-in fade-in duration-500 p-4 -mt-6 pb-20">
+    const esc = (v) => String(v ?? '-')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 
-                <div class="bg-white rounded-[2rem] shadow-sm border border-pink-100 p-6 mb-4">
-                    <div class="flex items-center justify-between gap-4">
-                        <div class="flex items-center gap-4">
-                            <div class="w-14 h-14 rounded-2xl bg-[#D48197] text-white flex items-center justify-center text-2xl shadow-sm">
-                                📊
-                            </div>
-                            <div>
-                                <h2 class="text-2xl font-black text-[#D48197]">รายงาน :: รายงานคอร์สสะสมคงเหลือ</h2>
-                                <p class="text-xs text-slate-400 mt-1">รายงานสรุปคอร์สลูกค้าที่ยังมีจำนวนคงเหลือ</p>
-                            </div>
-                        </div>
+    const normalizeBranch = (v) => String(v || '')
+        .replace('เอซคลินิก', '')
+        .replace('ACE Clinic', '')
+        .replace('สาขา', '')
+        .replace(':', '')
+        .trim();
 
-                        <button onclick="window.renderReportPage()" 
-                            class="no-print px-5 py-3 rounded-2xl bg-white text-[#D48197] font-bold text-xs border border-pink-200 hover:bg-pink-50">
-                            ← กลับ
-                        </button>
+    const currentUser = typeof window.getCurrentUserSafe === 'function'
+        ? window.getCurrentUserSafe()
+        : JSON.parse(localStorage.getItem('currentUser') || '{}');
+
+    const viewingBranch = typeof window.getCurrentViewingBranch === 'function'
+        ? window.getCurrentViewingBranch()
+        : (currentUser.viewingBranch || currentUser.branch || currentUser.homeBranch || 'ทุกสาขา');
+
+    const safeBranch = normalizeBranch(viewingBranch);
+    const isAllBranches = safeBranch === 'ทุกสาขา';
+
+    const typeFilter = document.getElementById('remainTypeFilter')?.value || 'คงเหลือเท่านั้น';
+    const branchFilter = document.getElementById('remainBranchFilter')?.value || safeBranch || 'ทุกสาขา';
+    const searchTerm = (document.getElementById('remainSearchInput')?.value || '').toLowerCase().trim();
+    const pageSize = parseInt(document.getElementById('remainPageSize')?.value || '20', 10);
+
+    const periodType = document.getElementById('remainPeriodType')?.value || 'ทั้งหมด';
+    const dayFilter = document.getElementById('remainDayFilter')?.value || '';
+    const monthOnlyFilter = document.getElementById('remainMonthOnlyFilter')?.value || String(new Date().getMonth() + 1).padStart(2, '0');
+const monthYearFilter = document.getElementById('remainMonthYearFilter')?.value || String(new Date().getFullYear());
+const monthFilter = `${monthYearFilter}-${monthOnlyFilter}`;
+    const yearFilter = document.getElementById('remainYearFilter')?.value || String(new Date().getFullYear());
+
+    let query = window.supabaseClient
+        .from('customer_course_balance')
+        .select('*')
+        .order('invoice_date', { ascending: false })
+        .order('created_at', { ascending: false });
+
+    if (!isAllBranches) {
+        query = query.eq('branch_name', safeBranch);
+    } else if (branchFilter !== 'ทุกสาขา') {
+        query = query.eq('branch_name', branchFilter);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+        console.error('reportRemainingCourse error:', error);
+        Swal.fire('โหลดรายงานไม่สำเร็จ', error.message || 'เกิดข้อผิดพลาด', 'error');
+        return;
+    }
+
+    let rows = Array.isArray(data) ? data : [];
+
+    rows = rows.map(r => {
+        const totalQty = Number(r.total_qty || 0);
+        const remainingQty = Number(r.remaining_qty || 0);
+        const usedQty = Math.max(0, totalQty - remainingQty);
+
+        return {
+            ...r,
+            total_qty: totalQty,
+            remaining_qty: remainingQty,
+            used_qty: usedQty
+        };
+    });
+
+    rows = rows.filter(r => {
+        const matchType =
+            typeFilter === 'ทั้งหมด' ||
+            (typeFilter === 'คงเหลือเท่านั้น' && Number(r.remaining_qty || 0) > 0) ||
+            (typeFilter === 'ใช้หมดแล้ว' && Number(r.remaining_qty || 0) <= 0);
+
+        const rowDate = String(r.invoice_date || '').slice(0, 10);
+        const rowMonth = rowDate.slice(0, 7);
+        const rowYear = rowDate.slice(0, 4);
+
+        const matchPeriod =
+            periodType === 'ทั้งหมด' ||
+            (periodType === 'รายวัน' && dayFilter && rowDate === dayFilter) ||
+            (periodType === 'รายเดือน' && monthFilter && rowMonth === monthFilter) ||
+            (periodType === 'รายปี' && yearFilter && rowYear === yearFilter);
+
+        const text = [
+            r.invoice_no,
+            r.hn,
+            r.old_hn,
+            r.course_code,
+            r.course_name,
+            r.branch_name
+        ].join(' ').toLowerCase();
+
+        const matchSearch = !searchTerm || text.includes(searchTerm);
+
+        return matchType && matchPeriod && matchSearch;
+    });
+
+    const totalCourses = rows.length;
+    const totalQty = rows.reduce((sum, r) => sum + Number(r.total_qty || 0), 0);
+    const totalRemain = rows.reduce((sum, r) => sum + Number(r.remaining_qty || 0), 0);
+    const totalValue = rows.reduce((sum, r) => sum + Number(r.total_price || r.sales_total || 0), 0);
+
+    const totalPages = Math.ceil(rows.length / pageSize) || 1;
+    window.currentRemainReportPage = Math.max(1, Math.min(window.currentRemainReportPage, totalPages));
+
+    const startIndex = (window.currentRemainReportPage - 1) * pageSize;
+    const paginatedRows = rows.slice(startIndex, startIndex + pageSize);
+
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 p-4 -mt-6 pb-24 text-left font-sans">
+
+            <div class="bg-white rounded-[2.5rem] border border-pink-100 shadow-sm p-6 mb-6 flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <div class="w-14 h-14 rounded-2xl bg-[#D48197] text-white flex items-center justify-center text-2xl shadow-lg">
+                        📊
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-black text-[#D48197]">รายงาน :: คอร์สคงเหลือ</h2>
+                        <p class="text-[12px] text-slate-400 font-bold mt-1">ดึงข้อมูลจากตาราง customer_course_balance</p>
                     </div>
                 </div>
 
-                <div class="bg-white rounded-[2rem] shadow-sm border border-pink-100 p-4 mb-3 no-print">
-                    <div class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
-
-                        <div>
-                            <label class="text-[10px] font-bold text-[#D48197] block mb-1">ประเภททั้งหมด</label>
-                            <select id="rcTypeFilter" class="ace-report-input" onchange="window.updateRemainingCourseDateFilter()">
-                                <option value="daily">รายวัน</option>
-                                <option value="monthly">รายเดือน</option>
-                                <option value="yearly">รายปี</option>
-                                <option value="all">ทั้งหมด</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label id="rcDateLabel" class="text-[10px] font-bold text-[#D48197] block mb-1">วันที่</label>
-                            <div id="rcDateFilterWrap"></div>
-                        </div>
-
-                        <div>
-                            <label class="text-[10px] font-bold text-[#D48197] block mb-1">เลือกสาขา</label>
-                            <select id="rcBranchFilter" class="ace-report-input">
-                                <option value="ทุกสาขา">ทั้งหมด</option>
-                                <option value="บางพลี">บางพลี</option>
-                                <option value="ชลบุรี">ชลบุรี</option>
-                                <option value="อุดมสุข">อุดมสุข</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="text-[10px] font-bold text-[#D48197] block mb-1">เลือกสถานะคอร์ส</label>
-                            <select id="rcStatusFilter" class="ace-report-input">
-                                <option value="remaining">คงเหลือเท่านั้น</option>
-                                <option value="all">ทั้งหมด</option>
-                                <option value="expired">หมดอายุ</option>
-                                <option value="active">ยังไม่หมดอายุ</option>
-                            </select>
-                        </div>
-
-                        <div class="flex gap-2">
-                            <button onclick="window.loadRemainingCourseReport()" 
-                                class="h-[54px] flex-1 rounded-2xl bg-[#D48197] text-white font-bold text-xs shadow-sm hover:opacity-90">
-                                📊 รายงาน
-                            </button>
-                            <button onclick="window.exportRemainingCourseCSV()" 
-                                class="h-[54px] flex-1 rounded-2xl bg-slate-800 text-white font-bold text-xs shadow-sm hover:opacity-90">
-                                📄 ออกรายงาน
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="mt-3">
-                        <label class="text-[10px] font-bold text-[#D48197] block mb-1">ค้นหา เลขบิล / HN / รหัสคอร์ส / ชื่อคอร์ส</label>
-                        <input id="rcSearchInput" 
-                            type="text" 
-                            placeholder="ค้นหา..." 
-                            class="ace-report-input"
-                            onkeydown="if(event.key === 'Enter') window.loadRemainingCourseReport();">
-                    </div>
-                </div>
-
-                <div id="rcSummaryBox" class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3"></div>
-
-                <div class="bg-white rounded-[2rem] border border-pink-100 shadow-sm overflow-hidden">
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-xs">
-                            <thead class="bg-[#D48197] text-white">
-                                <tr>
-                                    <th class="p-3 text-center">#</th>
-                                    <th class="p-3 text-left">เลขที่ใบแจ้งหนี้</th>
-                                    <th class="p-3 text-left">วันที่ซื้อ</th>
-                                    <th class="p-3 text-left">สาขา</th>
-                                    <th class="p-3 text-left">HN</th>
-                                    <th class="p-3 text-left">รหัสคอร์ส</th>
-                                    <th class="p-3 text-left">ชื่อคอร์ส</th>
-                                    <th class="p-3 text-center">ซื้อทั้งหมด</th>
-                                    <th class="p-3 text-center">คงเหลือ</th>
-                                    <th class="p-3 text-center">หน่วย</th>
-                                    <th class="p-3 text-left">วันหมดอายุ</th>
-                                    <th class="p-3 text-right">ราคา/ครั้ง</th>
-                                    <th class="p-3 text-right">มูลค่าคงเหลือ</th>
-                                </tr>
-                            </thead>
-                            <tbody id="rcTableBody">
-                                <tr>
-                                    <td colspan="13" class="p-8 text-center text-slate-400">
-                                        กดปุ่มรายงานเพื่อดูข้อมูล
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
+                <button onclick="window.loadPage ? window.loadPage(1, 'Dashboard') : window.history.back()"
+                    class="bg-white border border-pink-100 text-slate-500 px-5 py-3 rounded-2xl text-[12px] font-bold hover:bg-pink-50">
+                    ← กลับ
+                </button>
             </div>
-        `;
 
-        window.injectRemainingCourseReportCSS();
-        window.updateRemainingCourseDateFilter();
-        window.loadRemainingCourseReport();
+            <div class="bg-white rounded-[2.5rem] border border-pink-100 shadow-sm p-5 mb-5">
+                <div class="flex flex-wrap items-end gap-3">
 
-    } catch (err) {
-        console.error('reportRemainingCourse error:', err);
-        Swal.fire('Error', 'เกิดข้อผิดพลาด: ' + err.message, 'error');
-    }
-};
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] font-black text-[#D48197] ml-2">แสดง</label>
+                        <select id="remainPageSize" onchange="window.currentRemainReportPage=1; window.reportRemainingCourse()"
+                            class="h-[44px] min-w-[115px] bg-white border border-pink-200 rounded-2xl px-4 text-[12px] outline-none text-slate-600 shadow-sm appearance-none">
+                            <option value="20" ${pageSize === 20 ? 'selected' : ''}>20 รายการ</option>
+                            <option value="50" ${pageSize === 50 ? 'selected' : ''}>50 รายการ</option>
+                            <option value="100" ${pageSize === 100 ? 'selected' : ''}>100 รายการ</option>
+                        </select>
+                    </div>
 
-window.updateRemainingCourseDateFilter = function() {
-    const typeFilter = document.getElementById('rcTypeFilter')?.value || 'daily';
-    const wrap = document.getElementById('rcDateFilterWrap');
-    const label = document.getElementById('rcDateLabel');
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] font-black text-[#D48197] ml-2">ประเภท</label>
+                        <select id="remainTypeFilter" onchange="window.currentRemainReportPage=1; window.reportRemainingCourse()"
+                            class="h-[44px] min-w-[145px] bg-white border border-pink-200 rounded-2xl px-4 text-[12px] outline-none text-slate-600 shadow-sm appearance-none">
+                            <option value="คงเหลือเท่านั้น" ${typeFilter === 'คงเหลือเท่านั้น' ? 'selected' : ''}>คงเหลือเท่านั้น</option>
+                            <option value="ทั้งหมด" ${typeFilter === 'ทั้งหมด' ? 'selected' : ''}>ทั้งหมด</option>
+                            <option value="ใช้หมดแล้ว" ${typeFilter === 'ใช้หมดแล้ว' ? 'selected' : ''}>ใช้หมดแล้ว</option>
+                        </select>
+                    </div>
 
-    if (!wrap) return;
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] font-black text-[#D48197] ml-2">สาขา</label>
+                        <select id="remainBranchFilter" onchange="window.currentRemainReportPage=1; window.reportRemainingCourse()"
+                            class="h-[44px] min-w-[135px] bg-white border border-pink-200 rounded-2xl px-4 text-[12px] outline-none text-slate-600 shadow-sm appearance-none"
+                            ${!isAllBranches ? 'disabled' : ''}>
+                            <option value="ทุกสาขา" ${branchFilter === 'ทุกสาขา' ? 'selected' : ''}>ทุกสาขา</option>
+                            <option value="บางพลี" ${branchFilter === 'บางพลี' ? 'selected' : ''}>บางพลี</option>
+                            <option value="ชลบุรี" ${branchFilter === 'ชลบุรี' ? 'selected' : ''}>ชลบุรี</option>
+                            <option value="อุดมสุข" ${branchFilter === 'อุดมสุข' ? 'selected' : ''}>อุดมสุข</option>
+                        </select>
+                    </div>
 
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const today = now.toISOString().slice(0, 10);
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] font-black text-[#D48197] ml-2">ช่วงเวลา</label>
+                        <select id="remainPeriodType" onchange="window.currentRemainReportPage=1; window.reportRemainingCourse()"
+                            class="h-[44px] min-w-[120px] bg-white border border-pink-200 rounded-2xl px-4 text-[12px] outline-none text-slate-600 shadow-sm appearance-none">
+                            <option value="ทั้งหมด" ${periodType === 'ทั้งหมด' ? 'selected' : ''}>ทั้งหมด</option>
+                            <option value="รายวัน" ${periodType === 'รายวัน' ? 'selected' : ''}>รายวัน</option>
+                            <option value="รายเดือน" ${periodType === 'รายเดือน' ? 'selected' : ''}>รายเดือน</option>
+                            <option value="รายปี" ${periodType === 'รายปี' ? 'selected' : ''}>รายปี</option>
+                        </select>
+                    </div>
 
-    if (typeFilter === 'daily') {
-        if (label) label.textContent = 'วันที่';
+                    ${periodType === 'รายวัน' ? `
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] font-black text-[#D48197] ml-2">เลือกวันที่</label>
+                            <input type="date" id="remainDayFilter" value="${dayFilter}"
+                                onchange="window.currentRemainReportPage=1; window.reportRemainingCourse()"
+                                class="h-[44px] w-[150px] bg-white border border-pink-200 rounded-2xl px-4 text-[12px] outline-none text-slate-600 shadow-sm">
+                        </div>
+                    ` : ''}
 
-        wrap.innerHTML = `
-            <input id="rcDateFilter"
-                type="date"
-                value="${today}"
-                class="ace-report-input">
-        `;
-        return;
-    }
-
-    if (typeFilter === 'monthly') {
-        if (label) label.textContent = 'เดือน';
-
-        wrap.innerHTML = `
-            <input id="rcDateFilter"
-                type="month"
-                value="${currentYear}-${currentMonth}"
-                class="ace-report-input">
-        `;
-        return;
-    }
-
-    if (typeFilter === 'yearly') {
-        if (label) label.textContent = 'ปี พ.ศ.';
-
-        let yearOptions = '';
-
-        for (let y = currentYear + 1; y >= currentYear - 10; y--) {
-            const buddhistYear = y + 543;
-
-            yearOptions += `
-                <option value="${y}" ${y === currentYear ? 'selected' : ''}>
-                    ${buddhistYear}
+                    ${periodType === 'รายเดือน' ? `
+    <div class="flex flex-col gap-1">
+        <label class="text-[10px] font-black text-[#D48197] ml-2">เลือกเดือน</label>
+        <select id="remainMonthOnlyFilter"
+            onchange="window.currentRemainReportPage=1; window.reportRemainingCourse()"
+            class="h-[44px] w-[125px] bg-white border border-pink-200 rounded-2xl px-4 text-[12px] outline-none text-slate-600 shadow-sm appearance-none">
+            ${[
+                ['01','มกราคม'], ['02','กุมภาพันธ์'], ['03','มีนาคม'], ['04','เมษายน'],
+                ['05','พฤษภาคม'], ['06','มิถุนายน'], ['07','กรกฎาคม'], ['08','สิงหาคม'],
+                ['09','กันยายน'], ['10','ตุลาคม'], ['11','พฤศจิกายน'], ['12','ธันวาคม']
+            ].map(([m, name]) => `
+                <option value="${m}" ${(document.getElementById('remainMonthOnlyFilter')?.value || String(new Date().getMonth()+1).padStart(2,'0')) === m ? 'selected' : ''}>
+                    ${name}
                 </option>
-            `;
-        }
+            `).join('')}
+        </select>
+    </div>
 
-        wrap.innerHTML = `
-            <select id="rcDateFilter" class="ace-report-input">
-                ${yearOptions}
-            </select>
-        `;
-        return;
-    }
+    <div class="flex flex-col gap-1">
+        <label class="text-[10px] font-black text-[#D48197] ml-2">เลือกปี</label>
+        <input type="number" id="remainMonthYearFilter"
+            value="${document.getElementById('remainMonthYearFilter')?.value || new Date().getFullYear()}"
+            min="2020" max="2100"
+            onchange="window.currentRemainReportPage=1; window.reportRemainingCourse()"
+            class="h-[44px] w-[105px] bg-white border border-pink-200 rounded-2xl px-4 text-[12px] outline-none text-slate-600 shadow-sm">
+    </div>
+` : ''}
 
-    if (label) label.textContent = 'ช่วงเวลา';
+                    ${periodType === 'รายปี' ? `
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] font-black text-[#D48197] ml-2">เลือกปี</label>
+                            <input type="number" id="remainYearFilter" value="${yearFilter}" min="2020" max="2100"
+                                onchange="window.currentRemainReportPage=1; window.reportRemainingCourse()"
+                                class="h-[44px] w-[100px] bg-white border border-pink-200 rounded-2xl px-4 text-[12px] outline-none text-slate-600 shadow-sm">
+                        </div>
+                    ` : ''}
 
-    wrap.innerHTML = `
-        <input id="rcDateFilter"
-            type="text"
-            value="ทั้งหมด"
-            disabled
-            class="ace-report-input">
+                    <div class="flex flex-col gap-1 w-[300px]">
+                        <label class="text-[10px] font-black text-[#D48197] ml-2">ค้นหา เลขบิล / HN / ชื่อคอร์ส</label>
+                        <div class="flex gap-2">
+                            <input id="remainSearchInput" value="${esc(searchTerm)}"
+                                onkeyup="if(event.key==='Enter'){window.currentRemainReportPage=1; window.reportRemainingCourse()}"
+                                placeholder="ค้นหา..."
+                                class="h-[44px] flex-1 bg-white border border-pink-200 rounded-2xl px-4 text-[13px] outline-none text-slate-700 shadow-sm">
+
+                            <button onclick="window.currentRemainReportPage=1; window.reportRemainingCourse()"
+                                class="h-[44px] px-5 bg-[#D48197] text-white rounded-2xl text-[12px] font-black shadow-md hover:bg-black">
+                                ค้นหา
+                            </button>
+                        </div>
+                    </div>
+
+                    <button onclick="window.exportRemainingCourseExcel()"
+                        class="h-[44px] px-6 bg-black text-white rounded-2xl text-[12px] font-black shadow-md hover:bg-[#D48197]">
+                        📄 Excel
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
+                <div class="bg-white rounded-[2rem] border border-pink-100 p-5 shadow-sm">
+                    <p class="text-[10px] text-slate-400 font-black">จำนวนรายการคอร์ส</p>
+                    <h3 class="text-3xl font-black text-slate-800 mt-1">${totalCourses.toLocaleString()}</h3>
+                </div>
+                <div class="bg-white rounded-[2rem] border border-pink-100 p-5 shadow-sm">
+                    <p class="text-[10px] text-slate-400 font-black">จำนวนที่ซื้อทั้งหมด</p>
+                    <h3 class="text-3xl font-black text-slate-800 mt-1">${totalQty.toLocaleString()}</h3>
+                </div>
+                <div class="bg-white rounded-[2rem] border border-pink-100 p-5 shadow-sm">
+                    <p class="text-[10px] text-slate-400 font-black">จำนวนคงเหลือ</p>
+                    <h3 class="text-3xl font-black text-[#D48197] mt-1">${totalRemain.toLocaleString()}</h3>
+                </div>
+                <div class="bg-white rounded-[2rem] border border-pink-100 p-5 shadow-sm">
+                    <p class="text-[10px] text-slate-400 font-black">มูลค่ารวม</p>
+                    <h3 class="text-2xl font-black text-emerald-600 mt-1">฿${totalValue.toLocaleString()}</h3>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-[3rem] border border-pink-100 shadow-xl p-6 overflow-x-auto">
+                <table class="w-full min-w-[1200px] text-left border-separate border-spacing-y-2">
+                    <thead>
+                        <tr class="text-[11px]">
+                            <th class="bg-[#D48197] text-white px-4 py-4 rounded-l-2xl text-center">#</th>
+                            <th class="bg-[#D48197] text-white px-4 py-4">เลขที่ใบเสร็จ</th>
+                            <th class="bg-[#D48197] text-white px-4 py-4">วันที่ซื้อ</th>
+                            <th class="bg-[#D48197] text-white px-4 py-4">สาขา</th>
+                            <th class="bg-[#D48197] text-white px-4 py-4">HN</th>
+                            <th class="bg-[#D48197] text-white px-4 py-4">รหัสคอร์ส</th>
+                            <th class="bg-[#D48197] text-white px-4 py-4">ชื่อคอร์ส</th>
+                            <th class="bg-[#D48197] text-white px-4 py-4 text-center">ซื้อทั้งหมด</th>
+                            <th class="bg-[#D48197] text-white px-4 py-4 text-center">ใช้ไป</th>
+                            <th class="bg-[#D48197] text-white px-4 py-4 text-center">คงเหลือ</th>
+                            <th class="bg-[#D48197] text-white px-4 py-4 rounded-r-2xl text-center">วันหมดอายุ</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        ${paginatedRows.length ? paginatedRows.map((item, i) => `
+                            <tr class="bg-pink-50/40 hover:bg-pink-50 transition-all text-[12px] text-slate-600">
+                                <td class="px-4 py-4 rounded-l-2xl text-center font-bold">${startIndex + i + 1}</td>
+                                <td class="px-4 py-4 font-black text-slate-700">${esc(item.invoice_no || '-')}</td>
+                                <td class="px-4 py-4">${esc(item.invoice_date || '-')}</td>
+                                <td class="px-4 py-4">${esc(item.branch_name || '-')}</td>
+                                <td class="px-4 py-4 font-bold text-[#D48197]">${esc(item.hn || '-')}</td>
+                                <td class="px-4 py-4">${esc(item.course_code || '-')}</td>
+                                <td class="px-4 py-4 font-bold text-slate-800">${esc(item.course_name || '-')}</td>
+                                <td class="px-4 py-4 text-center font-black">${Number(item.total_qty || 0)}</td>
+                                <td class="px-4 py-4 text-center font-black text-blue-600">${Number(item.used_qty || 0)}</td>
+                                <td class="px-4 py-4 text-center font-black text-[#D48197]">${Number(item.remaining_qty || 0)}</td>
+                                <td class="px-4 py-4 rounded-r-2xl text-center">${esc(item.expiry_date || '-')}</td>
+                            </tr>
+                        `).join('') : `
+                            <tr>
+                                <td colspan="11" class="p-20 text-center text-slate-300 italic font-bold">
+                                    ไม่พบข้อมูลคอร์สคงเหลือ
+                                </td>
+                            </tr>
+                        `}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="flex justify-center items-center gap-4 mt-8">
+                <button onclick="window.currentRemainReportPage=Math.max(1,window.currentRemainReportPage-1);window.reportRemainingCourse()"
+                    ${window.currentRemainReportPage === 1 ? 'disabled' : ''}
+                    class="px-6 py-2 bg-white border border-pink-200 rounded-2xl disabled:opacity-30 text-[11px] font-bold hover:bg-pink-50">
+                    ก่อนหน้า
+                </button>
+
+                <span class="text-[12px] font-black text-[#D48197]">
+                    หน้า ${window.currentRemainReportPage} / ${totalPages}
+                </span>
+
+                <button onclick="window.currentRemainReportPage=Math.min(${totalPages},window.currentRemainReportPage+1);window.reportRemainingCourse()"
+                    ${window.currentRemainReportPage === totalPages ? 'disabled' : ''}
+                    class="px-6 py-2 bg-white border border-pink-200 rounded-2xl disabled:opacity-30 text-[11px] font-bold hover:bg-pink-50">
+                    ถัดไป
+                </button>
+            </div>
+        </div>
     `;
 };
 
-window.loadRemainingCourseReport = async function() {
+window.exportRemainingCourseExcel = async function() {
     try {
-        if (!window.supabaseClient) {
-            Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
-            return;
+        if (typeof XLSX === 'undefined') {
+            return Swal.fire('ยังไม่พบ XLSX', 'กรุณาใส่ CDN xlsx ใน <head> ก่อนค่ะ', 'warning');
         }
 
-        const typeFilter = document.getElementById('rcTypeFilter')?.value || 'daily';
-        const dateFilter = document.getElementById('rcDateFilter')?.value || '';
-        const branchFilter = document.getElementById('rcBranchFilter')?.value || 'ทุกสาขา';
-        const statusFilter = document.getElementById('rcStatusFilter')?.value || 'remaining';
-        const searchTerm = String(document.getElementById('rcSearchInput')?.value || '').toLowerCase().trim();
+        const normalizeBranch = (v) => String(v || '')
+            .replace('เอซคลินิก', '')
+            .replace('ACE Clinic', '')
+            .replace('สาขา', '')
+            .replace(':', '')
+            .trim();
 
-        Swal.fire({
-            title: 'กำลังโหลดรายงาน...',
-            allowOutsideClick: false,
-            didOpen: () => Swal.showLoading()
-        });
+        const currentUser = typeof window.getCurrentUserSafe === 'function'
+            ? window.getCurrentUserSafe()
+            : JSON.parse(localStorage.getItem('currentUser') || '{}');
+
+        const viewingBranch = typeof window.getCurrentViewingBranch === 'function'
+            ? window.getCurrentViewingBranch()
+            : (currentUser.viewingBranch || currentUser.branch || currentUser.homeBranch || 'ทุกสาขา');
+
+        const safeBranch = normalizeBranch(viewingBranch);
+        const isAllBranches = safeBranch === 'ทุกสาขา';
+
+        const typeFilter = document.getElementById('remainTypeFilter')?.value || 'คงเหลือเท่านั้น';
+        const branchFilter = document.getElementById('remainBranchFilter')?.value || safeBranch || 'ทุกสาขา';
+        const searchTerm = (document.getElementById('remainSearchInput')?.value || '').toLowerCase().trim();
 
         let query = window.supabaseClient
             .from('customer_course_balance')
-            .select(`
-                id,
-                customer_id,
-                hn,
-                old_hn,
-                invoice_no,
-                invoice_date,
-                course_code,
-                course_name,
-                total_qty,
-                remaining_qty,
-                unit,
-                expiry_date,
-                unit_price,
-                total_price,
-                sales_total,
-                branch_name,
-                source_file,
-                created_at,
-                staff_df,
-                doctor_df
-            `)
-            .order('invoice_date', { ascending: false })
-            .order('created_at', { ascending: false });
+            .select('*')
+            .order('invoice_date', { ascending: false });
 
-        if (statusFilter === 'remaining') {
-            query = query.gt('remaining_qty', 0);
-        }
-
-        if (branchFilter !== 'ทุกสาขา') {
-            query = query.ilike('branch_name', `%${branchFilter}%`);
-        }
-
-        if (dateFilter && typeFilter !== 'all') {
-            if (typeFilter === 'daily') {
-                query = query.eq('invoice_date', dateFilter);
-            }
-
-            if (typeFilter === 'monthly') {
-                const [year, month] = dateFilter.split('-');
-                const start = `${year}-${month}-01`;
-                const lastDay = new Date(Number(year), Number(month), 0).getDate();
-                const end = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
-
-                query = query.gte('invoice_date', start).lte('invoice_date', end);
-            }
-
-            if (typeFilter === 'yearly') {
-                const year = String(dateFilter);
-                query = query.gte('invoice_date', `${year}-01-01`).lte('invoice_date', `${year}-12-31`);
-            }
+        if (!isAllBranches) {
+            query = query.eq('branch_name', safeBranch);
+        } else if (branchFilter !== 'ทุกสาขา') {
+            query = query.eq('branch_name', branchFilter);
         }
 
         const { data, error } = await query;
 
         if (error) {
-            console.error('loadRemainingCourseReport error:', error);
-            Swal.fire('Error', 'โหลดข้อมูลไม่สำเร็จ: ' + error.message, 'error');
-            return;
+            console.error('exportRemainingCourseExcel error:', error);
+            return Swal.fire('โหลดข้อมูลไม่สำเร็จ', error.message || 'เกิดข้อผิดพลาด', 'error');
         }
 
-        const today = new Date().toISOString().slice(0, 10);
         let rows = Array.isArray(data) ? data : [];
 
-        if (statusFilter === 'expired') {
-            rows = rows.filter(r => r.expiry_date && String(r.expiry_date) < today);
-        }
+        rows = rows.map(r => {
+            const totalQty = Number(r.total_qty || 0);
+            const remainingQty = Number(r.remaining_qty || 0);
 
-        if (statusFilter === 'active') {
-            rows = rows.filter(r => !r.expiry_date || String(r.expiry_date) >= today);
-        }
-
-        if (searchTerm) {
-            rows = rows.filter(r => {
-                const text = [
-                    r.invoice_no,
-                    r.hn,
-                    r.old_hn,
-                    r.course_code,
-                    r.course_name,
-                    r.branch_name
-                ].map(v => String(v || '').toLowerCase()).join(' ');
-
-                return text.includes(searchTerm);
-            });
-        }
-
-        window.currentRemainingCourseRows = rows;
-
-        Swal.close();
-
-        if (typeof window.renderRemainingCourseTable === 'function') {
-            window.renderRemainingCourseTable(rows);
-        }
-
-    } catch (err) {
-        console.error('loadRemainingCourseReport fatal:', err);
-        Swal.fire('Error', 'เกิดข้อผิดพลาด: ' + err.message, 'error');
-    }
-};
-
-window.renderRemainingCourseTable = function(rows) {
-    const tbody = document.getElementById('rcTableBody');
-    const summaryBox = document.getElementById('rcSummaryBox');
-    if (!tbody) return;
-
-    rows = Array.isArray(rows) ? rows : [];
-
-    const formatMoney = (num) => Number(num || 0).toLocaleString('th-TH', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    });
-
-    const formatDate = (value) => {
-        if (!value) return '-';
-
-        const d = new Date(value);
-        if (isNaN(d.getTime())) return '-';
-
-        return d.toLocaleDateString('th-TH', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
+            return {
+                ...r,
+                total_qty: totalQty,
+                remaining_qty: remainingQty,
+                used_qty: Math.max(0, totalQty - remainingQty)
+            };
         });
-    };
 
-    const totalQty = rows.reduce((sum, r) => sum + Number(r.total_qty || 0), 0);
-    const remainQty = rows.reduce((sum, r) => sum + Number(r.remaining_qty || 0), 0);
-    const remainValue = rows.reduce((sum, r) => {
-        return sum + (Number(r.remaining_qty || 0) * Number(r.unit_price || 0));
-    }, 0);
+        rows = rows.filter(r => {
+            const matchType =
+                typeFilter === 'ทั้งหมด' ||
+                (typeFilter === 'คงเหลือเท่านั้น' && Number(r.remaining_qty || 0) > 0) ||
+                (typeFilter === 'ใช้หมดแล้ว' && Number(r.remaining_qty || 0) <= 0);
 
-    if (summaryBox) {
-        summaryBox.innerHTML = `
-            <div class="rc-card">
-                <p>จำนวนรายการ</p>
-                <b>${rows.length.toLocaleString('th-TH')}</b>
-            </div>
+            const text = [
+                r.invoice_no,
+                r.hn,
+                r.old_hn,
+                r.course_code,
+                r.course_name,
+                r.branch_name
+            ].join(' ').toLowerCase();
 
-            <div class="rc-card">
-                <p>จำนวนซื้อทั้งหมด</p>
-                <b>${totalQty.toLocaleString('th-TH')}</b>
-            </div>
+            return matchType && (!searchTerm || text.includes(searchTerm));
+        });
 
-            <div class="rc-card">
-                <p>จำนวนคงเหลือ</p>
-                <b class="text-[#D48197]">${remainQty.toLocaleString('th-TH')}</b>
-            </div>
-
-            <div class="rc-card">
-                <p>มูลค่าคงเหลือ</p>
-                <b>${formatMoney(remainValue)}</b>
-            </div>
-        `;
-    }
-
-    if (!rows.length) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="13" class="p-8 text-center text-slate-400">
-                    ไม่พบข้อมูลตามเงื่อนไขที่เลือก
-                </td>
-            </tr>
-        `;
-        return;
-    }
-
-    tbody.innerHTML = rows.map((r, index) => {
-        const totalQtyRow = Number(r.total_qty || 0);
-        const remainQtyRow = Number(r.remaining_qty || 0);
-        const unitPrice = Number(r.unit_price || 0);
-        const value = remainQtyRow * unitPrice;
-
-        return `
-            <tr class="border-b border-pink-50 hover:bg-pink-50/50 transition-colors">
-                <td class="p-3 text-center text-slate-500">${index + 1}</td>
-
-                <td class="p-3 font-bold text-[#9f5269]">
-                    ${r.invoice_no || '-'}
-                </td>
-
-                <td class="p-3 text-slate-600">
-                    ${formatDate(r.invoice_date)}
-                </td>
-
-                <td class="p-3 text-slate-600">
-                    ${r.branch_name || '-'}
-                </td>
-
-                <td class="p-3 font-bold text-[#D48197]">
-                    ${r.hn || r.old_hn || '-'}
-                </td>
-
-                <td class="p-3 text-slate-600">
-                    ${r.course_code || '-'}
-                </td>
-
-                <td class="p-3 min-w-[240px] font-semibold text-slate-700">
-                    ${r.course_name || '-'}
-                </td>
-
-                <td class="p-3 text-center text-slate-600">
-                    ${totalQtyRow.toLocaleString('th-TH')}
-                </td>
-
-                <td class="p-3 text-center font-black text-rose-600">
-                    ${remainQtyRow.toLocaleString('th-TH')}
-                </td>
-
-                <td class="p-3 text-center text-slate-600">
-                    ${r.unit || 'ครั้ง'}
-                </td>
-
-                <td class="p-3 text-slate-600">
-                    ${formatDate(r.expiry_date)}
-                </td>
-
-                <td class="p-3 text-right text-slate-600">
-                    ${formatMoney(unitPrice)}
-                </td>
-
-                <td class="p-3 text-right font-black text-slate-700">
-                    ${formatMoney(value)}
-                </td>
-            </tr>
-        `;
-    }).join('');
-};
-
-window.injectRemainingCourseReportCSS = function() {
-    if (document.getElementById('remainingCourseReportCSS')) return;
-
-    const style = document.createElement('style');
-    style.id = 'remainingCourseReportCSS';
-
-    style.innerHTML = `
-
-    /* =========================
-        INPUT / SELECT STYLE (NO GRAY)
-    ========================= */
-    .ace-report-input {
-        width: 100%;
-        height: 54px;
-        background: #ffffff !important;
-        border: 1.5px solid #f3c4d2 !important;
-        border-radius: 18px !important;
-        padding: 0 16px !important;
-        color: #334155 !important;
-        font-size: 13px !important;
-        font-weight: 700 !important;
-        outline: none !important;
-        box-shadow: 0 6px 18px rgba(212,129,151,.06) !important;
-
-        appearance: none !important;
-        -webkit-appearance: none !important;
-        -moz-appearance: none !important;
-
-        background-image: url("data:image/svg+xml;utf8,<svg fill='%23D48197' height='20' viewBox='0 0 24 24' width='20' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
-        background-repeat: no-repeat;
-        background-position: right 12px center;
-        background-size: 16px;
-    }
-
-    /* DATE / MONTH INPUT FIX */
-    input[type="date"].ace-report-input,
-    input[type="month"].ace-report-input {
-        appearance: auto !important;
-        -webkit-appearance: auto !important;
-        background-image: none !important;
-    }
-
-    .ace-report-input:hover {
-        border-color: #D48197 !important;
-        background: #fffafd !important;
-    }
-
-    .ace-report-input:focus {
-        border-color: #D48197 !important;
-        box-shadow: 0 0 0 4px rgba(212,129,151,.14) !important;
-        background: #ffffff !important;
-    }
-
-    .ace-report-input:disabled {
-        background: #fff5f8 !important;
-        color: #D48197 !important;
-        opacity: 1 !important;
-    }
-
-    /* =========================
-        SUMMARY CARD
-    ========================= */
-    .rc-card {
-        background: #ffffff;
-        border: 1px solid #f3c4d2;
-        border-radius: 22px;
-        padding: 16px;
-        box-shadow: 0 8px 22px rgba(212,129,151,.06);
-        transition: all 0.2s ease;
-    }
-
-    .rc-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 12px 26px rgba(212,129,151,.12);
-    }
-
-    .rc-card p {
-        font-size: 10px;
-        color: #9ca3af;
-        font-weight: 800;
-        text-transform: uppercase;
-        margin-bottom: 6px;
-        letter-spacing: .05em;
-    }
-
-    .rc-card b {
-        font-size: 26px;
-        color: #334155;
-        font-weight: 900;
-    }
-
-    /* =========================
-        TABLE STYLE
-    ========================= */
-    #remainingCourseReport table {
-        width: 100%;
-        border-collapse: collapse;
-    }
-
-    #remainingCourseReport thead {
-        background: linear-gradient(135deg, #D48197, #e9a9ba);
-    }
-
-    #remainingCourseReport th {
-        padding: 12px 10px;
-        font-size: 11px;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: .05em;
-        color: white;
-        white-space: nowrap;
-    }
-
-    #remainingCourseReport td {
-        padding: 10px;
-        font-size: 12px;
-        border-bottom: 1px solid #fde4ec;
-        white-space: nowrap;
-    }
-
-    #remainingCourseReport tbody tr:hover {
-        background: #fff5f8;
-    }
-
-    /* =========================
-        SCROLL BAR (สวยขึ้น)
-    ========================= */
-    #remainingCourseReport ::-webkit-scrollbar {
-        height: 8px;
-    }
-
-    #remainingCourseReport ::-webkit-scrollbar-thumb {
-        background: #f3c4d2;
-        border-radius: 10px;
-    }
-
-    #remainingCourseReport ::-webkit-scrollbar-track {
-        background: #fff5f8;
-    }
-
-    /* =========================
-        PRINT FIX
-    ========================= */
-    @media print {
-        body * {
-            visibility: hidden !important;
+        if (!rows.length) {
+            return Swal.fire('ไม่พบข้อมูล', 'ไม่มีข้อมูลสำหรับออกรายงานค่ะ', 'info');
         }
 
-        #remainingCourseReport,
-        #remainingCourseReport * {
-            visibility: visible !important;
-        }
+        const excelRows = rows.map((r, i) => ({
+            'ลำดับ': i + 1,
+            'เลขที่ใบเสร็จ': r.invoice_no || '',
+            'วันที่ซื้อ': r.invoice_date || '',
+            'สาขา': r.branch_name || '',
+            'HN': r.hn || '',
+            'HN เก่า': r.old_hn || '',
+            'รหัสคอร์ส': r.course_code || '',
+            'ชื่อคอร์ส': r.course_name || '',
+            'จำนวนซื้อทั้งหมด': Number(r.total_qty || 0),
+            'ใช้ไป': Number(r.used_qty || 0),
+            'คงเหลือ': Number(r.remaining_qty || 0),
+            'หน่วย': r.unit || '',
+            'วันหมดอายุ': r.expiry_date || '',
+            'มูลค่า': Number(r.total_price || r.sales_total || 0),
+            'customer_id': r.customer_id || ''
+        }));
 
-        #remainingCourseReport {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            padding: 8mm;
-            background: white;
-        }
+        const ws = XLSX.utils.json_to_sheet(excelRows);
 
-        .no-print {
-            display: none !important;
-        }
-
-        @page {
-            size: A4 landscape;
-            margin: 6mm;
-        }
-
-        #remainingCourseReport table {
-            font-size: 9px !important;
-        }
-
-        #remainingCourseReport th,
-        #remainingCourseReport td {
-            padding: 4px !important;
-        }
-    }
-
-    `;
-
-    document.head.appendChild(style);
-};
-
-window.printRemainingCourseReport = function() {
-    window.print();
-};
-
-window.exportRemainingCourseCSV = function() {
-    const rows = window.currentRemainingCourseRows || [];
-
-    if (!rows.length) {
-        Swal.fire('ไม่มีข้อมูล', 'ไม่มีข้อมูลสำหรับ Export', 'info');
-        return;
-    }
-
-    const header = [
-        'ลำดับ',
-        'สาขา',
-        'HN',
-        'Old HN',
-        'เลขบิล',
-        'วันที่ซื้อ',
-        'รหัสคอร์ส',
-        'ชื่อคอร์ส',
-        'ซื้อทั้งหมด',
-        'คงเหลือ',
-        'หน่วย',
-        'วันหมดอายุ',
-        'ราคา/ครั้ง',
-        'มูลค่าคงเหลือ',
-        'ค่ามือพนักงาน',
-        'ค่าแพทย์'
-    ];
-
-    const csvRows = rows.map((r, index) => {
-        const remainValue = Number(r.remaining_qty || 0) * Number(r.unit_price || 0);
-
-        return [
-            index + 1,
-            r.branch_name || '',
-            r.hn || '',
-            r.old_hn || '',
-            r.invoice_no || '',
-            r.invoice_date || '',
-            r.course_code || '',
-            r.course_name || '',
-            r.total_qty || 0,
-            r.remaining_qty || 0,
-            r.unit || '',
-            r.expiry_date || '',
-            r.unit_price || 0,
-            remainValue,
-            r.staff_df || 0,
-            r.doctor_df || 0
+        ws['!cols'] = [
+            { wch: 6 },
+            { wch: 18 },
+            { wch: 14 },
+            { wch: 12 },
+            { wch: 16 },
+            { wch: 14 },
+            { wch: 12 },
+            { wch: 45 },
+            { wch: 14 },
+            { wch: 10 },
+            { wch: 10 },
+            { wch: 10 },
+            { wch: 14 },
+            { wch: 14 },
+            { wch: 38 }
         ];
-    });
 
-    const csvContent = '\uFEFF' + [
-        header,
-        ...csvRows
-    ].map(row =>
-        row.map(value => `"${String(value).replaceAll('"', '""')}"`).join(',')
-    ).join('\n');
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'คอร์สคงเหลือ');
 
-    const blob = new Blob([csvContent], {
-        type: 'text/csv;charset=utf-8;'
-    });
+        const fileName = `ACE_รายงานคอร์สคงเหลือ_${branchFilter || safeBranch || 'ทุกสาขา'}_${new Date().toISOString().slice(0, 10)}.xlsx`;
 
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const today = new Date().toISOString().slice(0, 10);
+        XLSX.writeFile(wb, fileName);
 
-    a.href = url;
-    a.download = `รายงานคอร์สสะสมคงเหลือ_${today}.csv`;
-    a.click();
+        Swal.fire({
+            icon: 'success',
+            title: 'ออก Excel สำเร็จ',
+            text: fileName,
+            timer: 1600,
+            showConfirmButton: false
+        });
 
-    URL.revokeObjectURL(url);
+    } catch (e) {
+        console.error('exportRemainingCourseExcel catch:', e);
+        Swal.fire('เกิดข้อผิดพลาด', e.message || 'ออก Excel ไม่สำเร็จ', 'error');
+    }
 };
 
 /* =======================================================

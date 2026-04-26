@@ -20216,39 +20216,125 @@ window.reportRemainingCourse = async function() {
     const periodType = document.getElementById('remainPeriodType')?.value || 'ทั้งหมด';
     const dayFilter = document.getElementById('remainDayFilter')?.value || '';
     const monthOnlyFilter = document.getElementById('remainMonthOnlyFilter')?.value || String(new Date().getMonth() + 1).padStart(2, '0');
-const monthYearFilter = document.getElementById('remainMonthYearFilter')?.value || String(new Date().getFullYear());
-const monthFilter = `${monthYearFilter}-${monthOnlyFilter}`;
+    const monthYearFilter = document.getElementById('remainMonthYearFilter')?.value || String(new Date().getFullYear());
+    const monthFilter = `${monthYearFilter}-${monthOnlyFilter}`;
     const yearFilter = document.getElementById('remainYearFilter')?.value || String(new Date().getFullYear());
 
-    let query = window.supabaseClient
-        .from('customer_course_balance')
-        .select('*')
-        .order('invoice_date', { ascending: false })
-        .order('created_at', { ascending: false });
+    const fetchAllRows = async () => {
+        let allRows = [];
+        let from = 0;
+        const size = 1000;
 
-    if (!isAllBranches) {
-        query = query.eq('branch_name', safeBranch);
-    } else if (branchFilter !== 'ทุกสาขา') {
-        query = query.eq('branch_name', branchFilter);
-    }
+        while (true) {
+            let q = window.supabaseClient
+                .from('customer_course_balance')
+                .select('*')
+                .order('invoice_date', { ascending: false })
+                .order('created_at', { ascending: false })
+                .range(from, from + size - 1);
 
-    const { data, error } = await query;
+            if (!isAllBranches) {
+                q = q.in('branch_name', [
+                    safeBranch,
+                    `สาขา${safeBranch}`,
+                    `ACE Clinic ${safeBranch}`,
+                    `เอซคลินิก ${safeBranch}`
+                ]);
+            } else if (branchFilter !== 'ทุกสาขา') {
+                q = q.in('branch_name', [
+                    branchFilter,
+                    `สาขา${branchFilter}`,
+                    `ACE Clinic ${branchFilter}`,
+                    `เอซคลินิก ${branchFilter}`
+                ]);
+            }
 
-    if (error) {
+            const { data, error } = await q;
+            if (error) throw error;
+
+            const batch = Array.isArray(data) ? data : [];
+            allRows = allRows.concat(batch);
+
+            if (batch.length < size) break;
+            from += size;
+        }
+
+        return allRows;
+    };
+
+    let rows = [];
+
+    try {
+        rows = await fetchAllRows();
+    } catch (error) {
         console.error('reportRemainingCourse error:', error);
         Swal.fire('โหลดรายงานไม่สำเร็จ', error.message || 'เกิดข้อผิดพลาด', 'error');
         return;
     }
 
-    let rows = Array.isArray(data) ? data : [];
+    const customerIds = [...new Set(rows.map(r => String(r.customer_id || '').trim()).filter(Boolean))];
+    const customerHN = [...new Set(rows.map(r => String(r.hn || '').trim()).filter(Boolean))];
+
+    const customerMapById = {};
+    const customerMapByHN = {};
+
+    try {
+        if (customerIds.length > 0) {
+            for (let i = 0; i < customerIds.length; i += 1000) {
+                const ids = customerIds.slice(i, i + 1000);
+                const { data } = await window.supabaseClient
+                    .from('customers')
+                    .select('id, hn, old_hn, fullname, first_name, last_name, nickname, phone')
+                    .in('id', ids);
+
+                (data || []).forEach(c => {
+                    if (c.id) customerMapById[String(c.id)] = c;
+                    if (c.hn) customerMapByHN[String(c.hn).trim()] = c;
+                    if (c.old_hn) customerMapByHN[String(c.old_hn).trim()] = c;
+                });
+            }
+        }
+
+        if (customerHN.length > 0) {
+            for (let i = 0; i < customerHN.length; i += 1000) {
+                const hns = customerHN.slice(i, i + 1000);
+                const { data } = await window.supabaseClient
+                    .from('customers')
+                    .select('id, hn, old_hn, fullname, first_name, last_name, nickname, phone')
+                    .in('hn', hns);
+
+                (data || []).forEach(c => {
+                    if (c.id) customerMapById[String(c.id)] = c;
+                    if (c.hn) customerMapByHN[String(c.hn).trim()] = c;
+                    if (c.old_hn) customerMapByHN[String(c.old_hn).trim()] = c;
+                });
+            }
+        }
+    } catch (e) {
+        console.warn('load customer names for remaining report error:', e);
+    }
 
     rows = rows.map(r => {
         const totalQty = Number(r.total_qty || 0);
         const remainingQty = Number(r.remaining_qty || 0);
         const usedQty = Math.max(0, totalQty - remainingQty);
 
+        const customer =
+            customerMapById[String(r.customer_id || '')] ||
+            customerMapByHN[String(r.hn || '').trim()] ||
+            customerMapByHN[String(r.old_hn || '').trim()] ||
+            {};
+
+        const customerName =
+            r.customer_name ||
+            customer.fullname ||
+            [customer.first_name, customer.last_name].filter(Boolean).join(' ') ||
+            customer.nickname ||
+            '-';
+
         return {
             ...r,
+            customer_name: customerName,
             total_qty: totalQty,
             remaining_qty: remainingQty,
             used_qty: usedQty
@@ -20273,16 +20359,13 @@ const monthFilter = `${monthYearFilter}-${monthOnlyFilter}`;
 
         const text = [
             r.invoice_no,
-            r.hn,
-            r.old_hn,
+            r.customer_name,
             r.course_code,
             r.course_name,
             r.branch_name
         ].join(' ').toLowerCase();
 
-        const matchSearch = !searchTerm || text.includes(searchTerm);
-
-        return matchType && matchPeriod && matchSearch;
+        return matchType && matchPeriod && (!searchTerm || text.includes(searchTerm));
     });
 
     const totalCourses = rows.length;
@@ -20301,9 +20384,7 @@ const monthFilter = `${monthYearFilter}-${monthOnlyFilter}`;
 
             <div class="bg-white rounded-[2.5rem] border border-pink-100 shadow-sm p-6 mb-6 flex justify-between items-center">
                 <div class="flex items-center gap-4">
-                    <div class="w-14 h-14 rounded-2xl bg-[#D48197] text-white flex items-center justify-center text-2xl shadow-lg">
-                        📊
-                    </div>
+                    <div class="w-14 h-14 rounded-2xl bg-[#D48197] text-white flex items-center justify-center text-2xl shadow-lg">📊</div>
                     <div>
                         <h2 class="text-2xl font-black text-[#D48197]">รายงาน :: คอร์สคงเหลือ</h2>
                         <p class="text-[12px] text-slate-400 font-bold mt-1">ดึงข้อมูลจากตาราง customer_course_balance</p>
@@ -20372,32 +20453,27 @@ const monthFilter = `${monthYearFilter}-${monthOnlyFilter}`;
                     ` : ''}
 
                     ${periodType === 'รายเดือน' ? `
-    <div class="flex flex-col gap-1">
-        <label class="text-[10px] font-black text-[#D48197] ml-2">เลือกเดือน</label>
-        <select id="remainMonthOnlyFilter"
-            onchange="window.currentRemainReportPage=1; window.reportRemainingCourse()"
-            class="h-[44px] w-[125px] bg-white border border-pink-200 rounded-2xl px-4 text-[12px] outline-none text-slate-600 shadow-sm appearance-none">
-            ${[
-                ['01','มกราคม'], ['02','กุมภาพันธ์'], ['03','มีนาคม'], ['04','เมษายน'],
-                ['05','พฤษภาคม'], ['06','มิถุนายน'], ['07','กรกฎาคม'], ['08','สิงหาคม'],
-                ['09','กันยายน'], ['10','ตุลาคม'], ['11','พฤศจิกายน'], ['12','ธันวาคม']
-            ].map(([m, name]) => `
-                <option value="${m}" ${(document.getElementById('remainMonthOnlyFilter')?.value || String(new Date().getMonth()+1).padStart(2,'0')) === m ? 'selected' : ''}>
-                    ${name}
-                </option>
-            `).join('')}
-        </select>
-    </div>
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] font-black text-[#D48197] ml-2">เลือกเดือน</label>
+                            <select id="remainMonthOnlyFilter" onchange="window.currentRemainReportPage=1; window.reportRemainingCourse()"
+                                class="h-[44px] w-[125px] bg-white border border-pink-200 rounded-2xl px-4 text-[12px] outline-none text-slate-600 shadow-sm appearance-none">
+                                ${[
+                                    ['01','มกราคม'], ['02','กุมภาพันธ์'], ['03','มีนาคม'], ['04','เมษายน'],
+                                    ['05','พฤษภาคม'], ['06','มิถุนายน'], ['07','กรกฎาคม'], ['08','สิงหาคม'],
+                                    ['09','กันยายน'], ['10','ตุลาคม'], ['11','พฤศจิกายน'], ['12','ธันวาคม']
+                                ].map(([m, name]) => `
+                                    <option value="${m}" ${monthOnlyFilter === m ? 'selected' : ''}>${name}</option>
+                                `).join('')}
+                            </select>
+                        </div>
 
-    <div class="flex flex-col gap-1">
-        <label class="text-[10px] font-black text-[#D48197] ml-2">เลือกปี</label>
-        <input type="number" id="remainMonthYearFilter"
-            value="${document.getElementById('remainMonthYearFilter')?.value || new Date().getFullYear()}"
-            min="2020" max="2100"
-            onchange="window.currentRemainReportPage=1; window.reportRemainingCourse()"
-            class="h-[44px] w-[105px] bg-white border border-pink-200 rounded-2xl px-4 text-[12px] outline-none text-slate-600 shadow-sm">
-    </div>
-` : ''}
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] font-black text-[#D48197] ml-2">เลือกปี</label>
+                            <input type="number" id="remainMonthYearFilter" value="${monthYearFilter}" min="2020" max="2100"
+                                onchange="window.currentRemainReportPage=1; window.reportRemainingCourse()"
+                                class="h-[44px] w-[105px] bg-white border border-pink-200 rounded-2xl px-4 text-[12px] outline-none text-slate-600 shadow-sm">
+                        </div>
+                    ` : ''}
 
                     ${periodType === 'รายปี' ? `
                         <div class="flex flex-col gap-1">
@@ -20409,7 +20485,7 @@ const monthFilter = `${monthYearFilter}-${monthOnlyFilter}`;
                     ` : ''}
 
                     <div class="flex flex-col gap-1 w-[300px]">
-                        <label class="text-[10px] font-black text-[#D48197] ml-2">ค้นหา เลขบิล / HN / ชื่อคอร์ส</label>
+                        <label class="text-[10px] font-black text-[#D48197] ml-2">ค้นหา เลขบิล / ชื่อลูกค้า / ชื่อคอร์ส</label>
                         <div class="flex gap-2">
                             <input id="remainSearchInput" value="${esc(searchTerm)}"
                                 onkeyup="if(event.key==='Enter'){window.currentRemainReportPage=1; window.reportRemainingCourse()}"
@@ -20423,7 +20499,7 @@ const monthFilter = `${monthYearFilter}-${monthOnlyFilter}`;
                         </div>
                     </div>
 
-                    <button onclick="window.exportRemainingCourseExcel()"
+                    <button onclick="window.exportRemainingCourseExcel && window.exportRemainingCourseExcel()"
                         class="h-[44px] px-6 bg-black text-white rounded-2xl text-[12px] font-black shadow-md hover:bg-[#D48197]">
                         📄 Excel
                     </button>
@@ -20453,11 +20529,13 @@ const monthFilter = `${monthYearFilter}-${monthOnlyFilter}`;
                 <table class="w-full min-w-[1200px] text-left border-separate border-spacing-y-2">
                     <thead>
                         <tr class="text-[11px]">
-                            <th class="bg-[#D48197] text-white px-4 py-4 rounded-l-2xl text-center">#</th>
+                            <th class="bg-[#D48197] text-white px-4 py-4 rounded-l-2xl text-center">
+                                <input type="checkbox" onclick="window.toggleAllRemain(this)">
+                            </th>
                             <th class="bg-[#D48197] text-white px-4 py-4">เลขที่ใบเสร็จ</th>
                             <th class="bg-[#D48197] text-white px-4 py-4">วันที่ซื้อ</th>
                             <th class="bg-[#D48197] text-white px-4 py-4">สาขา</th>
-                            <th class="bg-[#D48197] text-white px-4 py-4">HN</th>
+                            <th class="bg-[#D48197] text-white px-4 py-4">ชื่อลูกค้า</th>
                             <th class="bg-[#D48197] text-white px-4 py-4">รหัสคอร์ส</th>
                             <th class="bg-[#D48197] text-white px-4 py-4">ชื่อคอร์ส</th>
                             <th class="bg-[#D48197] text-white px-4 py-4 text-center">ซื้อทั้งหมด</th>
@@ -20468,13 +20546,15 @@ const monthFilter = `${monthYearFilter}-${monthOnlyFilter}`;
                     </thead>
 
                     <tbody>
-                        ${paginatedRows.length ? paginatedRows.map((item, i) => `
+                        ${paginatedRows.length ? paginatedRows.map((item) => `
                             <tr class="bg-pink-50/40 hover:bg-pink-50 transition-all text-[12px] text-slate-600">
-                                <td class="px-4 py-4 rounded-l-2xl text-center font-bold">${startIndex + i + 1}</td>
+                                <td class="px-4 py-4 rounded-l-2xl text-center">
+                                    <input type="checkbox" class="remain-checkbox w-5 h-5 accent-pink-500 rounded-full">
+                                </td>
                                 <td class="px-4 py-4 font-black text-slate-700">${esc(item.invoice_no || '-')}</td>
                                 <td class="px-4 py-4">${esc(item.invoice_date || '-')}</td>
                                 <td class="px-4 py-4">${esc(item.branch_name || '-')}</td>
-                                <td class="px-4 py-4 font-bold text-[#D48197]">${esc(item.hn || '-')}</td>
+                                <td class="px-4 py-4 font-bold text-[#D48197]">${esc(item.customer_name || '-')}</td>
                                 <td class="px-4 py-4">${esc(item.course_code || '-')}</td>
                                 <td class="px-4 py-4 font-bold text-slate-800">${esc(item.course_name || '-')}</td>
                                 <td class="px-4 py-4 text-center font-black">${Number(item.total_qty || 0)}</td>
@@ -20512,6 +20592,12 @@ const monthFilter = `${monthYearFilter}-${monthOnlyFilter}`;
             </div>
         </div>
     `;
+};
+
+window.toggleAllRemain = function(el) {
+    document.querySelectorAll('.remain-checkbox').forEach(cb => {
+        cb.checked = el.checked;
+    });
 };
 
 window.exportRemainingCourseExcel = async function() {

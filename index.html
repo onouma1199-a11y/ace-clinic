@@ -3366,6 +3366,7 @@ window.saveCustomer = async function () {
         last_name: lastName,
         fullname: `${firstName} ${lastName}`.trim(),
         nickname: document.getElementById("modalNickname")?.value?.trim() || "",
+	citizen_id: document.getElementById('newCitizenId')?.value?.trim() || '',
         phone: phone,
         email: document.getElementById("modalEmail")?.value?.trim() || "",
         line_id: document.getElementById("modalLine")?.value?.trim() || "",
@@ -4766,9 +4767,8 @@ window.renderCustomerList = function (target) {
     target.innerHTML = `
       <div class="animate-in fade-in duration-500 p-4 -mt-6 text-left">
           
-         <div class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-pink-100 mb-6 overflow-x-auto relative z-20">
+         <div class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-pink-100 mb-6 overflow-x-auto relative z-20 mobile-scroll-x">
   <div class="flex items-end gap-4 min-w-max whitespace-nowrap">
-
     <div class="flex flex-col gap-1 flex-shrink-0">
       <label class="text-[10px] font-bold text-[#D48197] uppercase ml-2">แสดงลำดับ</label>
       <select id="pageSizeSelect" onchange="window.currentCustomerPage = 1; window.applyCustomerFilter()" class="border border-pink-100 px-4 py-2.5 rounded-2xl text-[12px] font-light bg-white outline-none shadow-sm min-w-[120px] text-slate-600 appearance-none cursor-pointer">
@@ -6663,9 +6663,8 @@ window.renderAppointmentPage = async function() {
     target.innerHTML = `
     <div class="animate-in fade-in duration-500 font-extralight uppercase pb-20">
         <div class="glass-card mb-8 border border-pink-200 shadow-sm p-4 rounded-3xl">
-            <div class="flex flex-col md:flex-row justify-between items-center gap-4">
-                <div class="flex flex-wrap gap-3 items-center flex-1">
-                    
+            <div class="flex flex-col md:flex-row justify-between items-center gap-4 mobile-scroll-x">
+    <div class="flex flex-wrap md:flex-nowrap gap-3 items-center flex-1 mobile-scroll-inner">               
                     <div class="relative min-w-[130px]">
                         <select id="appPageSize" onchange="window.currentAppPage=1; window.renderAppointmentPage()"
                             class="w-full border border-pink-200 px-4 py-2 rounded-xl text-[11px] outline-none bg-white font-normal h-[42px] cursor-pointer appearance-none shadow-sm focus:border-pink-400 transition-all text-slate-600">
@@ -8484,7 +8483,10 @@ window.renderQueuePage = async function() {
                     class="bg-[#D48197] text-white px-5 h-[42px] rounded-xl text-[10px] font-bold shadow-md hover:bg-black transition-all">
                     ค้นหา
                 </button>
-
+<button onclick="window.openDailyOTModal()"
+    class="bg-[#D48197] text-white px-5 h-[42px] rounded-xl text-[10px] font-bold shadow-md hover:bg-black transition-all shrink-0">
+    ⏱️ ตี OT พนักงาน
+</button>
                 <button onclick="window.loadPage(66, 'รายงานค่ามือ DF')" 
                     class="bg-[#D48197] text-white px-5 h-[42px] rounded-xl text-[10px] font-bold shadow-md hover:bg-black transition-all shrink-0">
                     📊 รายงานค่ามือ
@@ -8601,6 +8603,277 @@ window.renderQueuePage = async function() {
         </div>
     </div>
     `;
+};
+
+window.getQueuePayrollPeriod = function() {
+    const today = new Date();
+
+    let dateStr = String(window.currentQDateFilter || '').trim();
+
+    // ถ้าไม่มีวัน / กด x ล้างวันที่ / วันที่ไม่ถูกต้อง → ใช้วันนี้แทน
+    if (!dateStr || dateStr === 'undefined' || dateStr === 'null') {
+        dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    }
+
+    const parts = dateStr.split('-');
+    let year = Number(parts[0]);
+    let month = Number(parts[1]);
+
+    // กัน NaN
+    if (!year || !month) {
+        year = today.getFullYear();
+        month = today.getMonth() + 1;
+    }
+
+    // ถ้าเป็น ค.ศ. แปลงเป็น พ.ศ.
+    const thaiYear = year > 2400 ? year : year + 543;
+
+    return `${month}/${thaiYear}`;
+};
+
+window.openDailyOTModal = async function() {
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบ Supabase', 'error');
+    }
+
+    const currentUser = window.getCurrentUserSafe?.() || {};
+    const viewingBranch = window.getCurrentViewingBranch?.() || currentUser.branch || 'บางพลี';
+
+    const normalizeBranch = (v) => String(v || '')
+        .replace('เอซคลินิก', '')
+        .replace('ACE Clinic', '')
+        .replace('สาขา', '')
+        .replace(':', '')
+        .trim();
+
+    const branch = normalizeBranch(viewingBranch);
+
+    const today = new Date();
+let todayStr = String(window.currentQDateFilter || '').trim();
+
+if (!todayStr || todayStr === 'undefined' || todayStr === 'null') {
+    todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+}
+
+const parts = todayStr.split('-');
+const yyyy = Number(parts[0]) || today.getFullYear();
+const mm = String(Number(parts[1]) || (today.getMonth() + 1)).padStart(2, '0');
+const thaiYear = yyyy > 2400 ? yyyy : yyyy + 543;
+const period = `${Number(mm)}/${thaiYear}`;
+
+    let query = window.supabaseClient
+        .from('staff_profiles')
+        .select('staff_code, full_name, nickname, branch, is_active, employment_status')
+        .eq('is_active', true)
+        .neq('employment_status', 'ออก')
+        .order('full_name', { ascending: true });
+
+    if (branch && branch !== 'ทุกสาขา') {
+        query = query.in('branch', [
+            branch,
+            `สาขา${branch}`,
+            `ACE Clinic ${branch}`,
+            `เอซคลินิก ${branch}`
+        ]);
+    }
+
+    const { data: staffRows, error } = await query;
+
+    if (error) {
+        console.error(error);
+        return Swal.fire('โหลดพนักงานไม่สำเร็จ', error.message, 'error');
+    }
+
+    if (!staffRows || staffRows.length === 0) {
+        return Swal.fire('ไม่พบพนักงาน', 'ไม่มีพนักงานในสาขานี้ค่ะ', 'info');
+    }
+
+    const options = staffRows.map(s => `
+        <option value="${s.staff_code}">
+            ${s.full_name || s.nickname || s.staff_code} (${s.staff_code})
+        </option>
+    `).join('');
+
+    const result = await Swal.fire({
+        title: 'ตี OT พนักงาน',
+        html: `
+            <div class="text-left space-y-4">
+                <div>
+                    <label class="text-[11px] font-black text-[#D48197] ml-2">งวดเงินเดือน</label>
+                    <input id="otPeriod" value="${period}" readonly
+                        class="w-full h-[46px] bg-white border border-pink-200 rounded-2xl px-4 text-sm font-bold">
+                </div>
+
+                <div>
+                    <label class="text-[11px] font-black text-[#D48197] ml-2">วันที่ OT</label>
+                    <input id="otDate" type="date" value="${todayStr}"
+                        class="w-full h-[46px] bg-white border border-pink-200 rounded-2xl px-4 text-sm font-bold">
+                </div>
+
+                <div>
+                    <label class="text-[11px] font-black text-[#D48197] ml-2">เลือกพนักงาน</label>
+                    <select id="otStaffCode"
+                        class="w-full h-[46px] bg-white border border-pink-200 rounded-2xl px-4 text-sm font-bold">
+                        ${options}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-[11px] font-black text-[#D48197] ml-2">จำนวนเงิน OT</label>
+                    <input id="otAmount" type="number" placeholder="ชั่วโมงละ 50 บาท"
+                        class="w-full h-[46px] bg-white border border-pink-200 rounded-2xl px-4 text-sm font-bold">
+                </div>
+
+                <div>
+                    <label class="text-[11px] font-black text-[#D48197] ml-2">หมายเหตุ</label>
+                    <input id="otNote" placeholder="เช่น OT หลังเลิกงาน / ทำเคสเพิ่ม"
+                        class="w-full h-[46px] bg-white border border-pink-200 rounded-2xl px-4 text-sm font-bold">
+                </div>
+            </div>
+        `,
+        confirmButtonText: 'บันทึก OT',
+        cancelButtonText: 'ยกเลิก',
+        showCancelButton: true,
+        confirmButtonColor: '#D48197',
+        preConfirm: () => {
+            const staffCode = document.getElementById('otStaffCode')?.value;
+            const otDate = document.getElementById('otDate')?.value;
+            const otAmount = Number(document.getElementById('otAmount')?.value || 0);
+            const note = document.getElementById('otNote')?.value?.trim() || '';
+            const otPeriod = document.getElementById('otPeriod')?.value;
+
+            if (!staffCode || !otDate || otAmount <= 0) {
+                Swal.showValidationMessage('กรุณาเลือกพนักงาน วันที่ และใส่ยอด OT ให้ถูกต้องค่ะ');
+                return false;
+            }
+
+            return { staffCode, otDate, otAmount, note, otPeriod };
+        }
+    });
+
+    if (!result.isConfirmed) return;
+
+    await window.saveDailyOT(result.value);
+};
+
+window.saveDailyOT = async function(data) {
+    const { staffCode, otDate, otAmount, note, otPeriod } = data;
+
+    const { data: staff, error: staffErr } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .eq('staff_code', staffCode)
+        .single();
+
+    if (staffErr || !staff) {
+        return Swal.fire('ไม่พบพนักงาน', 'โหลดข้อมูลพนักงานไม่สำเร็จ', 'error');
+    }
+
+    const { error: insertErr } = await window.supabaseClient
+        .from('payroll_ot_logs')
+        .insert([{
+            staff_code: staffCode,
+            staff_name: staff.full_name || '',
+            branch: staff.branch || '',
+            period: otPeriod,
+            ot_date: otDate,
+            ot_amount: otAmount,
+            note: note
+        }]);
+
+    if (insertErr) {
+        console.error(insertErr);
+        return Swal.fire('บันทึก OT ไม่สำเร็จ', insertErr.message, 'error');
+    }
+
+    const { data: otRows, error: sumErr } = await window.supabaseClient
+        .from('payroll_ot_logs')
+        .select('ot_amount')
+        .eq('staff_code', staffCode)
+        .eq('period', otPeriod);
+
+    if (sumErr) {
+        return Swal.fire('รวมยอด OT ไม่สำเร็จ', sumErr.message, 'error');
+    }
+
+    const totalOT = (otRows || []).reduce((sum, row) => {
+        return sum + Number(row.ot_amount || 0);
+    }, 0);
+
+    const { data: oldPayroll } = await window.supabaseClient
+        .from('payroll_history')
+        .select('*')
+        .eq('staff_code', staffCode)
+        .eq('period', otPeriod)
+        .maybeSingle();
+
+    const salary = Number(oldPayroll?.salary ?? staff.salary ?? 0);
+    const comm = Number(oldPayroll?.comm ?? 0);
+    const df = Number(oldPayroll?.df ?? 0);
+    const extraIncome = Number(oldPayroll?.extra_income ?? 0);
+
+    const sso = Number(oldPayroll?.sso ?? 0);
+    const tax = Number(oldPayroll?.tax ?? 0);
+    const absDayDeduct = Number(oldPayroll?.abs_day_deduct ?? 0);
+    const absHourDeduct = Number(oldPayroll?.abs_hour_deduct ?? 0);
+    const lateDeduct = Number(oldPayroll?.late_deduct ?? 0);
+    const otherDeduct = Number(oldPayroll?.other_deduct ?? 0);
+
+    const incomeTotal = salary + comm + df + totalOT + extraIncome;
+    const expenseTotal = sso + tax + absDayDeduct + absHourDeduct + lateDeduct + otherDeduct;
+    const netPay = Math.round(incomeTotal - expenseTotal);
+
+    const payload = {
+        staff_code: staffCode,
+        staff_name: staff.full_name || '',
+        branch: staff.branch || '',
+        period: otPeriod,
+
+        salary,
+        comm,
+        df,
+        ot: totalOT,
+        extra_income: extraIncome,
+
+        sso,
+        tax,
+        abs_days: Number(oldPayroll?.abs_days ?? 0),
+        abs_hours: Number(oldPayroll?.abs_hours ?? 0),
+        late_mins: Number(oldPayroll?.late_mins ?? 0),
+        sick_days: Number(oldPayroll?.sick_days ?? 0),
+        vacation_days: Number(oldPayroll?.vacation_days ?? 0),
+
+        abs_day_deduct: absDayDeduct,
+        abs_hour_deduct: absHourDeduct,
+        late_deduct: lateDeduct,
+        other_deduct: otherDeduct,
+        other_deduct_note: oldPayroll?.other_deduct_note || '',
+        extra_income_note: oldPayroll?.extra_income_note || '',
+
+        net_pay: netPay,
+        updated_at: new Date().toISOString()
+    };
+
+    const { error: upsertErr } = await window.supabaseClient
+        .from('payroll_history')
+        .upsert(payload, { onConflict: 'staff_code,period' });
+
+    if (upsertErr) {
+        console.error(upsertErr);
+        return Swal.fire('อัปเดตเงินเดือนไม่สำเร็จ', upsertErr.message, 'error');
+    }
+
+    Swal.fire({
+        icon: 'success',
+        title: 'บันทึก OT สำเร็จ',
+        text: `รวม OT งวดนี้: ฿${totalOT.toLocaleString()}`,
+        timer: 1500,
+        showConfirmButton: false
+    });
+
+    if (typeof window.loadPayrollTable === 'function') {
+        await window.loadPayrollTable();
+    }
 };
 
 window.notifyNextQueue = async function() {
@@ -17596,6 +17869,7 @@ window.saveDrugMaster = async function() {
 /* =======================================================
     🩺 ZONE 7: STAFF & PAYROLL (ระบบจัดการพนักงาน & เงินเดือน)
    ======================================================= */
+// --- 🎯 ฟังก์ชันหน้าเมนูพนักงาน ---
 window.renderStaffManagement = function() {
     const target = document.getElementById('dynamicContent');
     if(!target) return;
@@ -17638,7 +17912,7 @@ window.renderStaffManagement = function() {
                     <p class="text-[10px] text-slate-400 mt-2 italic">บันทึกสถิติจากเครื่องสแกน เพื่อนำไปหักเงินเดือน</p>
                 </div>
 
-                <div onclick="window.renderPayrollSystem()" class="bg-white p-8 rounded-[3rem] border border-pink-50 shadow-xl hover:scale-105 transition-all cursor-pointer group">
+                <div onclick="window.renderPayrollSummaryReport()" class="bg-white p-8 rounded-[3rem] border border-pink-50 shadow-xl hover:scale-105 transition-all cursor-pointer group">
                     <div class="w-14 h-14 bg-green-50 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-green-500 transition-colors">
                         <span class="text-2xl group-hover:filter group-hover:invert transition-all">💰</span>
                     </div>
@@ -17859,6 +18133,7 @@ window.showStaffModal = async function(mode, idx = null, directStaff = null) {
         name: '',
         full_name: '',
         nickname: '',
+	citizen_id: '',
         gender: 'ไม่ระบุ',
         phone: '',
         branch: currentUserBranch,
@@ -17981,6 +18256,12 @@ modal.innerHTML = `
                     <label class="text-[10px] font-bold text-slate-400 ml-2 italic">ชื่อเล่น</label>
                     <input type="text" id="newNickname" value="${staff.nickname || ''}" class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
                 </div>
+	<div class="col-span-1">
+   	 <label class="text-[10px] font-bold text-slate-400 ml-2 italic">🪪 เลขบัตรประชาชน</label>
+   	 <input type="text" id="newCitizenId" value="${staff.citizen_id || ''}" maxlength="13"
+        placeholder="กรอกเลขบัตรประชาชน 13 หลัก"
+        class="w-full border-2 border-pink-100 p-3 rounded-xl text-sm font-bold outline-none">
+	</div>
                 
                 <div class="col-span-1">
                     <label class="text-[10px] font-bold text-slate-400 ml-2 italic">📞 เบอร์โทรศัพท์ (รหัสผ่าน) *</label>
@@ -18087,7 +18368,7 @@ window.saveStaffComplete = async function(idx, mode, directId = '') {
     let existingImg = '';
     const { data: existingStaff } = await window.supabaseClient
         .from('staff_profiles')
-        .select('staff_code')
+        .select('staff_code,img')
         .eq('staff_code', staffCode)
         .maybeSingle();
 
@@ -18102,6 +18383,7 @@ window.saveStaffComplete = async function(idx, mode, directId = '') {
         is_active: status !== 'ออก',
         gender: document.getElementById('newGender')?.value || 'ไม่ระบุ',
         nickname: document.getElementById('newNickname')?.value || '',
+	citizen_id: document.getElementById('newCitizenId')?.value?.trim() || '',
         bank_name: document.getElementById('newBank')?.value || '',
         bank_acc: document.getElementById('newAcc')?.value || '',
         start_date: document.getElementById('newStart')?.value || '',
@@ -18112,9 +18394,11 @@ window.saveStaffComplete = async function(idx, mode, directId = '') {
 
     // ถ้าตาราง staff_profiles ของคุณยังไม่มีคอลัมน์ img อย่าใส่ payload.img
     // แต่ถ้ามีคอลัมน์ img แล้ว ใช้บรรทัดนี้ได้
-    if (imgData && imgData.startsWith('data:')) {
-        payload.img = imgData;
-    }
+    if (imgData && imgData.startsWith('data:image')) {
+    payload.img = imgData;
+	} else if (existingStaff?.img) {
+    payload.img = existingStaff.img;
+}
 
     const { error } = await window.supabaseClient
         .from('staff_profiles')
@@ -18276,9 +18560,15 @@ window.viewStaffDetailDirect = async function(staff) {
                         <h3 class="text-lg font-black text-slate-700 mb-8 border-b border-dashed border-pink-200 pb-4 italic">📋 ข้อมูลประวัติโดยละเอียด</h3>
                         <div class="grid grid-cols-2 gap-y-6 gap-x-10">
                             <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">ชื่อเล่น</label><p class="font-bold text-slate-500 border-b border-slate-50 pb-1">${staff.nickname || '-'}</p></div>
-                            <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">เบอร์โทรศัพท์</label><p class="font-bold text-blue-500 border-b border-slate-50 pb-1">${staff.phone || '-'}</p></div>
-                            <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">วันเริ่มงาน</label><p class="font-bold text-slate-500 border-b border-slate-50 pb-1">${staff.startDate || staff.start_date || '-'}</p></div>
-                            <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">สถานะ</label><p class="font-bold text-green-500 border-b border-slate-50 pb-1">${staff.status || staff.employment_status || '-'}</p></div>
+
+<div><label class="text-[10px] text-slate-400 font-bold uppercase italic">เบอร์โทรศัพท์</label><p class="font-bold text-blue-500 border-b border-slate-50 pb-1">${staff.phone || '-'}</p></div>
+
+<div>
+    <label class="text-[10px] text-slate-400 font-bold uppercase italic">เลขบัตรประชาชน</label>
+    <p class="font-bold text-slate-500 border-b border-slate-50 pb-1">${staff.citizen_id || '-'}</p>
+</div>
+
+<div><label class="text-[10px] text-slate-400 font-bold uppercase italic">วันเริ่มงาน</label><p class="font-bold text-slate-500 border-b border-slate-50 pb-1">${staff.startDate || staff.start_date || '-'}</p></div>                            <div><label class="text-[10px] text-slate-400 font-bold uppercase italic">สถานะ</label><p class="font-bold text-green-500 border-b border-slate-50 pb-1">${staff.status || staff.employment_status || '-'}</p></div>
                             <div><label class="text-[10px] text-[#D48197] font-bold uppercase italic block">🏦 ธนาคาร</label><p class="font-bold text-slate-500 border-b border-slate-50 pb-1">${staff.bankName || staff.bank_name || '-'}</p></div>
                             <div><label class="text-[10px] text-[#D48197] font-bold uppercase italic block">💳 เลขที่บัญชี</label><p class="font-bold text-slate-500 border-b border-slate-50 pb-1">${staff.bankAcc || staff.bank_acc || '-'}</p></div>
                             
@@ -18559,11 +18849,19 @@ window.saveStaffProfile = async function(staffId) {
     const status = document.getElementById('newStatus')?.value || 'ทำงาน';
     const gender = document.getElementById('newGender')?.value || 'ไม่ระบุ';
     const nickname = document.getElementById('newNickname')?.value || '';
+    const citizenId = document.getElementById('newCitizenId')?.value?.trim() || '';
     const bankName = document.getElementById('newBank')?.value || '';
     const bankAcc = document.getElementById('newAcc')?.value || '';
     const startDate = document.getElementById('newStart')?.value || '';
     const address = document.getElementById('newAddress')?.value || '';
-    const salary = parseFloat(document.getElementById('newSalary')?.value || 0);
+    const salary = parseFloat(document.getElementById('newSalary')?.value || 0);const imgElement = 		document.getElementById('previewImg');
+const imgData = imgElement ? String(imgElement.src || '') : '';
+
+const { data: oldStaff } = await window.supabaseClient
+    .from('staff_profiles')
+    .select('img')
+    .eq('staff_code', staffId)
+    .maybeSingle();
 
     if (!name || !phone || !email) {
         return Swal.fire('ข้อมูลไม่ครบ', 'กรุณากรอกชื่อ เบอร์โทรศัพท์ และอีเมล', 'warning');
@@ -18594,6 +18892,7 @@ window.saveStaffProfile = async function(staffId) {
     is_active: status === 'ทำงาน',
     gender: gender,
     nickname: nickname,
+    citizen_id: citizenId,
     bank_name: bankName,
     bank_acc: bankAcc,
     start_date: startDate,
@@ -18601,6 +18900,13 @@ window.saveStaffProfile = async function(staffId) {
     salary: salary,
     updated_at: new Date().toISOString()
 };
+
+if (imgData && imgData.startsWith('data:image')) {
+    payload.img = imgData;
+} else if (oldStaff?.img) {
+    payload.img = oldStaff.img;
+}
+
     const { data, error } = await window.supabaseClient
         .from('staff_profiles')
         .update(payload)
@@ -18903,140 +19209,1072 @@ window.saveSalaryAdjustmentById = async function(staffId) {
     }
 };
 
-
-window.renderPayrollSystem = async function() {
-    const target = document.getElementById('dynamicContent');
+/* =======================================================
+   ZONE PAYROLL: หน้าเงินเดือนพนักงาน
+   ======================================================= */
+window.renderPayrollSummaryReport = async function() {
+    const target = document.getElementById('dynamicContent') || document.getElementById('pageContent');
     if (!target) return;
+target.classList.remove('max-w-7xl', 'mx-auto', 'container');
+target.classList.add('w-full', 'max-w-none');
+target.style.maxWidth = 'none';
+target.style.width = '100%';
+target.style.marginLeft = '0';
+target.style.marginRight = '0';
 
+    const currentUser = typeof window.getCurrentUserSafe === 'function'
+        ? window.getCurrentUserSafe()
+        : JSON.parse(localStorage.getItem('currentUser') || '{}');
+
+    const normalizeBranch = (v) => String(v || '')
+        .replace('เอซคลินิก', '')
+        .replace('ACE Clinic', '')
+        .replace('สาขา', '')
+        .replace(':', '')
+        .trim();
+
+    const viewingBranch = typeof window.getCurrentViewingBranch === 'function'
+        ? window.getCurrentViewingBranch()
+        : (currentUser.viewingBranch || currentUser.branch || currentUser.homeBranch || 'ทุกสาขา');
+
+    const safeBranch = normalizeBranch(viewingBranch);
+
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 w-full max-w-none px-6 -mt-6 pb-24 text-left font-sans">
+
+            <div class="bg-white rounded-[2.5rem] border border-pink-100 shadow-sm p-6 mb-6 flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <div class="w-14 h-14 rounded-2xl bg-[#D48197] text-white flex items-center justify-center text-2xl shadow-lg">
+                        💵
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-black text-[#D48197]">ระบบเงินเดือนพนักงาน</h2>
+                        <p class="text-[12px] text-slate-400 font-bold mt-1">
+                            เงินเดือน / คอมมิชชั่น / ค่ามือ / OT / หักขาดลา / ประกันสังคม
+                        </p>
+                    </div>
+                </div>
+
+                <button onclick="window.loadPage ? window.loadPage(1, 'Dashboard') : window.history.back()"
+                    class="bg-white border border-pink-100 text-slate-500 px-5 py-3 rounded-2xl text-[12px] font-bold hover:bg-pink-50">
+                    ← กลับ
+                </button>
+            </div>
+
+            <div class="bg-white rounded-[2.5rem] border border-pink-100 shadow-sm p-5 mb-5 w-full max-w-none overflow-x-auto">
+                <div class="flex items-end gap-3 whitespace-nowrap pb-2 min-w-[1180px]">
+
+                    <div class="flex flex-col gap-1">
+                        <label class="payroll-label">แสดง</label>
+                        <select id="payrollPageSize" onchange="window.loadPayrollTable?.()"
+                            class="payroll-input min-w-[115px]">
+                            <option value="20">20 รายการ</option>
+                            <option value="50">50 รายการ</option>
+                            <option value="100">100 รายการ</option>
+                        </select>
+                    </div>
+
+                    <div class="flex flex-col gap-1">
+                        <label class="payroll-label">สาขา</label>
+                        <input id="payrollBranchFilter" value="${safeBranch}" readonly
+    class="payroll-input w-[110px] bg-white border border-pink-200 rounded-2xl text-[#D48197] font-black">                    		</div>
+
+                    <div class="flex flex-col gap-1">
+                        <label class="payroll-label">ช่วงเวลา</label>
+                        <select id="payrollPeriodType" onchange="window.renderPayrollDateInput(); window.loadPayrollTable?.()"
+                            class="payroll-input min-w-[130px]">
+                            <option value="รายวัน">รายวัน</option>
+                            <option value="รายเดือน" selected>รายเดือน</option>
+                            <option value="รายปี">รายปี</option>
+                            <option value="กำหนดเอง">กำหนดเอง</option>
+                        </select>
+                    </div>
+
+                    <div id="payrollDateBox" class="flex items-end gap-3"></div>
+
+                    <div class="flex flex-col gap-1 w-[260px]">
+                        <label class="payroll-label">ค้นหาชื่อพนักงาน</label>
+                        <div class="flex gap-2">
+                            <input id="payrollSearchInput"
+                                onkeyup="if(event.key==='Enter') window.loadPayrollTable?.()"
+                                placeholder="ค้นหาชื่อ / รหัสพนักงาน / เลขบัตร..."
+                                class="payroll-input flex-1">
+                            <button onclick="window.loadPayrollTable?.()"
+                                class="h-[44px] px-5 bg-[#D48197] text-white rounded-2xl text-[12px] font-black shadow-md hover:bg-black">
+                                ค้นหา
+                            </button>
+                        </div>
+                    </div>
+
+                    <button onclick="window.openPayrollBillModal()"
+    class="h-[44px] px-4 bg-black text-white rounded-2xl text-[12px] font-black shadow-md hover:bg-[#D48197] shrink-0">
+    + ตีบิลเงินเดือน
+</button>
+<button onclick="window.exportPayrollExcel()"
+    class="h-[44px] px-4 bg-green-600 text-white rounded-2xl text-[12px] font-black shadow-md hover:bg-black shrink-0">
+    📊โหลดExcel
+</button>
+
+                </div>
+            </div>
+
+            <div class="bg-white rounded-[3rem] border border-pink-100 shadow-xl p-4 md:p-6 overflow-x-auto w-full max-w-none">
+                <div class="flex items-center justify-between mb-4">
+    <div>
+        <h3 class="text-lg font-black text-[#D48197]">ตารางเงินเดือนพนักงาน</h3>
+        <div id="payrollTotalCount" class="text-[12px] font-bold text-slate-400 mt-1">
+            ทั้งหมด 0 รายการ
+        </div>
+    </div>
+
+    <div class="bg-white border border-pink-100 rounded-[2rem] px-6 py-4 shadow-sm text-right">
+        <p class="text-[10px] text-slate-400 font-black">ยอดรวมเงินเดือนพนักงานทั้งหมด</p>
+        <h3 id="payrollGrandTotalBox" class="text-2xl font-black text-[#D48197]">฿0.00</h3>
+    </div>
+</div>
+               <table class="w-full min-w-[2200px] text-left border-separate border-spacing-y-2">
+                    <thead>
+                        <tr class="text-[11px]">
+                            <th class="payroll-th rounded-l-2xl text-center">ลำดับ</th>
+                            <th class="payroll-th">เลขประชาชน</th>
+                            <th class="payroll-th">ชื่อ-นามสกุล</th>
+                            <th class="payroll-th text-right">เงินเดือน</th>
+                            <th class="payroll-th text-right">คอมมิชชั่น</th>
+                            <th class="payroll-th text-right">ค่ามือ</th>
+                            <th class="payroll-th text-right">OT</th>
+                            <th class="payroll-th text-right">เงินพิเศษ</th>
+                            <th class="payroll-th text-right">หัก ปกส</th>
+                            <th class="payroll-th text-center">ขาด วัน</th>
+                            <th class="payroll-th text-center">ขาด ชม.</th>
+                            <th class="payroll-th text-center">มาสาย นาที</th>
+                            <th class="payroll-th text-center">ลาป่วย</th>
+                            <th class="payroll-th text-right">หักอื่นๆ</th>
+                            <th class="payroll-th text-right">หัก ณ ที่จ่าย</th>
+                            <th class="payroll-th text-right">รวมรับ</th>
+                            <th class="payroll-th text-right">รวมจ่าย</th>
+                            <th class="payroll-th text-right">คงเหลือสุทธิ</th>
+                            <th class="payroll-th rounded-r-2xl text-center">จัดการ</th>
+                        </tr>
+                    </thead>
+
+                    <tbody id="payrollTableBody">
+                        <tr>
+                            <td colspan="19" class="p-16 text-center text-slate-300 italic font-bold">
+                                กำลังโหลดข้อมูล...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div id="payrollPagination" class="flex justify-center items-center gap-4 mt-6"></div>
+            </div>
+        </div>
+    `;
+
+    window.injectPayrollPageStyle();
+    window.renderPayrollDateInput();
+
+    if (typeof window.loadPayrollTable === 'function') {
+        window.loadPayrollTable();
+    }
+};
+window.exportPayrollExcel = async function() {
     if (!window.supabaseClient) {
-        target.innerHTML = `<div class="glass-card py-20 text-center text-red-400 font-bold">ยังไม่พบการเชื่อมต่อ Supabase</div>`;
-        return;
+        return Swal.fire('Error', 'ยังไม่พบ Supabase', 'error');
     }
 
-    const currentUser = window.getCurrentUserSafe();
-    const viewingBranch = window.getCurrentViewingBranch();
-    const isAdmin = window.canViewAllBranches();
+    if (!window.XLSX) {
+        return Swal.fire('Error', 'ยังไม่พบไลบรารี Excel XLSX', 'error');
+    }
+
+    const toNumber = (v) => {
+        const n = Number(String(v ?? 0).replace(/,/g, ''));
+        return Number.isFinite(n) ? n : 0;
+    };
+
+    const branch = document.getElementById('payrollBranchFilter')?.value || '';
+    const period = window.getCurrentPayrollPeriod();
+    const periodType = document.getElementById('payrollPeriodType')?.value || 'รายเดือน';
+
+    let payrollQuery = window.supabaseClient
+        .from('payroll_history')
+        .select('*')
+        .order('updated_at', { ascending: false });
+
+    if (periodType === 'รายปี') {
+        payrollQuery = payrollQuery.ilike('period', `%/${period}`);
+    } else {
+        payrollQuery = payrollQuery.eq('period', period);
+    }
+
+    if (branch && branch !== 'ทุกสาขา') {
+        payrollQuery = payrollQuery.in('branch', [
+            branch,
+            `สาขา${branch}`,
+            `ACE Clinic ${branch}`,
+            `เอซคลินิก ${branch}`
+        ]);
+    }
+
+    const { data: payrollRows, error } = await payrollQuery;
+
+    if (error) {
+        return Swal.fire('Export ไม่สำเร็จ', error.message, 'error');
+    }
+
+    if (!payrollRows || payrollRows.length === 0) {
+        return Swal.fire('ไม่มีข้อมูล', 'ไม่พบข้อมูลเงินเดือนตามช่วงเวลาที่เลือก', 'info');
+    }
+
+    const staffCodes = [...new Set(payrollRows.map(r => r.staff_code).filter(Boolean))];
+
+    const { data: staffRows } = await window.supabaseClient
+        .from('staff_profiles')
+        .select('*')
+        .in('staff_code', staffCodes);
+
+    const staffMap = {};
+    (staffRows || []).forEach(s => {
+        staffMap[String(s.staff_code)] = s;
+    });
+
+    const excelRows = payrollRows.map((p, index) => {
+        const staff = staffMap[String(p.staff_code)] || {};
+
+        const salary = toNumber(p.salary);
+        const comm = toNumber(p.comm);
+        const df = toNumber(p.df);
+        const ot = toNumber(p.ot);
+        const extra = toNumber(p.extra_income);
+
+        const sso = toNumber(p.sso);
+        const absDayDeduct = toNumber(p.abs_day_deduct);
+        const absHourDeduct = toNumber(p.abs_hour_deduct);
+        const lateDeduct = toNumber(p.late_deduct);
+        const otherDeduct = toNumber(p.other_deduct);
+        const tax = toNumber(p.tax);
+
+        const incomeTotal = salary + comm + df + ot + extra;
+        const expenseTotal = sso + absDayDeduct + absHourDeduct + lateDeduct + otherDeduct + tax;
+        const netPay = toNumber(p.net_pay || incomeTotal - expenseTotal);
+
+        return {
+            'ลำดับ': index + 1,
+            'งวดเงินเดือน': p.period || '',
+            'สาขา': p.branch || staff.branch || '',
+            'รหัสพนักงาน': p.staff_code || '',
+            'เลขบัตรประชาชน': staff.citizen_id || '',
+            'ชื่อ-นามสกุล': staff.full_name || p.staff_name || '',
+            'เงินเดือน': salary,
+            'คอมมิชชั่น': comm,
+            'ค่ามือ / DF': df,
+            'OT': ot,
+            'เงินพิเศษ': extra,
+            'รายรับรวม': incomeTotal,
+            'หักประกันสังคม': sso,
+            'ขาดงาน วัน': toNumber(p.abs_days),
+            'ขาดงาน ชั่วโมง': toNumber(p.abs_hours),
+            'มาสาย นาที': toNumber(p.late_mins),
+            'ลาป่วย วัน': toNumber(p.sick_days),
+            'หักขาดงาน': absDayDeduct,
+            'หักชั่วโมง': absHourDeduct,
+            'หักมาสาย': lateDeduct,
+            'หักอื่นๆ': otherDeduct,
+            'หัก ณ ที่จ่าย': tax,
+            'รายจ่ายรวม': expenseTotal,
+            'คงเหลือสุทธิ': netPay,
+            'หมายเหตุเงินพิเศษ': p.extra_income_note || '',
+            'หมายเหตุหักอื่นๆ': p.other_deduct_note || '',
+            'อัปเดตล่าสุด': p.updated_at || ''
+        };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(excelRows);
+    const workbook = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Payroll');
+
+    const safeBranch = branch || 'ทุกสาขา';
+    const safePeriod = String(period).replace('/', '-');
+
+    XLSX.writeFile(
+        workbook,
+        `รายงานเงินเดือน_${safeBranch}_${safePeriod}.xlsx`
+    );
+};
+
+window.loadPayrollTable = async function() {
+    const tableBody = document.getElementById('payrollTableBody');
+    const totalCount = document.getElementById('payrollTotalCount');
+    const grandBox = document.getElementById('payrollGrandTotalBox');
+
+    if (!tableBody) return;
+
+    const toNumber = (v) => {
+        const n = Number(String(v ?? 0).replace(/,/g, ''));
+        return Number.isFinite(n) ? n : 0;
+    };
+
+    const money = (v) => `฿${toNumber(v).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    })}`;
+
+    tableBody.innerHTML = `
+        <tr>
+            <td colspan="19" class="p-16 text-center text-slate-300 italic font-bold">
+                กำลังโหลดข้อมูล...
+            </td>
+        </tr>
+    `;
+
+    try {
+        if (!window.supabaseClient) throw new Error('ยังไม่พบ Supabase');
+
+        const branch = document.getElementById('payrollBranchFilter')?.value || '';
+        const search = String(document.getElementById('payrollSearchInput')?.value || '').toLowerCase().trim();
+        const pageSize = Number(document.getElementById('payrollPageSize')?.value || 20);
+        const period = window.getCurrentPayrollPeriod();
+const periodType = document.getElementById('payrollPeriodType')?.value || 'รายเดือน';
+
+let payrollQuery = window.supabaseClient
+    .from('payroll_history')
+    .select('*')
+    .order('updated_at', { ascending: false });
+
+if (periodType === 'รายปี') {
+    payrollQuery = payrollQuery.ilike('period', `%/${period}`);
+} else {
+    payrollQuery = payrollQuery.eq('period', period);
+}
+        if (branch && branch !== 'ทุกสาขา') {
+            payrollQuery = payrollQuery.in('branch', [
+                branch,
+                `สาขา${branch}`,
+                `ACE Clinic ${branch}`,
+                `เอซคลินิก ${branch}`
+            ]);
+        }
+
+        const { data: payrollRows, error: payrollError } = await payrollQuery;
+        if (payrollError) throw payrollError;
+
+        const safePayrollRows = Array.isArray(payrollRows) ? payrollRows : [];
+        const staffCodes = [...new Set(safePayrollRows.map(p => String(p.staff_code || '').trim()).filter(Boolean))];
+
+        let staffRows = [];
+
+        if (staffCodes.length > 0) {
+            const { data: staffData, error: staffError } = await window.supabaseClient
+                .from('staff_profiles')
+                .select('*')
+                .in('staff_code', staffCodes);
+
+            if (staffError) throw staffError;
+            staffRows = Array.isArray(staffData) ? staffData : [];
+        }
+
+        const staffMap = {};
+        staffRows.forEach(s => {
+            staffMap[String(s.staff_code || '').trim()] = s;
+        });
+
+        let rows = safePayrollRows.map(pay => {
+            const staffCode = String(pay.staff_code || '').trim();
+            const staff = staffMap[staffCode] || {};
+
+            const salary = toNumber(pay.salary);
+            const comm = toNumber(pay.comm);
+            const df = toNumber(pay.df);
+            const ot = toNumber(pay.ot);
+            const extra = toNumber(pay.extra_income);
+
+            const sso = toNumber(pay.sso);
+            const absDays = toNumber(pay.abs_days);
+            const absHours = toNumber(pay.abs_hours);
+            const lateMins = toNumber(pay.late_mins);
+            const sickDays = toNumber(pay.sick_days);
+            const otherDeduct = toNumber(pay.other_deduct);
+            const tax = toNumber(pay.tax);
+
+            const absDayDeduct = toNumber(pay.abs_day_deduct);
+            const absHourDeduct = toNumber(pay.abs_hour_deduct);
+            const lateDeduct = toNumber(pay.late_deduct);
+
+            const incomeTotal = salary + comm + df + ot + extra;
+            const expenseTotal = sso + absDayDeduct + absHourDeduct + lateDeduct + otherDeduct + tax;
+            const netPay = pay.net_pay !== null && pay.net_pay !== undefined && pay.net_pay !== ''
+                ? toNumber(pay.net_pay)
+                : incomeTotal - expenseTotal;
+
+            return {
+                staffCode,
+                staff,
+                pay,
+                salary,
+                comm,
+                df,
+                ot,
+                extra,
+                sso,
+                absDays,
+                absHours,
+                lateMins,
+                sickDays,
+                otherDeduct,
+                tax,
+                absDayDeduct,
+                absHourDeduct,
+                lateDeduct,
+                incomeTotal,
+                expenseTotal,
+                netPay
+            };
+        });
+
+        if (search) {
+            rows = rows.filter(r => {
+                const text = [
+                    r.staffCode,
+                    r.staff.full_name,
+                    r.pay.staff_name,
+                    r.staff.nickname,
+                    r.staff.phone,
+                    r.staff.email,
+                    r.staff.citizen_id
+                ].join(' ').toLowerCase();
+
+                return text.includes(search);
+            });
+        }
+
+        if (totalCount) {
+            totalCount.innerText = `ทั้งหมด ${rows.length.toLocaleString()} รายการ`;
+        }
+
+        const grandTotal = rows.reduce((sum, r) => sum + toNumber(r.netPay), 0);
+        if (grandBox) grandBox.innerText = money(grandTotal);
+
+        const showRows = rows.slice(0, pageSize);
+
+        if (!showRows.length) {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="19" class="p-16 text-center text-slate-300 italic font-bold">
+                        ไม่พบข้อมูลเงินเดือนพนักงานงวดนี้
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tableBody.innerHTML = showRows.map((r, index) => {
+            const staff = r.staff || {};
+            const staffCode = r.staffCode || r.pay.staff_code || '';
+            const citizenId = staff.citizen_id || '-';
+            const staffName = staff.full_name || r.pay.staff_name || '-';
+
+            return `
+                <tr class="payroll-row">
+                    <td class="payroll-td text-center">${index + 1}</td>
+                    <td class="payroll-td">${citizenId}</td>
+                    <td class="payroll-td font-black text-slate-700">${staffName}</td>
+
+                    <td class="payroll-td text-right">${money(r.salary)}</td>
+                    <td class="payroll-td text-right">${money(r.comm)}</td>
+                    <td class="payroll-td text-right">${money(r.df)}</td>
+                    <td class="payroll-td text-right">${money(r.ot)}</td>
+                    <td class="payroll-td text-right">${money(r.extra)}</td>
+
+                    <td class="payroll-td text-right payroll-expense">${money(r.sso)}</td>
+                    <td class="payroll-td text-center">${r.absDays}</td>
+                    <td class="payroll-td text-center">${r.absHours}</td>
+                    <td class="payroll-td text-center">${r.lateMins}</td>
+                    <td class="payroll-td text-center">${r.sickDays}</td>
+                    <td class="payroll-td text-right payroll-expense">${money(r.otherDeduct)}</td>
+                    <td class="payroll-td text-right payroll-expense">${money(r.tax)}</td>
+
+                    <td class="payroll-td text-right font-black text-slate-900">${money(r.incomeTotal)}</td>
+                    <td class="payroll-td text-right font-black payroll-expense">${money(r.expenseTotal)}</td>
+                    <td class="payroll-td text-right font-black text-slate-900">${money(r.netPay)}</td>
+
+                    <td class="payroll-td text-center">
+                        <div class="payroll-action-wrap">
+                            <button onclick="window.openLuxuryPayroll('${staffCode}', '${period}')"
+                                class="bg-[#D48197] text-white px-4 py-2 rounded-l-2xl text-[11px] font-black">
+                                แก้ไข
+                            </button>
+
+                            <button type="button"
+                                onclick="event.stopPropagation(); window.togglePayrollMenu('${staffCode}')"
+                                class="bg-[#D48197] text-white px-3 py-2 rounded-r-2xl text-[11px] font-black border-l border-white/30">
+                                ▼
+                            </button>
+
+                            <div id="payrollMenu-${staffCode}" class="payroll-action-menu hidden">
+                                <button onclick="event.stopPropagation(); window.saveAndPrintPayrollById('${staffCode}', '${period}', 'print')">
+                                    🖨️ ปริ้นสลิป
+                                </button>
+                                <button class="danger" onclick="event.stopPropagation(); window.deletePayrollHistory('${staffCode}', '${period}')">
+                                    🗑️ ลบข้อมูล
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+    } catch (err) {
+        console.error('loadPayrollTable error:', err);
+
+        if (grandBox) grandBox.innerText = money(0);
+
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="19" class="p-16 text-center text-red-400 italic font-bold">
+                    โหลดข้อมูลไม่สำเร็จ: ${err.message || err}
+                </td>
+            </tr>
+        `;
+    }
+};
+
+window.togglePayrollMenu = function(staffCode, ev) {
+    if (ev) ev.stopPropagation();
+
+    const targetId = `payrollMenu-${staffCode}`;
+
+    document.querySelectorAll('.payroll-action-menu').forEach(menu => {
+        if (menu.id !== targetId) menu.classList.add('hidden');
+    });
+
+    const menu = document.getElementById(targetId);
+    if (!menu) return;
+
+    menu.classList.toggle('hidden');
+};
+
+document.addEventListener('click', function(e) {
+    if (e.target.closest('.payroll-action-wrap')) return;
+
+    document.querySelectorAll('.payroll-action-menu').forEach(menu => {
+        menu.classList.add('hidden');
+    });
+});
+
+window.deletePayrollHistory = async function(staffCode, period) {
+    const result = await Swal.fire({
+        icon: 'warning',
+        title: 'ยืนยันการลบ',
+        text: `ต้องการลบเงินเดือนงวด ${period} ใช่ไหมคะ`,
+        showCancelButton: true,
+        confirmButtonText: 'ลบ',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#ef4444'
+    });
+
+    if (!result.isConfirmed) return;
+
+    const { error } = await window.supabaseClient
+        .from('payroll_history')
+        .delete()
+        .eq('staff_code', staffCode)
+        .eq('period', period);
+
+    if (error) {
+        return Swal.fire('ลบไม่สำเร็จ', error.message || 'เกิดข้อผิดพลาด', 'error');
+    }
+
+    Swal.fire({
+        icon: 'success',
+        title: 'ลบเรียบร้อย',
+        timer: 1200,
+        showConfirmButton: false
+    });
+
+    window.loadPayrollTable?.();
+};
+
+window.getCurrentPayrollPeriod = function() {
+    const type = document.getElementById('payrollPeriodType')?.value || 'รายเดือน';
+    const today = new Date();
+
+    const currentMonth = today.getMonth() + 1;
+    const currentYearAD = today.getFullYear();
+
+    if (type === 'รายเดือน') {
+        const month = Number(document.getElementById('payrollMonthFilter')?.value || currentMonth);
+        const yearAD = Number(document.getElementById('payrollYearFilter')?.value || currentYearAD);
+        return `${month}/${yearAD + 543}`;
+    }
+
+    if (type === 'รายปี') {
+        const yearAD = Number(document.getElementById('payrollYearFilter')?.value || currentYearAD);
+        return `${yearAD + 543}`;
+    }
+
+    return `${currentMonth}/${currentYearAD + 543}`;
+};
+
+window.openPayrollBillModal = async function() {
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบ Supabase', 'error');
+    }
+
+    const branch = document.getElementById('payrollBranchFilter')?.value || '';
+    const period = window.getCurrentPayrollPeriod();
 
     let query = window.supabaseClient
         .from('staff_profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select('staff_code, full_name, nickname, branch, employment_status, is_active')
+        .eq('is_active', true)
+        .neq('employment_status', 'ออก')
+        .order('full_name', { ascending: true });
 
-    // ✅ ถ้าไม่ได้ดูทุกสาขา ให้ดึงเฉพาะสาขาที่กำลังดู
-    if (!(isAdmin && viewingBranch === 'ทุกสาขา')) {
-        query = query.eq('branch', viewingBranch);
+    if (branch && branch !== 'ทุกสาขา') {
+        query = query.in('branch', [
+            branch,
+            `สาขา${branch}`,
+            `ACE Clinic ${branch}`,
+            `เอซคลินิก ${branch}`
+        ]);
     }
 
-    const { data: allStaff, error } = await query;
+    const { data, error } = await query;
 
     if (error) {
-        console.error('renderPayrollSystem staff_profiles error:', error);
-        target.innerHTML = `<div class="glass-card py-20 text-center text-red-400 font-bold">โหลดข้อมูลพนักงานไม่สำเร็จ</div>`;
-        return;
+        console.error(error);
+        return Swal.fire('โหลดพนักงานไม่สำเร็จ', error.message, 'error');
     }
 
-    const { data: payrollHistory, error: payrollError } = await window.supabaseClient
-        .from('payroll_history')
-        .select('*');
+    const staffRows = data || [];
 
-    if (payrollError) {
-        console.error('renderPayrollSystem payroll_history error:', payrollError);
+    if (!staffRows.length) {
+        return Swal.fire('ไม่พบพนักงาน', 'ไม่มีพนักงานในสาขานี้ค่ะ', 'info');
     }
 
-    const filteredStaff = (allStaff || []).filter(s => {
-        const status = s.employment_status || s.status || 'ทำงาน';
-        return status === 'ทำงาน';
+    const options = staffRows.map(s => {
+        const name = s.full_name || s.nickname || s.staff_code;
+        return `<option value="${s.staff_code}">${name} (${s.staff_code})</option>`;
+    }).join('');
+
+    const result = await Swal.fire({
+        title: 'เลือกพนักงาน',
+        html: `
+            <select id="payrollStaffSelect" class="swal2-input" style="border:1px solid #f3c4d2;border-radius:16px;">
+                ${options}
+            </select>
+        `,
+        confirmButtonText: 'เปิดหน้าตีบิลเงินเดือน',
+        confirmButtonColor: '#D48197',
+        showCancelButton: true,
+        cancelButtonText: 'ยกเลิก',
+        preConfirm: () => document.getElementById('payrollStaffSelect')?.value
     });
 
-    const now = new Date();
-    const selM = document.getElementById('filterMonth')?.value || (now.getMonth() + 1);
-    const selY = document.getElementById('filterYear')?.value || (now.getFullYear() + 543);
-    const selectedPeriod = `${parseInt(selM)}/${selY}`;
+    if (!result.isConfirmed || !result.value) return;
 
-    target.innerHTML = `
-        <div class="animate-in fade-in duration-500 p-6 -mt-10 text-left pb-24 font-normal bg-[#FDF7F8]">
-            <div class="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
-                <div>
-                    <h1 class="text-4xl font-black text-slate-800 italic uppercase leading-none">PAYROLL</h1>
-                    <p class="text-[9px] text-[#D48197] font-black uppercase mt-2 tracking-[0.3em] italic">
-                        งวดสาขา: <span class="text-slate-800 underline">${viewingBranch}</span>
-                    </p>
-                </div>
-                <div class="flex gap-2 bg-white p-3 rounded-[1.5rem] shadow-sm border border-pink-100 items-end">
-                    <div class="flex flex-col">
-                        <label class="text-[8px] font-black text-[#C5A059] uppercase ml-2 mb-0.5 italic">เดือน</label>
-                        <select id="filterMonth" onchange="window.renderPayrollSystem()" class="bg-slate-50 border border-pink-50 rounded-lg px-2 py-1 text-[10px] font-bold outline-none cursor-pointer">
-                            ${[...Array(12)].map((_, i) => `<option value="${i+1}" ${selM == i+1 ? 'selected' : ''}>${new Intl.DateTimeFormat('th-TH', {month: 'short'}).format(new Date(2026, i, 1))}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="flex flex-col">
-                        <label class="text-[8px] font-black text-[#C5A059] uppercase ml-2 mb-0.5 italic">ปี (พ.ศ.)</label>
-                        <select id="filterYear" onchange="window.renderPayrollSystem()" class="bg-slate-50 border border-pink-50 rounded-lg px-2 py-1 text-[10px] font-bold outline-none cursor-pointer">
-                            <option value="2569" ${selY == 2569 ? 'selected' : ''}>2569</option>
-                            <option value="2570" ${selY == 2570 ? 'selected' : ''}>2570</option>
-                        </select>
-                    </div>
-                    <button onclick="window.renderStaffManagement()" class="bg-slate-800 text-white w-8 h-8 rounded-full flex items-center justify-center shadow-lg mb-0.5">❮</button>
-                </div>
+    window.openLuxuryPayroll(result.value, period);
+};
+
+window.injectPayrollPageStyle = function() {
+    const old = document.getElementById('payrollPageStyle');
+    if (old) old.remove();
+
+    const style = document.createElement('style');
+    style.id = 'payrollPageStyle';
+    style.innerHTML = `
+        .payroll-label {
+            font-size: 10px;
+            font-weight: 900;
+            color: #D48197;
+            margin-left: 8px;
+        }
+
+        .payroll-input {
+            height: 44px !important;
+            background: #ffffff !important;
+            background-color: #ffffff !important;
+            background-image: none !important;
+            border: 1px solid #f3c4d2 !important;
+            border-radius: 16px !important;
+            padding: 0 14px !important;
+            font-size: 12px !important;
+            color: #475569 !important;
+            outline: none !important;
+            box-shadow: 0 6px 16px rgba(212,129,151,.06) !important;
+            -webkit-appearance: none !important;
+            appearance: none !important;
+        }
+
+        select.payroll-input {
+            background: #ffffff !important;
+            background-color: #ffffff !important;
+            background-image: none !important;
+            -webkit-appearance: none !important;
+            appearance: none !important;
+            color: #475569 !important;
+        }
+
+        input.payroll-input,
+        select.payroll-input {
+            -webkit-text-fill-color: #475569 !important;
+        }
+
+        .payroll-input:focus {
+            border-color: #D48197 !important;
+            box-shadow: 0 0 0 4px rgba(212,129,151,.12) !important;
+        }
+
+        .payroll-select-wrap {
+            position: relative;
+            display: inline-block;
+        }
+
+        .payroll-select-wrap::after {
+            content: '▾';
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #D48197;
+            font-size: 10px;
+            pointer-events: none;
+        }
+
+        .payroll-select-wrap select.payroll-input {
+            padding-right: 30px !important;
+        }
+
+        .payroll-th {
+            background: #D48197;
+            color: white;
+            padding: 14px 12px;
+            font-weight: 900;
+            white-space: nowrap;
+        }
+
+        .payroll-td {
+            background: #fff5f8;
+            padding: 14px 12px;
+            font-size: 12px;
+            color: #475569;
+            white-space: nowrap;
+        }
+
+        /* ===== SWEETALERT CUSTOM ===== */
+
+        .swal2-popup {
+            border-radius: 28px !important;
+            padding: 30px !important;
+            font-family: inherit !important;
+        }
+
+        .swal2-popup select,
+        .swal2-popup .swal2-select,
+        #payrollStaffSelect {
+            width: 100% !important;
+            max-width: 520px !important;
+            height: 48px !important;
+            margin: 14px auto 4px auto !important;
+            background: #ffffff !important;
+            background-color: #ffffff !important;
+            background-image: none !important;
+            border: 1px solid #f3c4d2 !important;
+            border-radius: 18px !important;
+            padding: 0 16px !important;
+            font-size: 14px !important;
+            font-weight: 700 !important;
+            color: #475569 !important;
+            outline: none !important;
+            box-shadow: 0 6px 16px rgba(212,129,151,.08) !important;
+            -webkit-appearance: none !important;
+            appearance: none !important;
+        }
+
+        .swal2-popup select:focus,
+        .swal2-popup .swal2-select:focus,
+        #payrollStaffSelect:focus {
+            border-color: #D48197 !important;
+            box-shadow: 0 0 0 4px rgba(212,129,151,.12) !important;
+        }
+
+        .swal2-confirm {
+            background: #D48197 !important;
+            border-radius: 16px !important;
+            font-weight: 900 !important;
+            padding: 12px 24px !important;
+        }
+
+        .swal2-cancel {
+            background: #475569 !important;
+            border-radius: 16px !important;
+            font-weight: 900 !important;
+            padding: 12px 24px !important;
+        }
+.payroll-row {
+    background: #ffffff !important;
+}
+
+.payroll-row:hover .payroll-td {
+    background: #fff7fa !important;
+}
+
+.payroll-td {
+    background: #ffffff !important;
+    padding: 16px 12px !important;
+    font-size: 12px !important;
+    color: #475569 !important;
+    white-space: nowrap !important;
+    border-bottom: 1px solid #f8dce5 !important;
+}
+
+.payroll-expense {
+    color: #ff0000 !important;
+    font-weight: 900 !important;
+}
+
+.payroll-edit-btn {
+    background: #D48197 !important;
+    color: #ffffff !important;
+    padding: 9px 13px !important;
+    font-size: 11px !important;
+    font-weight: 900 !important;
+}
+
+.payroll-action-menu {
+    position: absolute;
+    right: 0;
+    top: 42px;
+    width: 150px;
+    background: #ffffff;
+    border: 1px solid #f3c4d2;
+    border-radius: 18px;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, .18);
+    padding: 8px;
+    z-index: 9999;
+    text-align: left;
+}
+
+.payroll-action-menu button {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 900;
+    color: #475569;
+    text-align: left;
+}
+
+.payroll-action-menu button:hover {
+    background: #fff1f5;
+    color: #D48197;
+}
+
+.payroll-action-menu button.danger {
+    color: #ef4444;
+}
+.payroll-action-wrap {
+    position: relative !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.payroll-action-menu {
+    position: absolute !important;
+    right: 0 !important;
+    top: 42px !important;
+    width: 170px !important;
+    background: #ffffff !important;
+    border: 1px solid #f3c4d2 !important;
+    border-radius: 18px !important;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, .18) !important;
+    padding: 8px !important;
+    z-index: 99999 !important;
+    text-align: left !important;
+}
+
+.payroll-action-menu button {
+    display: block !important;
+    width: 100% !important;
+    padding: 10px 12px !important;
+    border-radius: 12px !important;
+    font-size: 12px !important;
+    font-weight: 900 !important;
+    color: #475569 !important;
+    text-align: left !important;
+    background: white !important;
+}
+
+.payroll-action-menu button:hover {
+    background: #fff1f5 !important;
+    color: #D48197 !important;
+}
+
+.payroll-action-menu button.danger {
+    color: #ef4444 !important;
+}
+
+.payroll-action-menu.hidden {
+    display: none !important;
+}
+    `;
+    document.head.appendChild(style);
+};
+
+window.renderPayrollDateInput = function() {
+    const box = document.getElementById('payrollDateBox');
+    if (!box) return;
+
+    const type = document.getElementById('payrollPeriodType')?.value || 'รายเดือน';
+
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+
+    if (type === 'รายวัน') {
+        box.innerHTML = `
+            <div class="flex flex-col gap-1">
+                <label class="payroll-label">เลือกวันที่</label>
+                <input type="date" id="payrollDayFilter" value="${yyyy}-${mm}-${dd}"
+                    onchange="window.loadPayrollTable?.()"
+                    class="payroll-input w-[155px]">
+            </div>
+        `;
+    }
+
+    else if (type === 'รายเดือน') {
+        box.innerHTML = `
+            <div class="flex flex-col gap-1">
+                <label class="payroll-label">เลือกเดือน</label>
+                <select id="payrollMonthFilter" onchange="window.loadPayrollTable?.()"
+                    class="payroll-input w-[135px]">
+                    ${[
+                        ['01','มกราคม'], ['02','กุมภาพันธ์'], ['03','มีนาคม'], ['04','เมษายน'],
+                        ['05','พฤษภาคม'], ['06','มิถุนายน'], ['07','กรกฎาคม'], ['08','สิงหาคม'],
+                        ['09','กันยายน'], ['10','ตุลาคม'], ['11','พฤศจิกายน'], ['12','ธันวาคม']
+                    ].map(([m, n]) => `<option value="${m}" ${m === mm ? 'selected' : ''}>${n}</option>`).join('')}
+                </select>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                ${filteredStaff.length > 0 ? filteredStaff.map((s) => {
-                    const staffCode = s.staff_code || '';
-                    const staffName = s.full_name || '-';
-                    const record = (payrollHistory || []).find(p =>
-                        String(p.staff_code || '') === String(staffCode) &&
-                        String(p.period || '') === String(selectedPeriod)
-                    );
-
-                    return `
-                    <div class="bg-white rounded-[2.5rem] p-6 border border-slate-50 shadow-lg hover:shadow-2xl transition-all text-center relative overflow-hidden group">
-                        <div class="w-14 h-14 bg-[#FFF5F7] rounded-2xl flex items-center justify-center mb-4 border border-pink-50 mx-auto overflow-hidden">
-                            <img src="${s.img || 'https://via.placeholder.com/150'}" class="w-full h-full object-cover">
-                        </div>
-                        <h3 class="text-lg font-black text-slate-800 leading-tight mb-0.5 italic text-center">${staffName}</h3>
-                        <p class="text-[8px] text-[#D48197] font-black uppercase tracking-widest mb-4 italic text-center">${s.role || 'Staff'}</p>
-                        
-                       <div class="space-y-2 border-t border-slate-50 pt-4 mb-6 font-bold italic text-[10px]">
-                            <div class="flex justify-between">
-                                <span>เงินเดือน</span>
-                                <span class="text-slate-700 font-black">฿${parseFloat(s.salary || 0).toLocaleString()}</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span>ยอดรับสุทธิ</span>
-                                <span class="text-emerald-600 font-black">
-                                    ${record
-                                        ? `฿${Math.round(parseFloat(String(record.net_pay || 0).replace(/[^\d.-]/g, '')) || 0).toLocaleString()}`
-                                        : '-'}
-                                </span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span>สาขา</span>
-                                <span class="text-pink-400 font-black">${s.branch || '-'}</span>
-                            </div>
-                            <div class="flex justify-between">
-                                <span>สถานะ</span>
-                                <span class="${record ? 'text-green-500' : 'text-orange-400'} font-black">${record ? 'สำเร็จ' : 'รอดำเนินการ'}</span>
-                            </div>
-                        </div>
-
-                        <button onclick="window.openLuxuryPayroll('${staffCode}', '${selectedPeriod}')" class="w-full py-3 rounded-xl font-black text-[9px] uppercase tracking-[0.2em] shadow-md transition-all ${record ? 'bg-slate-100 text-slate-400' : 'bg-[#D48197] text-white hover:bg-black'}">
-                            ${record ? 'ดูข้อมูล / แก้ไข' : 'เริ่มคำนวณ'}
-                        </button>
-                    </div>`;
-                }).join('') : `
-                    <div class="col-span-full py-20 text-center bg-white rounded-[3rem] border-2 border-dashed border-pink-100">
-                        <p class="text-slate-300 italic">ไม่พบรายชื่อพนักงานที่ต้องคำนวณเงินเดือนในสาขา ${viewingBranch} ค่ะ</p>
-                    </div>
-                `}
+            <div class="flex flex-col gap-1">
+                <label class="payroll-label">เลือกปี</label>
+                <input type="number" id="payrollYearFilter" value="${yyyy}"
+                    onchange="window.loadPayrollTable?.()"
+                    class="payroll-input w-[105px]">
             </div>
-        </div>`;
+        `;
+    }
+
+    else if (type === 'รายปี') {
+        box.innerHTML = `
+            <div class="flex flex-col gap-1">
+                <label class="payroll-label">เลือกปี</label>
+                <input type="number" id="payrollYearFilter" value="${yyyy}"
+                    onchange="window.loadPayrollTable?.()"
+                    class="payroll-input w-[105px]">
+            </div>
+        `;
+    }
+
+    else {
+        box.innerHTML = `
+            <div class="flex flex-col gap-1">
+                <label class="payroll-label">เริ่มวันที่</label>
+                <input type="date" id="payrollStartFilter" value="${yyyy}-${mm}-01"
+                    onchange="window.loadPayrollTable?.()"
+                    class="payroll-input w-[155px]">
+            </div>
+
+            <div class="flex flex-col gap-1">
+                <label class="payroll-label">ถึงวันที่</label>
+                <input type="date" id="payrollEndFilter" value="${yyyy}-${mm}-${dd}"
+                    onchange="window.loadPayrollTable?.()"
+                    class="payroll-input w-[155px]">
+            </div>
+        `;
+    }
+};
+
+window.getPayrollMonthRange = function(period) {
+    const today = new Date();
+
+    const [m, y] = String(period || '').split('/');
+    let month = Number(m);
+    let year = Number(y);
+
+    // ✅ กัน period ว่าง / NaN
+    if (!month || !year) {
+        month = today.getMonth() + 1;
+        year = today.getFullYear() + 543;
+    }
+
+    // ✅ ถ้าเป็น พ.ศ. ให้แปลงเป็น ค.ศ.
+    if (year > 2400) year -= 543;
+
+    const start = `${year}-${String(month).padStart(2, '0')}-01`;
+    const endDate = new Date(year, month, 0);
+    const end = `${year}-${String(month).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
+
+    return { start, end };
+};
+
+window.parseThaiStartDate = function(value) {
+    if (!value) return null;
+
+    const raw = String(value).trim();
+
+    // รองรับ 2026-04-28
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+        return new Date(raw + 'T00:00:00');
+    }
+
+    // รองรับ 01/04/2569 หรือ 01-04-2569
+    const parts = raw.split(/[\/\-]/);
+    if (parts.length === 3) {
+        let d = Number(parts[0]);
+        let m = Number(parts[1]);
+        let y = Number(parts[2]);
+        if (y > 2400) y -= 543;
+        return new Date(y, m - 1, d);
+    }
+
+    return null;
+};
+
+window.isStaffSSOEligible = function(startDateText, period) {
+    const startDate = window.parseThaiStartDate(startDateText);
+    if (!startDate) return false;
+
+    const [m, y] = String(period || '').split('/');
+    const month = Number(m);
+    let year = Number(y);
+    if (year > 2400) year -= 543;
+
+    const payrollDate = new Date(year, month - 1, 1);
+    const eligibleDate = new Date(startDate);
+    eligibleDate.setMonth(eligibleDate.getMonth() + 3);
+
+    return payrollDate >= eligibleDate;
 };
 
 window.openLuxuryPayroll = async function(staffId, period) {
     if (!window.supabaseClient) {
         return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
     }
+
+    const toNumber = (v) => {
+        const n = Number(String(v ?? 0).replace(/,/g, ''));
+        return Number.isFinite(n) ? n : 0;
+    };
 
     const safePeriod = (() => {
         const [m, y] = String(period || '').split('/');
@@ -19052,197 +20290,321 @@ window.openLuxuryPayroll = async function(staffId, period) {
         .single();
 
     if (error || !staff) {
-        console.error('openLuxuryPayroll error:', error);
+        console.error('openLuxuryPayroll staff error:', error);
         return Swal.fire('Error', 'ไม่พบข้อมูลพนักงานในระบบ', 'error');
     }
 
-    const { data: prev, error: historyError } = await window.supabaseClient
+    const { data: prev } = await window.supabaseClient
         .from('payroll_history')
         .select('*')
         .eq('staff_code', staffId)
         .eq('period', safePeriod)
         .maybeSingle();
 
-    if (historyError) {
-        console.error('openLuxuryPayroll payroll_history error:', historyError);
-    }
-
     const staffName = staff.full_name || staff.name || '-';
+    const nickname = staff.nickname || '-';
+    const citizenId = staff.citizen_id || staff.national_id || staff.id_card || '-';
+    const position = staff.position || staff.role || '-';
+    const branch = staff.branch || '-';
+    const salary = toNumber(prev?.salary ?? staff.salary ?? 0);
+
+    const { start, end } = window.getPayrollMonthRange(safePeriod);
+
+// ✅ ดึงค่ามือ/DF จากห้องจัดการคิว
+let autoDF = 0;
+
+try {
+    const staffNameList = [
+        staff.full_name,
+        staff.nickname,
+        staff.staff_code,
+        `${staff.full_name || ''} (${staff.staff_code || ''})`
+    ]
+        .filter(Boolean)
+        .map(v => String(v).trim().toLowerCase());
+
+    const { data: queueDFRows, error: dfError } = await window.supabaseClient
+        .from('queues')
+        .select('staff, staff_df, date, status, branch')
+        .eq('status', 'เสร็จสิ้น')
+        .gte('date', start)
+        .lte('date', end);
+
+    if (dfError) throw dfError;
+
+    autoDF = (queueDFRows || [])
+        .filter(q => {
+            const qStaff = String(q.staff || '').trim().toLowerCase();
+            return staffNameList.some(name =>
+                qStaff === name ||
+                qStaff.includes(name) ||
+                name.includes(qStaff)
+            );
+        })
+        .reduce((sum, q) => sum + toNumber(q.staff_df), 0);
+
+} catch (e) {
+    console.warn('load auto DF fail:', e);
+}
+
+// ✅ ดึง OT รวมจาก payroll_ot_logs
+let autoOT = 0;
+
+try {
+    const { data: otRows, error: otError } = await window.supabaseClient
+        .from('payroll_ot_logs')
+        .select('ot_amount')
+        .eq('staff_code', staffId)
+        .eq('period', safePeriod);
+
+    if (otError) throw otError;
+
+    autoOT = (otRows || []).reduce((sum, r) => sum + toNumber(r.ot_amount), 0);
+
+} catch (e) {
+    console.warn('load auto OT fail:', e);
+}
+
+// ✅ ถ้าใน payroll_history เป็น 0 ให้ใช้ค่าที่ดึงอัตโนมัติ
+const df = toNumber(prev?.df) > 0 ? toNumber(prev.df) : autoDF;
+const ot = toNumber(prev?.ot) > 0 ? toNumber(prev.ot) : autoOT;
+
+    document.getElementById('payrollModal')?.remove();
 
     const modal = document.createElement('div');
     modal.id = 'payrollModal';
-    modal.className = 'fixed inset-0 bg-pink-900/40 backdrop-blur-md flex items-center justify-center z-[10006] p-4 font-normal';
+    modal.className = 'fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[10006] p-4 font-normal';
 
     modal.innerHTML = `
-        <div class="bg-white w-full max-w-6xl rounded-[4rem] shadow-2xl overflow-hidden border-2 border-pink-100 animate-in slide-in-from-bottom duration-500 text-left">
-            <div class="grid grid-cols-1 md:grid-cols-12">
-                <div class="md:col-span-4 bg-[#FFF5F7] p-10 flex flex-col justify-between border-r border-pink-100 font-bold italic">
-                    <div>
-                        <h3 class="text-2xl font-black text-slate-800 mb-1 uppercase">${staffName}</h3>
-                        <p class="text-[9px] text-[#D48197] font-black uppercase mb-8">งวดประมวลผล: ${safePeriod}</p>
-                        <div class="bg-white p-6 rounded-[2rem] shadow-sm border-b-8 border-[#C5A059] text-center">
-                            <p class="text-[8px] font-black text-slate-400 uppercase italic mb-1">ยอดรับสุทธิ (NET)</p>
-                            <h2 id="mNet" class="text-4xl font-black text-slate-800 italic tracking-tighter">฿0</h2>
+        <div class="bg-white w-full max-w-[980px] mx-auto my-6 rounded-[3rem] shadow-2xl border border-pink-100 p-6 text-left max-h-[90vh] overflow-y-auto">
+
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <h3 class="text-2xl font-black text-[#D48197]">ตีบิลเงินเดือนพนักงาน</h3>
+	<p class="text-[12px] text-slate-400 font-bold mt-1">งวดเงินเดือน: ${safePeriod}</p>
+	<input type="hidden" id="mStaffStartDate" value="${staff.start_date || ''}">
+                </div>
+                <button onclick="document.getElementById('payrollModal')?.remove()" class="text-2xl text-slate-300 hover:text-red-400">×</button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+                <div class="payroll-info-card"><p>HN พนักงาน</p><b>${staff.staff_code || '-'}</b></div>
+                <div class="payroll-info-card"><p>ชื่อ-นามสกุล</p><b>${staffName}</b></div>
+                <div class="payroll-info-card"><p>ชื่อเล่น</p><b>${nickname}</b></div>
+                <div class="payroll-info-card"><p>เลขบัตรประชาชน</p><b>${citizenId}</b></div>
+                <div class="payroll-info-card"><p>ตำแหน่ง</p><b>${position}</b></div>
+                <div class="payroll-info-card"><p>สาขา</p><b>${branch}</b></div>
+            </div>
+
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+
+    <div class="bg-pink-50/30 border border-pink-100 rounded-[2rem] p-5">
+        <h4 class="text-sm font-black text-[#D48197] mb-4">รายรับ</h4>
+
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label class="payroll-form-label">เงินเดือน</label>
+                <input id="mSalary" type="number" value="${salary}" readonly class="payroll-form-input">
+            </div>
+
+            <div>
+                <label class="payroll-form-label">ค่ามือ / DF</label>
+                <input id="mDF" type="number" value="${df}" oninput="window.calcPayrollLogic()" class="payroll-form-input">
+            </div>
+
+            <div>
+                <label class="payroll-form-label">OT</label>
+                <input id="mOT" type="number" value="${ot}" oninput="window.calcPayrollLogic()" class="payroll-form-input">
+            </div>
+
+            <div>
+                <label class="payroll-form-label">คอมมิชชั่น</label>
+                <input id="mComm" type="number" value="${prev?.comm ?? 0}" oninput="window.calcPayrollLogic()" class="payroll-form-input">
+            </div>
+
+            <div>
+                <label class="payroll-form-label">เงินพิเศษ</label>
+                <input id="mExtraIncome" type="number" value="${prev?.extra_income ?? 0}" oninput="window.calcPayrollLogic()" class="payroll-form-input">
+            </div>
+
+            <div class="col-span-2">
+                <label class="payroll-form-label">หมายเหตุเงินพิเศษ</label>
+                <input id="mExtraIncomeNote" type="text" value="${prev?.extra_income_note ?? ''}" placeholder="เช่น โบนัส / เบี้ยขยัน" class="payroll-form-input">
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white border border-pink-100 rounded-[2rem] p-5">
+        <h4 class="text-sm font-black text-red-400 mb-4">รายการหัก / ขาด / ลา / สาย</h4>
+
+        <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="payroll-form-label">ขาดงาน (วัน)</label>
+                            <input id="mAbsDays" type="number" value="${prev?.abs_days ?? 0}" oninput="window.calcPayrollLogic()" class="payroll-form-input">
+                            <p id="valAbsDayDeduct" class="payroll-mini-deduct">หัก: ฿0.00</p>
                         </div>
-                    </div>
 
-                   <div class="space-y-3">
-    <button onclick="window.saveAndPrintPayrollById('${staffId}', '${safePeriod}', 'save')" 
-        class="w-full bg-[#D48197] text-white py-4 rounded-[1.5rem] text-[11px] font-black shadow-lg hover:bg-black uppercase italic">
-        บันทึกข้อมูล
-    </button>
+                        <div>
+                            <label class="payroll-form-label">ขาดงาน (ชั่วโมง)</label>
+                            <input id="mAbsHours" type="number" value="${prev?.abs_hours ?? 0}" oninput="window.calcPayrollLogic()" class="payroll-form-input">
+                            <p id="valAbsHourDeduct" class="payroll-mini-deduct">หัก: ฿0.00</p>
+                        </div>
 
-    <button onclick="window.saveAndPrintPayrollById('${staffId}', '${safePeriod}', 'print')" 
-        class="w-full bg-white border-2 border-pink-200 text-[#D48197] py-3.5 rounded-[1.5rem] text-[10px] font-black hover:bg-pink-50 uppercase italic">
-        พิมพ์สลิป
-    </button>
+                        <div>
+                            <label class="payroll-form-label">มาสาย (นาที)</label>
+                            <input id="mLateMin" type="number" value="${prev?.late_mins ?? 0}" oninput="window.calcPayrollLogic()" class="payroll-form-input">
+                            <p id="valLateDeduct" class="payroll-mini-deduct">นาทีละ 5 บาท</p>
+                        </div>
 
-   <button type="button" onclick="window.sendPayrollEmailPrompt('${staffId}', '${safePeriod}')" 
-    class="w-full bg-white border-2 border-pink-200 text-[#D48197] py-3.5 rounded-[1.5rem] text-[10px] font-black hover:bg-pink-50 uppercase italic">
-    ส่งอีเมล
-</button>
+                        <div>
+                            <label class="payroll-form-label">ลาป่วย (วัน)</label>
+                            <input id="mSickDays" type="number" value="${prev?.sick_days ?? 0}" oninput="window.calcPayrollLogic()" class="payroll-form-input">
+                        </div>
 
-    <button onclick="document.getElementById('payrollModal')?.remove()" 
-        class="w-full text-slate-300 py-1 text-[9px] font-black uppercase hover:text-red-400 italic">
-        ปิดหน้าต่าง
-    </button>
+                        <div>
+                            <label class="payroll-form-label">หักอื่นๆ</label>
+                            <input id="mOtherDeduct" type="number" value="${prev?.other_deduct ?? 0}" oninput="window.calcPayrollLogic()" class="payroll-form-input">
+                        </div>
+
+                        <div>
+                            <label class="payroll-form-label">หัก ณ ที่จ่าย</label>
+                            <input id="mTax" type="number" value="${prev?.tax ?? 0}" oninput="window.calcPayrollLogic()" class="payroll-form-input">
+                        </div>
+
+                        <div>
+    <label class="payroll-form-label">หักประกันสังคม</label>
+    <input id="mSSO" type="number" value="${prev?.sso ?? 0}" readonly class="payroll-form-input">
+    <p id="ssoNote" class="text-[10px] text-slate-400 font-bold mt-1 text-right"></p>
 </div>
 
-                </div>
-
-                <div class="md:col-span-8 p-10 overflow-y-auto font-bold italic" style="max-height: 80vh;">
-                    <div class="grid grid-cols-2 gap-8">
-                        <div class="space-y-6">
-                            <h4 class="text-xs font-black text-[#C5A059] border-b-4 border-pink-50 pb-2 uppercase italic tracking-widest">💰 รายได้ (EARNINGS)</h4>
-                            <div class="space-y-4 font-normal italic">
-                                <div>
-                                    <label class="text-[10px] text-slate-400 font-black">เงินเดือนฐาน</label>
-                                    <input type="number" id="mSalary" value="${prev?.salary ?? staff.salary ?? 0}" class="w-full bg-slate-50 border-none p-3.5 rounded-2xl font-black text-slate-400 italic" readonly>
-                                </div>
-
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label class="text-[10px] text-slate-400 font-black italic">ค่าคอมมิชชั่น</label>
-                                        <input type="number" id="mComm" oninput="calcPayrollLogic()" value="${prev?.comm ?? 0}" class="w-full border-2 border-pink-50 p-3.5 rounded-2xl font-black outline-none focus:border-[#C5A059]">
-                                    </div>
-                                    <div>
-                                        <label class="text-[10px] text-slate-400 font-black italic">ค่ามือ (DF)</label>
-                                        <input type="number" id="mDF" oninput="calcPayrollLogic()" value="${prev?.df ?? 0}" class="w-full border-2 border-pink-50 p-3.5 rounded-2xl font-black outline-none focus:border-[#C5A059]">
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label class="text-[10px] text-slate-400 font-black italic">โอที (OT)</label>
-                                    <input type="number" id="mOT" oninput="calcPayrollLogic()" value="${prev?.ot ?? 0}" class="w-full border-2 border-pink-50 p-3.5 rounded-2xl font-black outline-none focus:border-[#C5A059]">
-                                </div>
-
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label class="text-[10px] text-slate-400 font-black italic">รายได้พิเศษ</label>
-                                        <input type="number" id="mExtraIncome" oninput="calcPayrollLogic()" value="${prev?.extra_income ?? 0}" class="w-full border-2 border-pink-50 p-3.5 rounded-2xl font-black outline-none focus:border-[#C5A059]">
-                                    </div>
-                                    <div>
-                                        <label class="text-[10px] text-slate-400 font-black italic">หมายเหตุรายได้พิเศษ</label>
-                                        <input type="text" id="mExtraIncomeNote" value="${prev?.extra_income_note ?? ''}" placeholder="เช่น โบนัส / เบี้ยขยัน" class="w-full border-2 border-pink-50 p-3.5 rounded-2xl font-black outline-none focus:border-[#C5A059]">
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="space-y-6">
-                            <h4 class="text-xs font-black text-red-400 border-b-4 border-pink-50 pb-2 uppercase italic tracking-widest">🔴 รายการหักและสถิติ</h4>
-
-                            <div class="space-y-4">
-                                <div class="bg-red-50/30 p-5 rounded-[2.5rem] border border-red-100 shadow-inner space-y-4 italic">
-                                    <p class="text-[9px] font-black text-red-500 mb-1 uppercase underline underline-offset-4">⚠️ รายละเอียดวินัยและการลา</p>
-
-                                    <div class="flex flex-col gap-0.5">
-                                        <div class="flex justify-between items-center">
-                                            <label class="text-[10px] text-slate-500">ขาดงาน (วัน)</label>
-                                            <input type="number" id="mAbsDays" oninput="calcPayrollLogic()" value="${prev?.abs_days ?? 0}" class="w-14 bg-white border border-red-100 p-1 rounded-lg text-center font-black text-red-500 text-xs">
-                                        </div>
-                                        <div class="text-[8px] text-right text-red-400 font-black italic" id="valAbsDayDeduct">
-                                            หัก: ฿${parseFloat(prev?.abs_day_deduct ?? 0).toFixed(2)}
-                                        </div>
-                                    </div>
-
-                                    <div class="flex flex-col gap-0.5">
-                                        <div class="flex justify-between items-center">
-                                            <label class="text-[10px] text-slate-500">หักชั่วโมง (เช่น 1.30)</label>
-                                            <input type="number" id="mAbsHours" oninput="calcPayrollLogic()" value="${prev?.abs_hours ?? 0}" class="w-14 bg-white border border-red-100 p-1 rounded-lg text-center font-black text-red-500 text-xs">
-                                        </div>
-                                        <div class="text-[8px] text-right text-red-400 font-black italic" id="valAbsHourDeduct">
-                                            หัก: ฿${parseFloat(prev?.abs_hour_deduct ?? 0).toFixed(2)}
-                                        </div>
-                                    </div>
-
-                                    <div class="flex flex-col gap-0.5">
-                                        <div class="flex justify-between items-center">
-                                            <label class="text-[10px] text-slate-500">มาสาย (นาที)</label>
-                                            <input type="number" id="mLateMin" oninput="calcPayrollLogic()" value="${prev?.late_mins ?? 0}" class="w-14 bg-white border border-red-100 p-1 rounded-lg text-center font-black text-red-500 text-xs">
-                                        </div>
-                                        <div class="text-[8px] text-right text-red-400 font-black italic" id="valLateDeduct">
-                                            หัก: ฿${parseFloat(prev?.late_deduct ?? 0).toFixed(2)}
-                                        </div>
-                                    </div>
-
-                                    <div class="grid grid-cols-2 gap-3 pt-2">
-                                        <div>
-                                            <label class="text-[10px] text-slate-500">หักค่าอื่นๆ</label>
-                                            <input type="number" id="mOtherDeduct" oninput="calcPayrollLogic()" value="${prev?.other_deduct ?? 0}" class="w-full bg-white border border-red-100 p-2 rounded-lg font-black text-red-500 text-xs">
-                                        </div>
-                                        <div>
-                                            <label class="text-[10px] text-slate-500">หมายเหตุหักอื่นๆ</label>
-                                            <input type="text" id="mOtherDeductNote" value="${prev?.other_deduct_note ?? ''}" placeholder="เช่น ค่าปรับ / หักอุปกรณ์" class="w-full bg-white border border-red-100 p-2 rounded-lg font-black text-xs">
-                                        </div>
-                                    </div>
-
-                                    <div class="pt-2 border-t border-red-200 flex justify-between items-center">
-                                        <span class="text-[11px] font-black text-red-600">รวมหักวินัย:</span>
-                                        <span id="resDeductTotal" class="text-[12px] font-black text-red-600">
-                                            - ฿${(
-                                                parseFloat(prev?.abs_day_deduct ?? 0) +
-                                                parseFloat(prev?.abs_hour_deduct ?? 0) +
-                                                parseFloat(prev?.late_deduct ?? 0) +
-                                                parseFloat(prev?.other_deduct ?? 0)
-                                            ).toFixed(2)}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label class="text-[10px] text-slate-400 font-black italic">ลาป่วย (วัน)</label>
-                                        <input type="number" id="mSickDays" oninput="calcPayrollLogic()" value="${prev?.sick_days ?? 0}" class="w-full border-2 border-pink-50 p-3.5 rounded-2xl font-black outline-none focus:border-[#C5A059]">
-                                    </div>
-                                    <div>
-                                        <label class="text-[10px] text-slate-400 font-black italic">ลาพักร้อน (วัน)</label>
-                                        <input type="number" id="mVacationDays" oninput="calcPayrollLogic()" value="${prev?.vacation_days ?? 0}" class="w-full border-2 border-pink-50 p-3.5 rounded-2xl font-black outline-none focus:border-[#C5A059]">
-                                    </div>
-                                </div>
-
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label class="text-[10px] text-slate-400 font-black italic">ภาษี (WHT)</label>
-                                        <input type="number" id="mTax" oninput="calcPayrollLogic()" value="${prev?.tax ?? 0}" class="w-full border-2 border-pink-50 p-3.5 rounded-2xl font-black outline-none focus:border-[#C5A059]">
-                                    </div>
-                                    <div>
-                                        <label class="text-[10px] text-slate-400 font-black italic">ประกันสังคม</label>
-                                        <input type="number" id="mSSO" value="${prev?.sso ?? 0}" class="w-full bg-slate-100 border-none p-3.5 rounded-2xl font-black text-slate-400 italic" readonly>
-                                    </div>
-                                </div>
-                            </div>
+                        <div>
+                            <label class="payroll-form-label">หมายเหตุหักอื่นๆ</label>
+                            <input id="mOtherDeductNote" type="text" value="${prev?.other_deduct_note ?? ''}" placeholder="เช่น ค่าปรับ / หักอุปกรณ์" class="payroll-form-input">
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                <div class="payroll-total-card">
+                    <p>รายรับรวม</p>
+                    <b id="payrollIncomeTotal">฿0.00</b>
+                </div>
+
+                <div class="payroll-total-card">
+                    <p>รายจ่ายรวม</p>
+                    <b id="payrollExpenseTotal" class="text-red-500">฿0.00</b>
+                </div>
+
+                <div class="payroll-total-card">
+                    <p>คงเหลือสุทธิ</p>
+                    <b id="mNet" class="text-[#D48197]">฿0.00</b>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-8">
+                <button onclick="document.getElementById('payrollModal')?.remove()" class="px-8 py-3 rounded-2xl bg-slate-100 text-slate-500 text-xs font-black">
+                    ปิดหน้าต่าง
+                </button>
+                <button onclick="window.saveAndPrintPayrollById('${staffId}', '${safePeriod}', 'save')" class="px-10 py-3 rounded-2xl bg-black text-white text-xs font-black shadow-xl hover:bg-[#D48197]">
+                    บันทึกเงินเดือน
+                </button>
             </div>
         </div>
     `;
 
     document.body.appendChild(modal);
+    window.injectPayrollModalStyle?.();
+
     if (typeof window.calcPayrollLogic === 'function') {
         window.calcPayrollLogic();
     }
+};
+
+window.injectPayrollModalStyle = function() {
+    if (document.getElementById('payrollModalStyle')) return;
+
+    const style = document.createElement('style');
+    style.id = 'payrollModalStyle';
+    style.innerHTML = `
+        .payroll-info-card {
+            background: #fff;
+            border: 1px solid #f3c4d2;
+            border-radius: 20px;
+            padding: 16px;
+            box-shadow: 0 6px 18px rgba(212,129,151,.06);
+        }
+
+        .payroll-info-card p {
+            font-size: 10px;
+            font-weight: 900;
+            color: #D48197;
+            margin-bottom: 6px;
+        }
+
+        .payroll-info-card b {
+            font-size: 14px;
+            font-weight: 900;
+            color: #334155;
+        }
+
+        .payroll-form-label {
+            font-size: 10px;
+            font-weight: 900;
+            color: #D48197;
+            margin-left: 8px;
+            margin-bottom: 4px;
+            display: block;
+        }
+
+        .payroll-form-input {
+            width: 100%;
+            height: 46px;
+            background: #fff !important;
+            border: 1px solid #f3c4d2 !important;
+            border-radius: 16px !important;
+            padding: 0 14px !important;
+            outline: none !important;
+            font-size: 13px !important;
+            color: #334155 !important;
+            font-weight: 800 !important;
+        }
+
+        .payroll-form-input:focus {
+            border-color: #D48197 !important;
+            box-shadow: 0 0 0 4px rgba(212,129,151,.12) !important;
+        }
+
+        .payroll-mini-deduct {
+            font-size: 10px;
+            color: #ef4444;
+            font-weight: 800;
+            text-align: right;
+            margin-top: 4px;
+        }
+
+        .payroll-total-card {
+            background: #fff;
+            border: 1px solid #f3c4d2;
+            border-radius: 24px;
+            padding: 20px;
+            box-shadow: 0 6px 18px rgba(212,129,151,.08);
+        }
+
+        .payroll-total-card p {
+            font-size: 11px;
+            font-weight: 900;
+            color: #94a3b8;
+            margin-bottom: 8px;
+        }
+
+        .payroll-total-card b {
+            font-size: 26px;
+            font-weight: 900;
+            color: #334155;
+        }
+    `;
+    document.head.appendChild(style);
 };
 
 window.getDaysInPayrollPeriod = function(period) {
@@ -19277,7 +20639,7 @@ window.calcPayrollLogic = function() {
     const tax = parseFloat(document.getElementById('mTax')?.value || 0) || 0;
 
     const absD = parseFloat(document.getElementById('mAbsDays')?.value || 0) || 0;
-    const absHIn = parseFloat(document.getElementById('mAbsHours')?.value || 0) || 0;
+    const absH = parseFloat(document.getElementById('mAbsHours')?.value || 0) || 0;
     const lateM = parseFloat(document.getElementById('mLateMin')?.value || 0) || 0;
     const otherDeduct = parseFloat(document.getElementById('mOtherDeduct')?.value || 0) || 0;
 
@@ -19289,67 +20651,72 @@ window.calcPayrollLogic = function() {
     const dayRate = salary / safeDays;
     const hourRate = dayRate / 8;
 
-    // ✅ ขาดงาน = ฐานเงินเดือนอย่างเดียว
     const absDayTotal = absD * dayRate;
-
-    const valAbsDayDeduct = document.getElementById('valAbsDayDeduct');
-    if (valAbsDayDeduct) {
-        valAbsDayDeduct.innerText = `หัก: ฿${absDayTotal.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        })}`;
-    }
-
-    // ✅ 1.30 = 1 ชั่วโมง 30 นาที
-    const h = Math.floor(absHIn);
-    const m = Math.round((absHIn - h) * 100);
-    const absHourDeduct = (h + (m / 60)) * hourRate;
-
-    const valAbsHourDeduct = document.getElementById('valAbsHourDeduct');
-    if (valAbsHourDeduct) {
-        valAbsHourDeduct.innerText = `หัก: ฿${absHourDeduct.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        })}`;
-    }
-
-    // ✅ มาสาย นาทีละ 5 บาท
+    const absHourDeduct = absH * hourRate;
     const lateDeduct = lateM * 5;
 
+const incomeTotal = salary + comm + df + ot + extraIncome;
+
+const beforeSsoDeduct =
+    absDayTotal +
+    absHourDeduct +
+    lateDeduct +
+    otherDeduct +
+    tax;
+
+const startDateText = document.getElementById('mStaffStartDate')?.value || '';
+const canDeductSSO = window.isStaffSSOEligible
+    ? window.isStaffSSOEligible(startDateText, window.currentPayrollPeriod)
+    : true;
+
+// ✅ ฐานคิด ปกส. = รายรับรวม - รายจ่ายก่อน ปกส.
+const ssoIncomeBase = Math.max(0, incomeTotal - beforeSsoDeduct);
+
+// ✅ ประกันสังคมไทย ปี 2569-2571
+// ฐานขั้นต่ำ 1,650 / ฐานสูงสุด 17,500 / หัก 5% สูงสุด 875
+let ssoBase = 0;
+
+if (canDeductSSO && ssoIncomeBase > 0) {
+    ssoBase = Math.min(17500, Math.max(1650, ssoIncomeBase));
+}
+
+const sso = canDeductSSO ? Math.round(ssoBase * 0.05) : 0;
+
+const expenseTotal = beforeSsoDeduct + sso;
+const net = incomeTotal - expenseTotal;
+
+const mSSO = document.getElementById('mSSO');
+if (mSSO) mSSO.value = Math.round(sso);
+
+const ssoNote = document.getElementById('ssoNote');
+if (ssoNote) {
+    ssoNote.innerText = canDeductSSO
+        ? `ครบ 3 เดือนแล้ว หักประกันสังคม 5% จากฐาน ฿${ssoBase.toLocaleString()}`
+        : 'ยังไม่ครบ 3 เดือน ไม่หักประกันสังคม';
+}
+
+    const valAbsDayDeduct = document.getElementById('valAbsDayDeduct');
+    if (valAbsDayDeduct) valAbsDayDeduct.innerText =
+        `หัก: ฿${absDayTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    const valAbsHourDeduct = document.getElementById('valAbsHourDeduct');
+    if (valAbsHourDeduct) valAbsHourDeduct.innerText =
+        `หัก: ฿${absHourDeduct.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
     const valLateDeduct = document.getElementById('valLateDeduct');
-    if (valLateDeduct) {
-        valLateDeduct.innerText = `หัก: ฿${lateDeduct.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        })}`;
-    }
+    if (valLateDeduct) valLateDeduct.innerText =
+        `หัก: ฿${lateDeduct.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-    const totalD = absDayTotal + absHourDeduct + lateDeduct + otherDeduct;
+    const incomeBox = document.getElementById('payrollIncomeTotal');
+    if (incomeBox) incomeBox.innerText =
+        `฿${incomeTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-    const resDeductTotal = document.getElementById('resDeductTotal');
-    if (resDeductTotal) {
-        resDeductTotal.innerText = `- ฿${totalD.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        })}`;
-    }
+    const expenseBox = document.getElementById('payrollExpenseTotal');
+    if (expenseBox) expenseBox.innerText =
+        `฿${expenseTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-    const income = salary + comm + df + ot + extraIncome;
-    const ssoBase = Math.max(0, income - totalD);
-    const sso = Math.min(875, ssoBase * 0.05);
-
-    const mSSO = document.getElementById('mSSO');
-    if (mSSO) {
-        mSSO.value = Math.round(sso);
-    }
-
-    const net = income - totalD - sso - tax;
-    const roundedNet = Math.round(net);
-
-    const mNet = document.getElementById('mNet');
-    if (mNet) {
-        mNet.innerText = `฿${roundedNet.toLocaleString()}`;
-    }
+    const netBox = document.getElementById('mNet');
+    if (netBox) netBox.innerText = `฿${Math.round(net).toLocaleString()}`;
 
     window.lastPayrollCalc = {
         dayRate,
@@ -19357,9 +20724,10 @@ window.calcPayrollLogic = function() {
         absDayTotalDeduct: absDayTotal,
         absHourDeduct,
         lateDeduct,
-        totalDeduct: totalD,
+        totalDeduct: expenseTotal,
         sso: Math.round(sso),
-        netPay: roundedNet
+        netPay: Math.round(net),
+        canDeductSSO
     };
 };
 
@@ -19373,36 +20741,29 @@ window.saveAndPrintPayrollById = async function(staffId, period, action = 'save'
         return `${parseInt(m || '0', 10)}/${y || ''}`;
     })();
 
-    // ✅ Safari: เปิดหน้าต่างพิมพ์ทันทีจาก click event
     let previewWindow = null;
+
+    // ✅ เปิด popup ทันทีสำหรับ Safari
     if (action === 'print') {
         previewWindow = window.open('', '_blank', 'width=920,height=1200');
         if (!previewWindow) {
             return Swal.fire({
                 icon: 'warning',
                 title: 'เปิดหน้าพรีวิวไม่ได้',
-                text: 'กรุณาอนุญาต pop-up ของเบราว์เซอร์ก่อนค่ะ'
+                text: 'กรุณาอนุญาต pop-up'
             });
         }
 
+        previewWindow.document.open();
         previewWindow.document.write(`
             <html>
-            <head>
-                <meta charset="utf-8">
-                <title>Loading...</title>
-                <style>
-                    body {
-                        font-family: 'Sarabun', sans-serif;
-                        display:flex;
-                        align-items:center;
-                        justify-content:center;
-                        height:100vh;
-                        margin:0;
-                        color:#666;
-                    }
-                </style>
-            </head>
-            <body>กำลังเตรียมสลิป...</body>
+                <head>
+                    <meta charset="utf-8">
+                    <title>กำลังเตรียมสลิป...</title>
+                </head>
+                <body style="font-family:Sarabun,Arial; padding:30px;">
+                    กำลังเตรียมสลิป...
+                </body>
             </html>
         `);
         previewWindow.document.close();
@@ -19416,55 +20777,70 @@ window.saveAndPrintPayrollById = async function(staffId, period, action = 'save'
 
     if (staffErr || !staff) {
         if (previewWindow) previewWindow.close();
-        console.error('saveAndPrintPayrollById staff error:', staffErr);
         return Swal.fire('Error', 'ไม่พบข้อมูลพนักงาน', 'error');
     }
 
-    const salary = +document.getElementById('mSalary')?.value || 0;
-    const comm = +document.getElementById('mComm')?.value || 0;
-    const df = +document.getElementById('mDF')?.value || 0;
-    const ot = +document.getElementById('mOT')?.value || 0;
+    const { data: oldPayroll } = await window.supabaseClient
+        .from('payroll_history')
+        .select('*')
+        .eq('staff_code', staffId)
+        .eq('period', safePeriod)
+        .maybeSingle();
 
-    const extraIncome = +document.getElementById('mExtraIncome')?.value || 0;
-    const extraIncomeNote = document.getElementById('mExtraIncomeNote')?.value?.trim() || '';
+    const readNumber = (id, fallback = 0) => {
+        const el = document.getElementById(id);
+        if (!el) return Number(fallback || 0);
 
-    const tax = +document.getElementById('mTax')?.value || 0;
-    const sso = +document.getElementById('mSSO')?.value || 0;
+        const raw = String(el.value ?? '').replace(/,/g, '').trim();
+        if (raw === '') return Number(fallback || 0);
 
-    const absDays = +document.getElementById('mAbsDays')?.value || 0;
-    const absHours = +document.getElementById('mAbsHours')?.value || 0;
-    const lateMins = +document.getElementById('mLateMin')?.value || 0;
+        const n = Number(raw);
+        return Number.isFinite(n) ? n : Number(fallback || 0);
+    };
 
-    const otherDeduct = +document.getElementById('mOtherDeduct')?.value || 0;
-    const otherDeductNote = document.getElementById('mOtherDeductNote')?.value?.trim() || '';
+    const readText = (id, fallback = '') => {
+        const el = document.getElementById(id);
+        if (!el) return fallback || '';
+        const raw = String(el.value ?? '').trim();
+        return raw !== '' ? raw : (fallback || '');
+    };
 
-    const sickDays = +document.getElementById('mSickDays')?.value || 0;
-    const vacationDays = +document.getElementById('mVacationDays')?.value || 0;
+    const salary = readNumber('mSalary', oldPayroll?.salary ?? staff.salary ?? 0);
+    const comm = readNumber('mComm', oldPayroll?.comm ?? 0);
+    const df = readNumber('mDF', oldPayroll?.df ?? 0);
+    const ot = readNumber('mOT', oldPayroll?.ot ?? 0);
+    const extraIncome = readNumber('mExtraIncome', oldPayroll?.extra_income ?? 0);
 
-    const daysInMonth = typeof window.getDaysInPayrollPeriod === 'function'
-        ? window.getDaysInPayrollPeriod(safePeriod)
-        : 30;
+    const tax = readNumber('mTax', oldPayroll?.tax ?? 0);
+    const sso = readNumber('mSSO', oldPayroll?.sso ?? 0);
 
-    const safeDaysInMonth = daysInMonth > 0 ? daysInMonth : 30;
-    const dayRate = salary / safeDaysInMonth;
+    const absDays = readNumber('mAbsDays', oldPayroll?.abs_days ?? 0);
+    const absHours = readNumber('mAbsHours', oldPayroll?.abs_hours ?? 0);
+    const lateMins = readNumber('mLateMin', oldPayroll?.late_mins ?? 0);
+
+    const otherDeduct = readNumber('mOtherDeduct', oldPayroll?.other_deduct ?? 0);
+    const sickDays = readNumber('mSickDays', oldPayroll?.sick_days ?? 0);
+    const vacationDays = readNumber('mVacationDays', oldPayroll?.vacation_days ?? 0);
+
+    const extraIncomeNote = readText('mExtraIncomeNote', oldPayroll?.extra_income_note ?? '');
+    const otherDeductNote = readText('mOtherDeductNote', oldPayroll?.other_deduct_note ?? '');
+
+    const daysInMonth = window.getDaysInPayrollPeriod?.(safePeriod) || 30;
+    const dayRate = salary / daysInMonth;
     const hourRate = dayRate / 8;
 
-    // ✅ ขาดงาน = ฐานเงินเดือนอย่างเดียว
     const absDayTotalDeduct = absDays * dayRate;
 
-    // ✅ 1.30 = 1 ชั่วโมง 30 นาที
     const h = Math.floor(absHours);
     const m = Math.round((absHours - h) * 100);
     const absHourDeduct = (h + (m / 60)) * hourRate;
 
-    // ✅ มาสาย
     const lateDeduct = lateMins * 5;
 
-    const netPayNumber = Math.round(
-        parseFloat(
-            String(document.getElementById('mNet')?.innerText || '0').replace(/[^\d.-]/g, '')
-        ) || 0
-    );
+    const incomeTotal = salary + comm + df + ot + extraIncome;
+    const expenseTotal = absDayTotalDeduct + absHourDeduct + lateDeduct + otherDeduct + tax + sso;
+
+    const netPayNumber = Math.round(incomeTotal - expenseTotal);
 
     const payload = {
         staff_code: staffId,
@@ -19476,7 +20852,6 @@ window.saveAndPrintPayrollById = async function(staffId, period, action = 'save'
         comm,
         df,
         ot,
-
         extra_income: extraIncome,
         extra_income_note: extraIncomeNote,
 
@@ -19507,42 +20882,30 @@ window.saveAndPrintPayrollById = async function(staffId, period, action = 'save'
 
     if (error) {
         if (previewWindow) previewWindow.close();
-        console.error('saveAndPrintPayrollById error:', error);
-        return Swal.fire({
-            icon: 'error',
-            title: action === 'print' ? 'พิมพ์ไม่สำเร็จ' : 'บันทึกไม่สำเร็จ',
-            text: error.message || 'เกิดข้อผิดพลาด'
-        });
+        return Swal.fire('บันทึกไม่สำเร็จ', error.message, 'error');
     }
 
+    // ✅ จุดที่โค้ดเดิมตกหล่น: ต้องเรียก printSlip ตรงนี้
     if (action === 'print') {
         if (typeof window.printSlip === 'function') {
             await window.printSlip(payload, staff, previewWindow);
         } else {
             if (previewWindow) previewWindow.close();
-            return Swal.fire({
-                icon: 'warning',
-                title: 'ยังพิมพ์ไม่ได้',
-                text: 'ยังไม่พบฟังก์ชัน printSlip ในระบบ'
-            });
+            return Swal.fire('ยังพิมพ์ไม่ได้', 'ไม่พบฟังก์ชัน window.printSlip', 'error');
         }
+
+        return;
     }
 
     document.getElementById('payrollModal')?.remove();
+    await window.loadPayrollTable?.();
 
-    if (typeof window.renderPayrollSystem === 'function') {
-        await window.renderPayrollSystem();
-    }
-
-    if (action === 'save') {
-        Swal.fire({
-            icon: 'success',
-            title: 'บันทึกสำเร็จ',
-            text: `งวด ${safePeriod}`,
-            timer: 1500,
-            showConfirmButton: false
-        });
-    }
+    Swal.fire({
+        icon: 'success',
+        title: 'บันทึกสำเร็จ',
+        timer: 1200,
+        showConfirmButton: false
+    });
 };
 
 window.getBranchHeaderInfo = async function(branchName = '') {
@@ -19759,17 +21122,295 @@ window.printSlip = async function(payload, staff, previewWindow = null) {
     previewWindow.document.write(`
         <html>
         <head>
-            <meta charset="utf-8">
-            <title>Payroll Slip - ${staffName}</title>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
-  
-        </head>
+    <meta charset="utf-8">
+    <title>Payroll Slip - ${staffName}</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"><\/script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
 
+    <style>
+    @page {
+        size: A4 portrait;
+        margin: 8mm;
+    }
+
+    * {
+        box-sizing: border-box;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    body {
+        margin: 0;
+        padding: 0;
+        background: #f8f2f4;
+        font-family: Arial, Tahoma, sans-serif;
+        color: #1f2937;
+    }
+
+    .toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: #ffffff;
+        padding: 10px;
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        border-bottom: 1px solid #f3c4d2;
+    }
+
+    .btn {
+        border: 0;
+        padding: 9px 14px;
+        border-radius: 14px;
+        font-weight: 800;
+        cursor: pointer;
+        color: white;
+    }
+
+    .btn-print { background: #D48197; }
+    .btn-pdf { background: #111827; }
+    .btn-img { background: #C5A059; }
+    .btn-close { background: #64748b; }
+
+    .page {
+        width: 194mm;
+        height: 132mm;
+        margin: 10mm auto 0;
+        padding: 0;
+        background: #ffffff;
+        overflow: hidden;
+    }
+
+    .slip {
+        width: 100%;
+        height: 100%;
+    }
+
+    .card {
+        width: 100%;
+        height: 100%;
+        border: 1.5px solid #f3c4d2;
+        border-radius: 18px;
+        padding: 9mm 9mm 7mm;
+        background: #ffffff;
+        overflow: hidden;
+    }
+
+    .head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        border-bottom: 1.5px solid #f7d6df;
+        padding-bottom: 5px;
+        margin-bottom: 6px;
+    }
+
+    .head-left {
+        display: flex;
+        gap: 9px;
+        align-items: center;
+    }
+
+    .logo-box {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        border: 1px solid #f3c4d2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        background: #fff7fa;
+        flex-shrink: 0;
+    }
+
+    .logo-box img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+
+    .title {
+        font-size: 19px;
+        font-weight: 900;
+        color: #D48197;
+        letter-spacing: .04em;
+        line-height: 1;
+    }
+
+    .small {
+        font-size: 8px;
+        color: #64748b;
+        line-height: 1.25;
+    }
+
+    .grid2,
+    .split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 7px;
+    }
+
+    .grid2 {
+        margin-bottom: 7px;
+    }
+
+    .split {
+        margin-top: 7px;
+    }
+
+    .box {
+        border: 1px solid #f3c4d2;
+        border-radius: 13px;
+        padding: 7px 10px;
+        background: #fffafd;
+        overflow: hidden;
+    }
+
+    .box-title {
+        font-size: 10px;
+        font-weight: 900;
+        color: #D48197;
+        margin-bottom: 3px;
+        border-bottom: 1px dashed #f3c4d2;
+        padding-bottom: 3px;
+    }
+
+    .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 2.5px 0;
+        border-bottom: 1px solid #f8e5eb;
+        font-size: 9.5px;
+        line-height: 1.2;
+    }
+
+    .row:last-child {
+        border-bottom: 0;
+    }
+
+    .label {
+        color: #64748b;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .value {
+        color: #111827;
+        font-weight: 900;
+        text-align: right;
+        white-space: nowrap;
+    }
+
+    .net {
+        margin-top: 7px;
+	margin-bottom: 12px;
+         background: #D48197;
+        color: white;
+        border-radius: 16px;
+        padding: 9px 16px;
+        text-align: right;
+        min-height: 42px;
+    }
+
+    .net .small {
+        color: white;
+        font-weight: 800;
+        font-size: 8px;
+    }
+
+    .net h1 {
+        margin: 0;
+        font-size: 28px;
+        font-weight: 900;
+        letter-spacing: 1px;
+    }
+
+    .extra-bottom {
+        margin-top: 10px;
+        display: grid;
+        grid-template-columns: 1fr 60px 100px;
+        gap: 8px;
+        align-items: end;
+    }
+
+    .qr-box,
+    .sign-box {
+        text-align: center;
+        font-size: 8px;
+        color: #64748b;
+    }
+
+    .qr-box img {
+        width: 46px;
+        height: 46px;
+        object-fit: contain;
+    }
+
+    .sign-box img {
+        max-width: 82px;
+        max-height: 30px;
+        object-fit: contain;
+    }
+
+    .sign-name {
+        border-top: 1px solid #cbd5e1;
+        margin-top: 14px;
+        padding-top: 3px;
+        font-weight: 900;
+        color: #111827;
+        font-size: 8px;
+    }
+
+    .sign-pos {
+        font-size: 7.5px;
+        color: #64748b;
+    }
+
+    .footer {
+        margin-top: 4px;
+        text-align: center;
+        font-size: 7.5px;
+        color: #94a3b8;
+    }
+
+    @media print {
+        html, body {
+            width: 210mm;
+            height: 297mm;
+            background: #ffffff !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        .toolbar {
+            display: none !important;
+        }
+
+        .page {
+            width: 194mm !important;
+            height: 132mm !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+            page-break-after: avoid !important;
+            break-after: avoid !important;
+        }
+
+        .card {
+            height: 132mm !important;
+            padding: 8mm 9mm 6mm !important;
+            overflow: hidden !important;
+        }
+    }
+</style>
+</head>
         <body>
             <div class="toolbar">
                 <button class="btn btn-print" onclick="window.print()">พิมพ์</button>
-                <button class="btn btn-pdf" onclick="window.saveSlipPDF()">บันทึก PDF</button>
+                <button class="btn btn-pdf" onclick="window.sendSlipEmail()">ส่งเมล</button>
                 <button class="btn btn-img" onclick="window.saveSlipImage()">บันทึกรูป</button>
                 <button class="btn btn-close" onclick="window.close()">ปิด</button>
             </div>
@@ -19895,30 +21536,61 @@ window.printSlip = async function(payload, staff, previewWindow = null) {
                     }).from(el).save();
                 };
 
-                window.saveSlipImage = function() {
-                    const el = document.getElementById('slipCapture');
-                    if (!window.html2canvas) {
-                        alert('ยังไม่พบ html2canvas');
-                        return;
-                    }
+              window.saveSlipImage = function() {
+    const el = document.getElementById('slipCapture');
+    if (!window.html2canvas) {
+        alert('ยังไม่พบ html2canvas');
+        return;
+    }
 
-                    window.html2canvas(el, {
-                        scale: 2,
-                        useCORS: true,
-                        backgroundColor: '#ffffff'
-                    }).then(canvas => {
-                        const link = document.createElement('a');
-                        link.download = 'PayrollSlip-${staffCode}-${safePeriod}.png';
-                        link.href = canvas.toDataURL('image/png');
-                        link.click();
-                    });
-                };
-            <\/script>
+    window.html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff'
+    }).then(canvas => {
+        const link = document.createElement('a');
+        link.download = 'PayrollSlip-${staffCode}-${safePeriod}.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    });
+};
+
+window.sendSlipEmail = function() {
+    const email = "${staff?.email || ''}";
+
+    if (!email) {
+        alert('พนักงานคนนี้ยังไม่มีอีเมลในระบบ');
+        return;
+    }
+
+    const subject = encodeURIComponent("สลิปเงินเดือน งวด ${safePeriod} - ${staffName}");
+
+    const bodyText =
+        "เรียน ${staffName}\\n\\n" +
+        "แจ้งสลิปเงินเดือนงวด ${safePeriod}\\n\\n" +
+        "ยอดรับสุทธิ: ฿${netPay.toLocaleString()}\\n\\n" +
+        "ACE Clinic";
+
+    const body = encodeURIComponent(bodyText);
+
+    const gmailUrl =
+        "https://mail.google.com/mail/?view=cm&fs=1" +
+        "&to=" + encodeURIComponent(email) +
+        "&su=" + subject +
+        "&body=" + body;
+
+    window.open(gmailUrl, "_blank");
+};
+<\/script>
         </body>
         </html>
     `);
 
     previewWindow.document.close();
+
+setTimeout(() => {
+    previewWindow.focus();
+}, 500);
 };
 
 window.sendPayrollEmailPrompt = async function(staffId, period) {
@@ -19968,210 +21640,6 @@ window.sendPayrollEmailPrompt = async function(staffId, period) {
     );
 
     window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
-};
-
-window.renderAttendanceRecord = async function() {
-    const target = document.getElementById('dynamicContent');
-    if (!target) return;
-
-    if (!window.supabaseClient) {
-        target.innerHTML = `<div class="py-20 text-center text-red-400 font-bold">ยังไม่พบการเชื่อมต่อ Supabase</div>`;
-        return;
-    }
-
-    const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
-
-    // ✅ ใช้ helper กลางของระบบ
-    const currentUser = window.getCurrentUserSafe();
-    const viewingBranch = window.getCurrentViewingBranch();
-    const isAdmin = window.canViewAllBranches();
-
-    if (!window.attViewMode) window.attViewMode = 'monthly';
-    const selMonth = window.selectedAttMonth || String(new Date().getMonth() + 1).padStart(2, '0');
-    const selYearThai = window.selectedAttYear || "2569";
-
-    const { data: payrollHistory, error: payrollError } = await window.supabaseClient
-        .from('payroll_history')
-        .select('*');
-
-    if (payrollError) {
-        console.error('renderAttendanceRecord payroll_history error:', payrollError);
-        target.innerHTML = `<div class="py-20 text-center text-red-400 font-bold">โหลดประวัติ Attendance ไม่สำเร็จ</div>`;
-        return;
-    }
-
-    let staffQuery = window.supabaseClient
-        .from('staff_profiles')
-        .select('*');
-
-    // ✅ ถ้าไม่ใช่โหมดทุกสาขาแบบ admin/CEO ให้ดึงเฉพาะสาขาที่กำลังดู
-    if (!(isAdmin && viewingBranch === 'ทุกสาขา')) {
-        staffQuery = staffQuery.eq('branch', viewingBranch);
-    }
-
-    const { data: staffProfiles, error: staffError } = await staffQuery;
-
-    if (staffError) {
-        console.error('renderAttendanceRecord staff_profiles error:', staffError);
-        target.innerHTML = `<div class="py-20 text-center text-red-400 font-bold">โหลดข้อมูลพนักงานไม่สำเร็จ</div>`;
-        return;
-    }
-
-    const staffMap = {};
-    (staffProfiles || []).forEach(s => {
-        const code = String(s.staff_code || '');
-        if (code) staffMap[code] = s;
-    });
-
-    let displayData = [];
-    let titleText = "";
-
-    if (window.attViewMode === 'monthly') {
-        const periodKey = `${parseInt(selMonth)}/${selYearThai}`;
-        titleText = `สรุปสถิติงวดเดือน ${monthNames[parseInt(selMonth) - 1]} ${selYearThai}`;
-
-        displayData = (payrollHistory || [])
-            .filter(p => String(p.period || '') === String(periodKey))
-            .filter(record => {
-                const staffCode = String(record.staff_code || '');
-                const staffInfo = staffMap[staffCode];
-
-                if (viewingBranch === 'ทุกสาขา' && isAdmin) return true;
-                if (!staffInfo) return false;
-
-                const staffBranch = window.normalizeBranch(staffInfo.branch);
-                return staffBranch === viewingBranch;
-            })
-            .map(record => {
-                const staffCode = String(record.staff_code || '');
-                const staffInfo = staffMap[staffCode];
-
-                return {
-                    ...record,
-                    displayName: staffInfo ? (staffInfo.full_name || 'ไม่ระบุชื่อ') : (record.staff_name || 'ไม่ระบุชื่อ'),
-                    lateMins: parseFloat(record.late_mins || 0),
-                    absDays: parseFloat(record.abs_days || 0),
-                    absHours: parseFloat(record.abs_hours || 0),
-                    sickDays: parseFloat(record.sick_days || 0),
-                    vacationDays: parseFloat(record.vacation_days || 0),
-                    netAmount: Math.round(
-                        parseFloat(String(record.net_pay || 0).replace(/[^\d.-]/g, '')) || 0
-                    )
-                };
-            });
-
-    } else {
-        titleText = `สรุปสถิติรวมทั้งปี พ.ศ. ${selYearThai}`;
-        const yearlyMap = {};
-
-        (payrollHistory || []).forEach(record => {
-            if (!record.period || !String(record.period).endsWith(selYearThai)) return;
-
-            const staffCode = String(record.staff_code || '');
-            const staffInfo = staffMap[staffCode];
-
-            if (!(viewingBranch === 'ทุกสาขา' && isAdmin)) {
-                if (!staffInfo) return;
-
-                const staffBranch = window.normalizeBranch(staffInfo.branch);
-                if (staffBranch !== viewingBranch) return;
-            }
-
-            if (!yearlyMap[staffCode]) {
-                yearlyMap[staffCode] = {
-                    staffCode: staffCode,
-                    displayName: staffInfo ? (staffInfo.full_name || 'ไม่ระบุชื่อ') : (record.staff_name || 'ไม่ระบุชื่อ'),
-                    lateMins: 0,
-                    absDays: 0,
-                    absHours: 0,
-                    sickDays: 0,
-                    vacationDays: 0,
-                    netAmount: 0,
-                    monthsCount: 0
-                };
-            }
-
-            yearlyMap[staffCode].lateMins += parseFloat(record.late_mins || 0);
-            yearlyMap[staffCode].absDays += parseFloat(record.abs_days || 0);
-            yearlyMap[staffCode].absHours += parseFloat(record.abs_hours || 0);
-            yearlyMap[staffCode].sickDays += parseFloat(record.sick_days || 0);
-            yearlyMap[staffCode].vacationDays += parseFloat(record.vacation_days || 0);
-            yearlyMap[staffCode].netAmount += Math.round(
-                parseFloat(String(record.net_pay || 0).replace(/[^\d.-]/g, '')) || 0
-            );
-            yearlyMap[staffCode].monthsCount += 1;
-        });
-
-        displayData = Object.values(yearlyMap);
-    }
-    target.innerHTML = `
-        <div class="animate-in fade-in duration-500 text-left pb-20 font-normal">
-            <div class="bg-white p-8 rounded-[3rem] shadow-sm border border-pink-100 mb-8 flex flex-col md:flex-row justify-between items-center gap-6 no-print">
-                <div>
-                    <h2 class="text-2xl font-black text-slate-800 italic uppercase leading-none">ATTENDANCE SUMMARY</h2>
-                    <p class="text-[10px] text-[#D48197] font-black uppercase mt-2 italic tracking-widest text-left">${titleText}</p>
-                </div>
-                
-                <div class="flex flex-wrap items-center gap-3 bg-slate-50 p-3 rounded-3xl border border-pink-50">
-                    <div class="flex bg-white rounded-xl p-1 shadow-sm border border-pink-100 mr-2">
-                        <button onclick="window.attViewMode='monthly'; window.renderAttendanceRecord()" class="px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${window.attViewMode === 'monthly' ? 'bg-[#D48197] text-white' : 'text-slate-400'}">รายเดือน</button>
-                        <button onclick="window.attViewMode='yearly'; window.renderAttendanceRecord()" class="px-4 py-1.5 text-[10px] font-black rounded-lg transition-all ${window.attViewMode === 'yearly' ? 'bg-[#D48197] text-white' : 'text-slate-400'}">รายปี</button>
-                    </div>
-
-                    ${window.attViewMode === 'monthly' ? `
-                        <select onchange="window.selectedAttMonth = this.value; window.renderAttendanceRecord()" class="bg-white border border-pink-200 rounded-xl px-4 py-2 text-xs font-bold outline-none cursor-pointer">
-                            ${monthNames.map((m, i) => `<option value="${String(i + 1).padStart(2, '0')}" ${selMonth == String(i + 1).padStart(2, '0') ? 'selected' : ''}>${m}</option>`).join('')}
-                        </select>
-                    ` : ''}
-                    
-                    <select onchange="window.selectedAttYear = this.value; window.renderAttendanceRecord()" class="bg-white border border-pink-200 rounded-xl px-4 py-2 text-xs font-bold outline-none cursor-pointer">
-                        <option value="2568" ${selYearThai == '2568' ? 'selected' : ''}>2568</option>
-                        <option value="2569" ${selYearThai == '2569' ? 'selected' : ''}>2569</option>
-                        <option value="2570" ${selYearThai == '2570' ? 'selected' : ''}>2570</option>
-                    </select>
-
-                    <button onclick="window.print()" class="bg-slate-800 text-white px-6 py-2 rounded-xl text-[10px] font-black shadow-lg hover:bg-black transition-all uppercase">🖨️ พิมพ์</button>
-                </div>
-
-                <button onclick="loadPage(7, 'จัดการพนักงาน')" class="bg-pink-50 p-3 rounded-2xl text-[#D48197] font-bold shadow-sm hover:bg-pink-100 transition-all">🔙 กลับ</button>
-            </div>
-
-            <div class="glass-card overflow-hidden !p-0 shadow-2xl border-none">
-                <table class="w-full text-sm text-center">
-                    <thead class="bg-[#F9EBEF] text-[#D48197] font-black uppercase italic text-[10px]">
-                        <tr>
-                            <th class="p-5 text-left">ชื่อพนักงาน</th>
-                            <th class="p-5">สาย (นาที)</th>
-                            <th class="p-5">ขาด (วัน)</th>
-                            <th class="p-5">หักชั่วโมง</th>
-                            <th class="p-5">ลาป่วย (วัน)</th>
-                            <th class="p-5">ลาพักร้อน (วัน)</th>
-                            <th class="p-5">สุทธิที่จ่าย</th>
-                            <th class="p-5 bg-pink-100/30 text-blue-600">ประเมิน (%)</th>
-                        </tr>
-                    </thead>
-                    <tbody class="font-bold text-slate-600">
-                        ${displayData.length > 0 ? displayData.map(record => `
-                            <tr class="border-b border-pink-50 hover:bg-pink-50/10 transition-all">
-                                <td class="p-5 text-left">${record.displayName}</td>
-                                <td class="p-5">${record.lateMins} น.</td>
-                                <td class="p-5">${record.absDays} ว.</td>
-                                <td class="p-5">${record.absHours}</td>
-                                <td class="p-5">${record.sickDays} ว.</td>
-                                <td class="p-5">${record.vacationDays} ว.</td>
-                                <td class="p-5 text-[#D48197]">฿${Math.round(record.netAmount).toLocaleString()}</td>
-                                <td class="p-5 bg-pink-50/20 text-blue-600">5.0%</td>
-                            </tr>
-                        `).join('') : `
-                            <tr>
-                                <td colspan="8" class="p-20 text-slate-300 italic">❌ ไม่พบประวัติ</td>
-                            </tr>
-                        `}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    `;
 };
 
 window.renderStaffCalendar = async function() {
@@ -25888,6 +27356,29 @@ window.__notificationPermissionTimer = setTimeout(() => {
       box-sizing: border-box !important;
     }
   }
+@media screen and (max-width: 768px) {
+  .mobile-scroll-x {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 10px !important;
+  }
+
+  .mobile-scroll-inner {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    width: max-content !important;
+    min-width: 980px !important;
+    gap: 12px !important;
+  }
+
+  .mobile-scroll-inner > * {
+    flex: 0 0 auto !important;
+  }
+}
 </style>
 </body>
 </html>

@@ -19711,6 +19711,7 @@ target.style.marginRight = '0';
                             <th class="payroll-th text-center">ขาด ชม.</th>
                             <th class="payroll-th text-center">มาสาย นาที</th>
                             <th class="payroll-th text-center">ลาป่วย</th>
+			    <th class="payroll-th text-center">ลาพักร้อน</th>
                             <th class="payroll-th text-right">หักอื่นๆ</th>
                             <th class="payroll-th text-right">หัก ณ ที่จ่าย</th>
                             <th class="payroll-th text-right">รวมรับ</th>
@@ -19959,6 +19960,7 @@ if (periodType === 'รายปี') {
             const absHours = toNumber(pay.abs_hours);
             const lateMins = toNumber(pay.late_mins);
             const sickDays = toNumber(pay.sick_days);
+	    const vacationDays = toNumber(pay.vacation_days);
             const otherDeduct = toNumber(pay.other_deduct);
             const tax = toNumber(pay.tax);
 
@@ -19987,6 +19989,7 @@ if (periodType === 'รายปี') {
                 absHours,
                 lateMins,
                 sickDays,
+		vacationDays,
 		sickDayDeduct,
                 otherDeduct,
                 tax,
@@ -20054,12 +20057,34 @@ if (periodType === 'รายปี') {
                     <td class="payroll-td text-right">${money(r.extra)}</td>
 
                     <td class="payroll-td text-right payroll-expense">${money(r.sso)}</td>
-                    <td class="payroll-td text-center">${r.absDays}</td>
-                    <td class="payroll-td text-center">${r.absHours}</td>
-                    <td class="payroll-td text-center">${r.lateMins}</td>
-                    <td class="payroll-td text-center">${r.sickDays}</td>
-                    <td class="payroll-td text-right payroll-expense">${money(r.otherDeduct)}</td>
-                    <td class="payroll-td text-right payroll-expense">${money(r.tax)}</td>
+
+<td class="payroll-td text-center"
+    style="color:${Number(r.absDays || 0) > 0 ? '#2563eb' : '#475569'} !important; font-weight:${Number(r.absDays || 0) > 0 ? '900' : '400'} !important;">
+    ${r.absDays}
+</td>
+
+<td class="payroll-td text-center"
+    style="color:${Number(r.absHours || 0) > 0 ? '#2563eb' : '#475569'} !important; font-weight:${Number(r.absHours || 0) > 0 ? '900' : '400'} !important;">
+    ${r.absHours}
+</td>
+
+<td class="payroll-td text-center"
+    style="color:${Number(r.lateMins || 0) > 0 ? '#2563eb' : '#475569'} !important; font-weight:${Number(r.lateMins || 0) > 0 ? '900' : '400'} !important;">
+    ${r.lateMins}
+</td>
+
+<td class="payroll-td text-center"
+    style="color:${Number(r.sickDays || 0) > 0 ? '#2563eb' : '#475569'} !important; font-weight:${Number(r.sickDays || 0) > 0 ? '900' : '400'} !important;">
+    ${r.sickDays}
+</td>
+
+<td class="payroll-td text-center"
+    style="color:${Number(r.vacationDays || 0) > 0 ? '#16a34a' : '#475569'} !important; font-weight:${Number(r.vacationDays || 0) > 0 ? '900' : '400'} !important;">
+    ${r.vacationDays}
+</td>
+
+<td class="payroll-td text-right payroll-expense">${money(r.otherDeduct)}</td>
+<td class="payroll-td text-right payroll-expense">${money(r.tax)}</td>
 
                     <td class="payroll-td text-right font-black text-slate-900">${money(r.incomeTotal)}</td>
                     <td class="payroll-td text-right font-black payroll-expense">${money(r.expenseTotal)}</td>
@@ -20821,9 +20846,30 @@ const ot = toNumber(prev?.ot) > 0 ? toNumber(prev.ot) : autoOT;
                         <div>
     <label class="payroll-form-label">ลาป่วย (วัน)</label>
     <input id="mSickDays" type="number" value="${prev?.sick_days ?? 0}" oninput="window.calcPayrollLogic()" class="payroll-form-input">
-
-    <!-- ✅ เพิ่มบรรทัดนี้ -->
     <p id="valSickDayDeduct" class="payroll-mini-deduct">หัก: ฿0.00</p>
+</div>
+
+<div class="col-span-2 bg-pink-50/30 border border-pink-100 rounded-2xl p-3">
+    <div class="flex justify-between items-center mb-2">
+        <div>
+            <p class="text-[11px] font-black text-[#D48197]">รายการพักร้อนเดือนนี้</p>
+            <p id="vacationQuotaNote" class="text-[10px] text-slate-400 font-bold">
+                สิทธิ์ปีนี้: 0 วัน | ใช้แล้ว: 0 วัน | คงเหลือ: 0 วัน
+            </p>
+        </div>
+
+        <button type="button"
+            onclick="window.addVacationDate && window.addVacationDate()"
+            class="text-[10px] bg-[#D48197] text-white px-3 py-1 rounded-xl font-black">
+            + เพิ่มวันที่พักร้อน
+        </button>
+    </div>
+
+    <div id="vacationDateList" class="space-y-2 text-[11px] text-slate-600">
+        ยังไม่มีรายการพักร้อนเดือนนี้
+    </div>
+
+    <input id="mVacationDays" type="hidden" value="${prev?.vacation_days ?? 0}">
 </div>
 
                         <div>
@@ -20879,15 +20925,259 @@ const ot = toNumber(prev?.ot) > 0 ? toNumber(prev.ot) : autoOT;
     `;
 
     document.body.appendChild(modal);
-	window.injectPayrollModalStyle?.();
+window.injectPayrollModalStyle?.();
 
-	// ✅ โหลดลาป่วยสะสมทั้งปี ก่อนคำนวณ
-	window.currentStaffUsedSickDaysThisYear =
- 	   await window.loadStaffSickDaysThisYear(staffId, safePeriod);
+// ✅ โหลดลาป่วยสะสมทั้งปี ก่อนคำนวณ
+window.currentStaffUsedSickDaysThisYear =
+   await window.loadStaffSickDaysThisYear(staffId, safePeriod);
 
-	if (typeof window.calcPayrollLogic === 'function') {
-   	 window.calcPayrollLogic();
-	}
+// ✅ รีเซ็ต/แสดงรายการพักร้อนของ modal นี้
+window.vacationQuota = window.calculateVacationQuota(staff.start_date || '', safePeriod);
+
+window.currentStaffUsedVacationDaysThisYear =
+    await window.loadStaffVacationUsedThisYear(staffId, safePeriod);
+
+window.vacationDates = await window.loadVacationDates(staffId, safePeriod);
+
+renderVacationList();
+
+if (typeof window.calcPayrollLogic === 'function') {
+    window.calcPayrollLogic();
+}
+};
+
+window.vacationDates = [];
+
+window.addVacationDate = async function() {
+    const today = new Date().toISOString().split('T')[0];
+
+    const result = await Swal.fire({
+        title: 'เลือกวันที่พักร้อน',
+        html: `
+            <div class="text-left">
+                <label class="text-[11px] font-black text-[#D48197] ml-2">วันที่พักร้อน</label>
+                <input id="vacationDateInput" type="date" value="${today}"
+                    class="w-full h-[46px] bg-white border border-pink-200 rounded-2xl px-4 mt-2 text-slate-700 font-bold outline-none">
+            </div>
+        `,
+        confirmButtonText: 'เพิ่มวันที่',
+        cancelButtonText: 'ยกเลิก',
+        showCancelButton: true,
+        confirmButtonColor: '#D48197',
+        didOpen: () => {
+            const popup = document.querySelector('.swal2-container');
+            if (popup) popup.style.zIndex = '20000';
+        },
+        preConfirm: () => {
+            const date = document.getElementById('vacationDateInput')?.value;
+            if (!date) {
+                Swal.showValidationMessage('กรุณาเลือกวันที่พักร้อน');
+                return false;
+            }
+            return date;
+        }
+    });
+
+    if (!result.isConfirmed || !result.value) return;
+
+    const date = result.value;
+
+    // ✅ กัน array ยังไม่ถูกสร้าง
+    window.vacationDates = window.vacationDates || [];
+
+    // ✅ กัน quota undefined
+    const quota = Number(window.vacationQuota || 0);
+
+    // ❌ ยังไม่มีสิทธิ์
+    if (quota <= 0) {
+        return Swal.fire('ยังไม่มีสิทธิ์พักร้อน', 'พนักงานคนนี้ยังไม่มีสิทธิ์พักร้อนในปีนี้ค่ะ', 'warning');
+    }
+
+    // ❌ วันที่ซ้ำ
+    if (window.vacationDates.includes(date)) {
+        return Swal.fire('วันที่ซ้ำ', 'วันนี้ถูกเพิ่มแล้วค่ะ', 'warning');
+    }
+
+    // ✅ ใช้สิทธิ์ครบ (นับรวมทั้งปี)
+const usedBefore = Number(window.currentStaffUsedVacationDaysThisYear || 0);
+const usedThisMonth = Number((window.vacationDates || []).length || 0);
+
+if ((usedBefore + usedThisMonth) >= quota) {
+    return Swal.fire(
+        'ใช้สิทธิ์ครบแล้ว',
+        `ใช้วันพักร้อนครบ ${quota} วันแล้วค่ะ`,
+        'warning'
+    );
+}
+    // ✅ เพิ่มวัน
+    window.vacationDates.push(date);
+
+    // ✅ อัปเดต UI
+    renderVacationList();
+
+    // ✅ feedback นิดนึง UX จะดูโปรมาก
+    Swal.fire({
+        icon: 'success',
+        title: 'เพิ่มสำเร็จ',
+        text: `เพิ่มวัน ${date} เรียบร้อย`,
+        timer: 1200,
+        showConfirmButton: false
+    });
+};
+
+function renderVacationList() {
+    const el = document.getElementById('vacationDateList');
+    if (!el) return;
+
+    const quotaNote = document.getElementById('vacationQuotaNote');
+    const quota = Number(window.vacationQuota || 0);
+    const usedBefore = Number(window.currentStaffUsedVacationDaysThisYear || 0);
+	const usedThisMonth = Number((window.vacationDates || []).length || 0);
+	const used = usedBefore + usedThisMonth;
+	const remain = Math.max(0, quota - used);
+
+    if (quotaNote) {
+        quotaNote.innerText = `สิทธิ์ปีนี้: ${quota} วัน | ใช้แล้ว: ${used} วัน | คงเหลือ: ${remain} วัน`;
+    }
+
+    if (!window.vacationDates.length) {
+        el.innerHTML = 'ยังไม่มีรายการพักร้อนเดือนนี้';
+
+        const input = document.getElementById('mVacationDays');
+        if (input) input.value = 0;
+
+        return;
+    }
+
+    el.innerHTML = window.vacationDates.map((d, i) => `
+        <div class="flex justify-between items-center bg-white px-2 py-1 rounded-lg border border-pink-100">
+            <span>${d}</span>
+            <button onclick="window.removeVacation(${i})" class="text-red-400 text-xs">ลบ</button>
+        </div>
+    `).join('');
+
+    const input = document.getElementById('mVacationDays');
+    if (input) input.value = window.vacationDates.length;
+}
+
+window.loadStaffVacationUsedThisYear = async function(staffCode, period) {
+    try {
+        if (!window.supabaseClient || !staffCode || !period) return 0;
+
+        const [monthText, yearText] = String(period || '').split('/');
+        const currentMonth = Number(monthText || 0);
+        const thaiYear = String(yearText || '').trim();
+
+        if (!currentMonth || !thaiYear) return 0;
+
+        const { data, error } = await window.supabaseClient
+            .from('staff_vacation_logs')
+            .select('period,vacation_days')
+            .eq('staff_code', staffCode)
+            .like('period', `%/${thaiYear}`);
+
+        if (error) {
+            console.error('loadStaffVacationUsedThisYear error:', error);
+            return 0;
+        }
+
+        return (data || []).reduce((sum, row) => {
+            const [m] = String(row.period || '').split('/');
+            const rowMonth = Number(m || 0);
+
+            // นับเฉพาะเดือนก่อนหน้า ไม่เอาเดือนนี้มานับซ้ำ
+            if (rowMonth > 0 && rowMonth < currentMonth) {
+                return sum + Number(row.vacation_days || 1);
+            }
+
+            return sum;
+        }, 0);
+
+    } catch (e) {
+        console.error('loadStaffVacationUsedThisYear catch:', e);
+        return 0;
+    }
+};
+
+window.calculateVacationQuota = function(startDateText, period) {
+    if (!startDateText || !period) return 0;
+
+    const startDate = window.parseThaiStartDate
+        ? window.parseThaiStartDate(startDateText)
+        : new Date(startDateText);
+
+    if (!startDate || isNaN(startDate.getTime())) return 0;
+
+    const [m, y] = String(period).split('/');
+    const payrollMonth = Number(m);
+    let payrollYear = Number(y);
+
+    if (payrollYear > 2400) payrollYear -= 543;
+
+    const oneYearDate = new Date(startDate);
+    oneYearDate.setFullYear(oneYearDate.getFullYear() + 1);
+
+    const payrollDate = new Date(payrollYear, payrollMonth - 1, 1);
+
+    if (payrollDate < new Date(oneYearDate.getFullYear(), oneYearDate.getMonth(), 1)) {
+        return 0;
+    }
+
+    // ปีถัดไปหลังปีที่ครบ 1 ปี = ได้เต็ม 6 วัน
+    if (payrollYear > oneYearDate.getFullYear()) {
+        return 6;
+    }
+
+    // ปีแรกที่ครบ 1 ปี: นับเดือนที่เหลือถึง ธ.ค.
+    const eligibleMonth = oneYearDate.getMonth() + 1;
+    const monthsLeft = 12 - eligibleMonth + 1;
+
+    return Math.floor(monthsLeft / 2);
+};
+
+window.loadVacationDates = async function(staffCode, period) {
+    const { data, error } = await window.supabaseClient
+        .from('staff_vacation_logs')
+        .select('*')
+        .eq('staff_code', staffCode)
+        .eq('period', period)
+        .order('vacation_date', { ascending: true });
+
+    if (error) {
+        console.error('loadVacationDates error:', error);
+        return [];
+    }
+
+    return (data || []).map(r => r.vacation_date);
+};
+
+window.saveVacationDates = async function(staffCode, period, branch) {
+    const rows = (window.vacationDates || []).map(date => ({
+        staff_code: staffCode,
+        vacation_date: date,
+        vacation_days: 1,
+        period,
+        branch
+    }));
+
+    await window.supabaseClient
+        .from('staff_vacation_logs')
+        .delete()
+        .eq('staff_code', staffCode)
+        .eq('period', period);
+
+    if (rows.length > 0) {
+        const { error } = await window.supabaseClient
+            .from('staff_vacation_logs')
+            .insert(rows);
+
+        if (error) throw error;
+    }
+};
+
+window.removeVacation = function(index) {
+    window.vacationDates.splice(index, 1);
+    renderVacationList();
 };
 
 window.injectPayrollModalStyle = function() {
@@ -21277,7 +21567,7 @@ window.saveAndPrintPayrollById = async function(staffId, period, action = 'save'
 
     const otherDeduct = readNumber('mOtherDeduct', oldPayroll?.other_deduct ?? 0);
     const sickDays = readNumber('mSickDays', oldPayroll?.sick_days ?? 0);
-    const vacationDays = readNumber('mVacationDays', oldPayroll?.vacation_days ?? 0);
+    const vacationDays = Number((window.vacationDates || []).length || 0);
 	const sickDayDeduct = window.lastPayrollCalc?.sickDayDeduct || 0;
 	const sickDeductDays = window.lastPayrollCalc?.sickDeductDays || 0;
 
@@ -21357,6 +21647,16 @@ window.saveAndPrintPayrollById = async function(staffId, period, action = 'save'
         if (previewWindow) previewWindow.close();
         return Swal.fire('บันทึกไม่สำเร็จ', error.message, 'error');
     }
+
+	try {
+    if (typeof window.saveVacationDates === 'function') {
+        await window.saveVacationDates(staffId, safePeriod, staff.branch || '');
+    }
+	} catch (vacErr) {
+    console.error('save vacation dates error:', vacErr);
+    if (previewWindow) previewWindow.close();
+    return Swal.fire('บันทึกวันพักร้อนไม่สำเร็จ', vacErr.message || 'เกิดข้อผิดพลาด', 'error');
+	}
 
     // ✅ จุดที่โค้ดเดิมตกหล่น: ต้องเรียก printSlip ตรงนี้
     if (action === 'print') {

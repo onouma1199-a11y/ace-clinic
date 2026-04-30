@@ -2167,14 +2167,17 @@ window.__getDashboardDateRange = function(period = 'day') {
     const safePeriod = window.normalizeDashboardPeriod(period);
 
     const now = new Date();
-    const today = now.toISOString().split('T')[0];
 
-    const currentMonth = today.slice(0, 7);
-    const currentYear = today.slice(0, 4);
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
 
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-        .toISOString()
-        .split('T')[0];
+    const today = `${yyyy}-${mm}-${dd}`;
+    const currentMonth = `${yyyy}-${mm}`;
+    const currentYear = String(yyyy);
+
+    const lastDay = new Date(yyyy, now.getMonth() + 1, 0).getDate();
+    const monthEnd = `${currentMonth}-${String(lastDay).padStart(2, '0')}`;
 
     return {
         period: safePeriod,
@@ -2975,7 +2978,8 @@ window.changePeriod = function(period, btnElement) {
     const target = document.getElementById('dynamicContent');
 
     if (typeof window.renderDashboard === 'function') {
-        window.renderDashboard(target, window.currentPeriod, false);
+        window.__dashboardCache = {};
+	window.renderDashboard(target, window.currentPeriod, true);
     }
 };
 
@@ -2995,6 +2999,9 @@ window.renderDashboard = async function(target = null, period = 'day', forceRelo
     const cacheKey = `${selectedBranch}__${safePeriod}`;
     const cacheAgeMs = 15000;
 
+	window.__dashboardCache = window.__dashboardCache || {};
+	const cached = window.__dashboardCache[cacheKey];
+
     const quickState = {
         period: safePeriod,
         statsApps: [],
@@ -3010,7 +3017,6 @@ window.renderDashboard = async function(target = null, period = 'day', forceRelo
         customerMap: {}
     };
 
-    const cached = window.__dashboardCache[cacheKey];
 
     // ✅ ถ้าไม่ได้บังคับโหลดใหม่ ค่อยใช้ cache
     if (!forceReload && cached && (Date.now() - cached.time < cacheAgeMs)) {
@@ -3460,29 +3466,25 @@ window.clearCustomerCache = function () {
 
 window.refreshCustomerRelatedViews = async function(customerId = '') {
     try {
-        // ✅ ล้าง cache ลูกค้า
         if (typeof window.clearCustomerCache === 'function') {
             window.clearCustomerCache();
         }
 
-        // ✅ ล้าง cache นัดหมาย ถ้ามี
         window.appointmentCache = null;
         window.appointmentDB = null;
         window.__appointmentCache = null;
         window.__appointmentCacheLoadedAt = 0;
 
-        // ✅ ล้าง cache dashboard
         window.__dashboardCache = {};
 
-        // ✅ ถ้าอยู่หน้านัดหมายอยู่ ค่อย render ใหม่
         const pageTitle = document.getElementById('pageTitle')?.innerText || '';
+
         if (pageTitle.includes('นัดหมาย') && typeof window.renderAppointmentPage === 'function') {
-            window.renderAppointmentPage();
+            await window.renderAppointmentPage();
         }
 
-        // ✅ ถ้าอยู่ Dashboard อยู่ ค่อย render ใหม่
         if (pageTitle.includes('Dashboard') && typeof window.renderDashboard === 'function') {
-            window.renderDashboard(null, window.currentPeriod || 'day', true);
+            await window.renderDashboard(null, window.currentPeriod || 'day', true);
         }
 
     } catch (e) {
@@ -6792,6 +6794,10 @@ window.renderAppointmentPage = async function() {
     }
 
     const dateFilter = window.currentAppointmentDateFilter || "";
+const holidayForDate =
+    dateFilter && typeof window.getClinicHolidayByDate === 'function'
+        ? await window.getClinicHolidayByDate(dateFilter)
+        : null;
     const currentSearch = document.getElementById('appSearchInput')?.value || "";
     const statusFilter = document.getElementById('statusFilter')?.value || "ทั้งหมด";
     const appRowsPerPage = parseInt(document.getElementById('appPageSize')?.value, 10) || 10;
@@ -6997,7 +7003,10 @@ window.renderAppointmentPage = async function() {
                 </thead>
 
                 <tbody id="appointmentTableBody" class="text-slate-500 font-extralight">
-                    ${paginatedData.length > 0 ? paginatedData.map((ap, i) => {
+                    ${
+    holidayForDate
+        ? window.renderAppointmentHolidayRow(holidayForDate)
+        : paginatedData.length > 0 ? paginatedData.map((ap, i) => {
                         const realId = ap.id || ap.appointment_id || ap.created_at || ap.createdAt;
 
                         const customerInfo =
@@ -7113,7 +7122,8 @@ window.renderAppointmentPage = async function() {
                                 </td>
                             </tr>
                         `;
-                    }).join('') : `<tr><td colspan="13" class="p-20 text-center italic text-slate-300">ไม่พบข้อมูลนัดหมาย...</td></tr>`}
+                    }).join('') : `<tr><td colspan="13" class="p-20 text-center italic text-slate-300">ไม่พบข้อมูลนัดหมาย...</td></tr>`
+}
                 </tbody>
             </table>
         </div>
@@ -7148,7 +7158,25 @@ window.renderAppointmentPage = async function() {
 
     </div>`;
 };
-
+// ฟังก์ชันแสดงวันหยุด
+window.renderAppointmentHolidayRow = function(holiday) {
+    return `
+        <tr>
+            <td colspan="13" class="p-16 text-center">
+                <div class="bg-pink-50 border border-pink-200 rounded-[2rem] p-8 inline-block">
+                    <div class="text-4xl mb-3">🏖️</div>
+                    <h3 class="text-xl font-black text-[#D48197]">คลินิกหยุด</h3>
+                    <p class="text-sm text-slate-500 font-bold mt-2">
+                        ${holiday?.title || 'วันหยุดคลินิก'}
+                    </p>
+                    <p class="text-[12px] text-slate-400 mt-1">
+                        ไม่สามารถลงนัดหมายในวันนี้ได้
+                    </p>
+                </div>
+            </td>
+        </tr>
+    `;
+};
 // ฟังก์ชันเพิ่มนัดหมาย
 window.openAppointmentModal = async function(appId = null) {
     try {
@@ -7621,9 +7649,45 @@ window.saveNewAppointment = async function(appId = '') {
         }
 
         if (!date) {
-            Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกวันที่นัดหมายค่ะ', 'warning');
-            return;
+    Swal.fire('ข้อมูลไม่ครบ', 'กรุณาเลือกวันที่นัดหมายค่ะ', 'warning');
+    return;
+}
+
+// ✅ เช็กวันหยุดคลินิกก่อนบันทึกนัดหมาย
+if (typeof window.getClinicHolidayByDate === 'function') {
+    const holiday = await window.getClinicHolidayByDate(date);
+
+    if (holiday) {
+        // ✅ ปิด modal นัดหมายก่อน เพื่อไม่ให้บัง Swal
+        const appModal =
+            document.getElementById('appointmentModal') ||
+            document.getElementById('appModal') ||
+            document.getElementById('addAppointmentModal') ||
+            document.querySelector('.appointment-modal');
+
+        if (appModal) {
+            appModal.remove();
         }
+
+        // ✅ ดัน Swal ขึ้นหน้าสุด
+        setTimeout(() => {
+            Swal.fire({
+                icon: 'warning',
+                title: 'วันหยุดคลินิก',
+                html: `วันที่ ${date} เป็นวันหยุด: <b>${holiday.title}</b><br>ไม่สามารถลงนัดหมายได้ค่ะ`,
+                confirmButtonColor: '#D48197',
+                backdrop: true,
+                didOpen: () => {
+                    document.querySelectorAll('.swal2-container').forEach(el => {
+                        el.style.zIndex = '9999999';
+                    });
+                }
+            });
+        }, 100);
+
+        return;
+    }
+}
 
         if (!courseText) {
             Swal.fire('ข้อมูลไม่ครบ', 'กรุณาพิมพ์รายการคอร์สค่ะ', 'warning');
@@ -12947,6 +13011,12 @@ setTimeout(() => {
 
     if (typeof window.renderSalesPage === 'function') {
         window.renderSalesPage();
+    }
+
+    // ✅ ให้ Dashboard รายวัน/รายเดือน/รายปี โหลดยอดใหม่
+    window.__dashboardCache = {};
+    if (typeof window.renderDashboard === 'function') {
+        window.renderDashboard(null, window.currentPeriod || 'day', true);
     }
 }, 100);
 
@@ -19618,10 +19688,10 @@ target.style.marginRight = '0';
                     </div>
                 </div>
 
-                <button onclick="window.loadPage ? window.loadPage(1, 'Dashboard') : window.history.back()"
-                    class="bg-white border border-pink-100 text-slate-500 px-5 py-3 rounded-2xl text-[12px] font-bold hover:bg-pink-50">
-                    ← กลับ
-                </button>
+               <button onclick="window.renderStaffManagement ? window.renderStaffManagement() : window.history.back()"
+    class="bg-white border border-pink-100 text-slate-500 px-5 py-3 rounded-2xl text-[12px] font-bold hover:bg-pink-50">
+    ← กลับ
+</button>
             </div>
 
             <div class="bg-white rounded-[2.5rem] border border-pink-100 shadow-sm p-5 mb-5 w-full max-w-none overflow-x-auto">
@@ -19742,6 +19812,7 @@ target.style.marginRight = '0';
         window.loadPayrollTable();
     }
 };
+
 window.exportPayrollExcel = async function() {
     if (!window.supabaseClient) {
         return Swal.fire('Error', 'ยังไม่พบ Supabase', 'error');
@@ -22468,6 +22539,9 @@ window.sendPayrollEmailPrompt = async function(staffId, period) {
     window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
 };
 
+/* =======================================================
+     ตารางวันหยุด
+   ======================================================= */
 window.renderStaffCalendar = async function() {
     const target = document.getElementById('dynamicContent');
     if (!target) return;
@@ -22519,6 +22593,31 @@ window.renderStaffCalendar = async function() {
     `;
 
     await window.updateHolidayDisplay();
+};
+
+window.getClinicHolidayByDate = async function(dateText) {
+    if (!window.supabaseClient || !dateText) return null;
+
+    const cleanDate = String(dateText).split('T')[0]; // ✅ กันเวลา
+
+    const { data, error } = await window.supabaseClient
+        .from('clinic_holidays')
+        .select('*')
+        .lte('start_date', cleanDate)
+        .gte('end_date', cleanDate)
+        .maybeSingle();
+
+    if (error) {
+        console.error('getClinicHolidayByDate error:', error);
+        return null;
+    }
+
+    return data || null;
+};
+
+window.isClinicHoliday = async function(dateText) {
+    const holiday = await window.getClinicHolidayByDate(dateText);
+    return !!holiday;
 };
 
 window.changeMonth = async function(offset) {
@@ -22741,6 +22840,9 @@ window.deleteHoliday = async function(id) {
 window.openGoogleCalendar = function() {
     window.open('https://calendar.google.com/', '_blank');
 };
+/* =======================================================
+    ขาด/ลา/มาสาย
+   ======================================================= */
 
 /* =======================================================
     📈 ZONE 8: REPORTS & SETTINGS (ระบบรายงาน & ตั้งค่าคลินิก)

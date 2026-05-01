@@ -6770,8 +6770,52 @@ window.renderAppointmentPage = async function() {
     const viewingBranch = window.getCurrentViewingBranch();
     const isAdmin = window.canViewAllBranches();
 
-    const allAppointments = await window.getAppointmentDBByBranch();
+    if (typeof window.currentAppointmentDateFilter === 'undefined') {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    window.currentAppointmentDateFilter = `${yyyy}-${mm}-${dd}`;
+}
 
+const currentSearchForQuery = String(window.currentAppointmentSearch || '').trim();
+const dateForQuery = window.currentAppointmentDateFilter || "";
+
+let appQuery = window.supabaseClient
+    .from('appointments')
+    .select('*')
+    .order('date', { ascending: false })
+    .order('time', { ascending: true })
+    .limit(1000);
+
+if (!(viewingBranch === 'ทุกสาขา' && isAdmin)) {
+    appQuery = appQuery.eq('branch', viewingBranch);
+}
+
+if (!currentSearchForQuery && dateForQuery) {
+    appQuery = appQuery.eq('date', dateForQuery);
+}
+
+if (currentSearchForQuery) {
+    const s = currentSearchForQuery.replace(/\s+/g, '%');
+
+    appQuery = appQuery.or([
+        `customer_name.ilike.%${s}%`,
+        `customername.ilike.%${s}%`,
+        `hn.ilike.%${currentSearchForQuery}%`,
+        `customer_hn.ilike.%${currentSearchForQuery}%`,
+        `old_hn.ilike.%${currentSearchForQuery}%`,
+        `phone.ilike.%${currentSearchForQuery}%`,
+        `customer_id.ilike.%${currentSearchForQuery}%`
+    ].join(','));
+}
+
+const { data: allAppointments, error: appointmentError } = await appQuery;
+
+if (appointmentError) {
+    console.error('load appointments error:', appointmentError);
+    return;
+}
     const normalizeCustomerKey = (v) =>
         String(v || '').trim().replace(/\s+/g, '').toUpperCase();
 
@@ -6785,21 +6829,13 @@ window.renderAppointmentPage = async function() {
             .replaceAll("'", '&#039;');
     };
 
-    if (typeof window.currentAppointmentDateFilter === 'undefined' || window.currentAppointmentDateFilter === null) {
-        const today = new Date();
-        const yyyy = today.getFullYear();
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const dd = String(today.getDate()).padStart(2, '0');
-        window.currentAppointmentDateFilter = `${yyyy}-${mm}-${dd}`;
-    }
-
-    const dateFilter = window.currentAppointmentDateFilter || "";
+     const dateFilter = window.currentAppointmentDateFilter || "";
 const holidayForDate =
     dateFilter && typeof window.getClinicHolidayByDate === 'function'
         ? await window.getClinicHolidayByDate(dateFilter)
         : null;
-    const currentSearch = document.getElementById('appSearchInput')?.value || "";
-    const statusFilter = document.getElementById('statusFilter')?.value || "ทั้งหมด";
+    const currentSearch = window.currentAppointmentSearch || "";
+    const statusFilter = window.currentAppointmentStatusFilter || document.getElementById('statusFilter')?.value || "ทั้งหมด";
     const appRowsPerPage = parseInt(document.getElementById('appPageSize')?.value, 10) || 10;
 
     const formatDateTH = (dateStr) => {
@@ -6808,6 +6844,38 @@ const holidayForDate =
         const yearTH = parseInt(y, 10) < 2500 ? parseInt(y, 10) + 543 : y;
         return `${d}/${m}/${yearTH}`;
     };
+const searchText = String(currentSearch || '').toLowerCase().trim();
+const searchKey = normalizeCustomerKey(currentSearch);
+
+const matchedCustomerIds = new Set();
+const matchedCustomerHNs = new Set();
+
+if (searchText) {
+    try {
+        const searchForDB = searchText.replace(/\s+/g, '%');
+
+        const { data: matchedCustomers, error } = await window.supabaseClient
+            .from('customers')
+            .select('id, hn, old_hn, fullname, nickname, phone')
+            .or([
+                `fullname.ilike.%${searchForDB}%`,
+                `nickname.ilike.%${searchForDB}%`,
+                `hn.ilike.%${searchText}%`,
+                `old_hn.ilike.%${searchText}%`,
+                `phone.ilike.%${searchText}%`
+            ].join(','));
+
+        if (!error) {
+            (matchedCustomers || []).forEach(c => {
+                if (c.id) matchedCustomerIds.add(normalizeCustomerKey(c.id));
+                if (c.hn) matchedCustomerHNs.add(normalizeCustomerKey(c.hn));
+                if (c.old_hn) matchedCustomerHNs.add(normalizeCustomerKey(c.old_hn));
+            });
+        }
+    } catch (e) {
+        console.error('search customers error:', e);
+    }
+}
 
     let filteredData = (allAppointments || []).filter(ap => {
         const apBranch = window.normalizeBranch(ap.branch);
@@ -6815,34 +6883,104 @@ const holidayForDate =
             (viewingBranch === 'ทุกสาขา' && isAdmin) ||
             (apBranch === viewingBranch);
 
-        const searchText = currentSearch.toLowerCase().trim();
-        const matchSearch =
-            !searchText ||
-            String(ap.customer_name || ap.customerName || ap.customername || '').toLowerCase().includes(searchText) ||
-            String(ap.customer_id || '').toLowerCase().includes(searchText) ||
-            String(ap.hn || ap.customer_hn || '').toLowerCase().includes(searchText) ||
-            String(ap.phone || ap.customer_phone || '').toLowerCase().includes(searchText);
 
-        const matchStatus = statusFilter === "ทั้งหมด" || ap.status === statusFilter;
-        const apDate = String(ap.date || '').slice(0, 10);
-        const matchDate = !dateFilter || apDate === dateFilter;
+const fullNameVal = String(
+    ap.customer_name ||
+    ap.customerName ||
+    ap.customername ||
+    ap.fullname ||
+    ap.name ||
+    ''
+).toLowerCase();
+
+const nickVal = String(
+    ap.nickname ||
+    ap.nick_name ||
+    ap.customer_nickname ||
+    ''
+).toLowerCase();
+
+const apCustomerId =
+    ap.customer_id ||
+    ap.customerId ||
+    ap.customerID ||
+    ap.customer?.id ||
+    '';
+
+const apHN =
+    ap.hn ||
+    ap.customer_hn ||
+    ap.customerHN ||
+    ap.customer?.hn ||
+    '';
+
+const apOldHN =
+    ap.old_hn ||
+    ap.oldHN ||
+    ap.customer_old_hn ||
+    ap.customer?.old_hn ||
+    '';
+
+const hnVal = String(apHN).toLowerCase();
+const oldHnVal = String(apOldHN).toLowerCase();
+const phoneVal = String(ap.phone || ap.customer_phone || ap.customerPhone || ap.tel || ap.mobile || '').toLowerCase();
+const customerIdVal = String(apCustomerId).toLowerCase();
+
+const hnKey = normalizeCustomerKey(apHN);
+const oldHnKey = normalizeCustomerKey(apOldHN);
+const customerIdKey = normalizeCustomerKey(apCustomerId);
+
+const matchSearch =
+    !searchText ||
+    fullNameVal.includes(searchText) ||
+    nickVal.includes(searchText) ||
+    normalizeCustomerKey(fullNameVal).includes(searchKey) ||
+    normalizeCustomerKey(nickVal).includes(searchKey) ||
+    hnVal.includes(searchText) ||
+    oldHnVal.includes(searchText) ||
+    phoneVal.includes(searchText) ||
+    customerIdVal.includes(searchText) ||
+    matchedCustomerIds.has(customerIdKey) ||
+    matchedCustomerHNs.has(customerIdKey) ||
+    matchedCustomerHNs.has(hnKey) ||
+    matchedCustomerHNs.has(oldHnKey);
+
+const matchStatus = searchText
+    ? true
+    : (statusFilter === "ทั้งหมด" || ap.status === statusFilter);
+
+const apDate = String(ap.date || '').slice(0, 10);
+
+const matchDate = searchText
+    ? true
+    : (!dateFilter || apDate === dateFilter);
 
         return matchBranch && matchSearch && matchStatus && matchDate;
     });
 
     filteredData.sort((a, b) => {
-        const priority = {
-            "รอดำเนินการ": 0,
-            "ส่งเข้าคิวแล้ว": 1,
-            "ไม่มาตามนัด": 2,
-            "เสร็จสิ้น": 3,
-            "ยกเลิก": 4
-        };
-        const scoreA = priority[a.status] !== undefined ? priority[a.status] : 99;
-        const scoreB = priority[b.status] !== undefined ? priority[b.status] : 99;
-        if (scoreA !== scoreB) return scoreA - scoreB;
-        return String(a.time || '').localeCompare(String(b.time || ''));
-    });
+    const dateA = String(a.date || '');
+    const dateB = String(b.date || '');
+
+    if (dateA !== dateB) {
+        return dateB.localeCompare(dateA); // ล่าสุดขึ้นก่อน
+    }
+
+    const priority = {
+        "รอดำเนินการ": 0,
+        "ส่งเข้าคิวแล้ว": 1,
+        "ไม่มาตามนัด": 2,
+        "เสร็จสิ้น": 3,
+        "ยกเลิก": 4
+    };
+
+    const scoreA = priority[a.status] ?? 99;
+    const scoreB = priority[b.status] ?? 99;
+
+    if (scoreA !== scoreB) return scoreA - scoreB;
+
+    return String(a.time || '').localeCompare(String(b.time || ''));
+});
 
     const totalPages = Math.ceil(filteredData.length / appRowsPerPage) || 1;
     window.currentAppPage = Math.min(window.currentAppPage || 1, totalPages);
@@ -6931,7 +7069,10 @@ const holidayForDate =
         </div>
 
                     <div class="relative min-w-[165px]">
-                        <select id="statusFilter" onchange="window.currentAppPage=1; window.renderAppointmentPage()"
+                        <select id="statusFilter" onchange="
+    window.currentAppointmentStatusFilter = this.value;
+    window.currentAppPage = 1;
+    window.renderAppointmentPage();"
                             class="w-full border border-pink-200 px-4 py-2 rounded-xl text-[11px] outline-none bg-white font-normal h-[42px] cursor-pointer appearance-none shadow-sm focus:border-pink-400 transition-all text-slate-600">
                             <option value="ทั้งหมด" ${statusFilter === 'ทั้งหมด' ? 'selected' : ''}>🔍 สถานะ: ทั้งหมด</option>
                             <option value="รอดำเนินการ" ${statusFilter === 'รอดำเนินการ' ? 'selected' : ''}>🟡 รอดำเนินการ</option>
@@ -6943,37 +7084,61 @@ const holidayForDate =
                         <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-pink-300 pointer-events-none">▼</span>
                     </div>
         
-                    <div class="relative min-w-[170px] flex items-center">
-                        <input type="date" id="filterDate" 
-                            onchange="window.currentAppointmentDateFilter=this.value; window.currentAppPage=1; window.renderAppointmentPage()"
-                            value="${window.currentAppointmentDateFilter || ''}"
-                            class="w-full border border-pink-200 px-4 py-2 rounded-xl text-[11px] outline-none bg-white font-normal h-[42px] shadow-sm focus:border-pink-400 transition-all text-slate-600 cursor-pointer">
-                        
-                        <button onclick="window.currentAppointmentDateFilter=''; window.currentAppPage=1; window.renderAppointmentPage();" 
-                            class="absolute right-9 text-slate-300 hover:text-pink-500 transition-all font-bold text-lg no-print"
-                            style="display: ${dateFilter ? 'block' : 'none'};">
-                            ×
-                        </button>
-                    </div>
+                  <div class="relative min-w-[170px] flex items-center">
+    <input type="date" id="filterDate"
+    value="${dateFilter}"
+    onchange="
+        window.currentAppointmentDateFilter = this.value;
+        window.currentAppPage = 1;
+        window.renderAppointmentPage();
+    "
+    class="w-full border border-pink-100 rounded-xl px-4 py-2 text-[12px] outline-none bg-white h-[42px] shadow-sm focus:border-[#D48197] transition-all text-slate-600 cursor-pointer">
 
-                    <div class="relative flex items-center min-w-[220px]">
-                        <input id="appSearchInput" type="text" placeholder="🔍 ค้นชื่อ / HN / เบอร์โทร" value="${escapeSafe(currentSearch)}"
-                            onkeyup="if(event.key === 'Enter') { window.currentAppPage=1; window.renderAppointmentPage(); }"
-                            class="w-full border border-pink-200 px-10 py-2 rounded-xl text-[11px] outline-none bg-white h-[42px] shadow-sm focus:border-pink-400 font-normal text-slate-700">
-                        
-                        <button onclick="window.currentAppPage=1; window.renderAppointmentPage()"
-                            class="absolute right-1 top-1 bottom-1 bg-[#D48197] text-white px-4 rounded-lg text-[10px] font-bold hover:bg-black transition-all">
-                            ค้นหา
-                        </button>
-                    </div>
+  <button onclick="
+    window.currentAppointmentDateFilter = '';
+    window.currentAppointmentStatusFilter = 'ทั้งหมด';
+    window.currentAppPage = 1;
+    window.renderAppointmentPage();
+"
+    class="absolute right-9 text-slate-300 hover:text-pink-500 transition-all font-bold text-lg no-print"
+    style="display: ${dateFilter ? 'block' : 'none'};">
+    ×
+</button>
+</div>
 
-                    <div class="flex gap-2 items-end">
-    <button onclick="window.exportDailyAppointmentExcel()" 
+<div class="relative flex items-center min-w-[280px] flex-1">
+    <input id="appSearchInput" type="text"
+        placeholder="ค้นชื่อ / ชื่อเล่น / HN / เบอร์โทร..."
+        value="${escapeSafe(currentSearch)}"
+        onkeyup="
+            if (event.key === 'Enter') {
+                window.currentAppointmentSearch = this.value.trim();
+                window.currentAppPage = 1;
+                window.renderAppointmentPage();
+            }
+        "
+        class="w-full border border-pink-100 bg-white rounded-xl px-10 py-2 text-[12px] outline-none font-light h-[42px] shadow-sm focus:border-[#D48197] transition-all text-slate-700">
+
+    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300">🔍</span>
+
+    <button onclick="
+        const searchInput = document.getElementById('appSearchInput');
+        window.currentAppointmentSearch = searchInput ? searchInput.value.trim() : '';
+        window.currentAppPage = 1;
+        window.renderAppointmentPage();
+    "
+        class="absolute right-1 top-1 bottom-1 bg-[#D48197] text-white px-4 rounded-lg text-[10px] font-bold hover:bg-black transition-all">
+        ค้นหา
+    </button>
+</div>
+
+<div class="flex gap-2 items-end">
+    <button onclick="window.exportDailyAppointmentExcel()"
         class="h-[42px] w-28 bg-white border border-[#D48197] text-[#D48197] px-4 rounded-xl text-[10px] font-bold hover:bg-pink-50 transition-all shadow-sm flex items-center justify-center">
         📊 รายงานนัด
     </button>
-    
-    <button onclick="window.openAppointmentModal()" 
+
+    <button onclick="window.openAppointmentModal()"
         class="h-[42px] w-28 bg-[#D48197] text-white px-4 rounded-xl text-[10px] font-bold hover:bg-black transition-all shadow-md flex items-center justify-center">
         + เพิ่มนัดหมาย
     </button>
@@ -7008,6 +7173,7 @@ const holidayForDate =
         ? window.renderAppointmentHolidayRow(holidayForDate)
         : paginatedData.length > 0 ? paginatedData.map((ap, i) => {
                         const realId = ap.id || ap.appointment_id || ap.created_at || ap.createdAt;
+			const safeRealId = escapeSafe(realId);
 
                         const customerInfo =
                             customerMapById[normalizeCustomerKey(ap.customer_id)] ||
@@ -7040,7 +7206,7 @@ const holidayForDate =
                         return `
                             <tr class="border-b border-pink-50 hover:bg-pink-50/20 transition-all font-extralight text-slate-600" style="height: 60px;">
                                 <td class="p-1 text-center">
-                                    <button onclick="window.toggleConfirmAppById('${realId}')"
+                                    <button onclick="window.toggleConfirmAppById('${safeRealId}')"
                                         class="w-4 h-4 rounded-full border flex items-center justify-center mx-auto ${ap.is_confirm || ap.isConfirm ? 'bg-[#D48197] border-[#D48197] text-white' : 'border-slate-300 text-slate-300'}">
                                         <span style="font-size: 7px;">✓</span>
                                     </button>
@@ -7084,35 +7250,35 @@ const holidayForDate =
                                 <td class="p-1 text-center relative" style="overflow: visible !important;">
                                     <div class="relative inline-flex items-center justify-center" style="overflow: visible !important;">
                                         <div class="inline-flex items-center bg-[#D48197] text-white rounded-full shadow-sm scale-90 relative z-10">
-                                            <button onclick="window.editAppointmentById('${realId}')" 
+                                            <button onclick="window.editAppointmentById('${safeRealId}')"
                                                 class="pl-4 pr-3 py-2 border-r border-white/20 hover:bg-black/10 text-[12px] uppercase font-extralight">
                                                 แก้ไข
                                             </button>
 
-                                            <button onclick="event.preventDefault(); event.stopPropagation(); window.toggleAppActionMenu(event, '${realId}')" 
+                                            <button onclick="event.preventDefault(); event.stopPropagation(); window.toggleAppActionMenu(event, '${safeRealId}')"
                                                 class="px-2.5 py-2 hover:bg-black/10 flex items-center justify-center rounded-r-full">
                                                 <span style="font-size: 9px;">▼</span>
                                             </button>
                                         </div>
 
-                                        <div id="app-action-menu-${realId}" class="hidden absolute right-0 top-full mt-2 w-48 bg-white border border-pink-100 rounded-2xl shadow-2xl text-left text-slate-600 font-normal z-[99999] overflow-hidden">
+                                        <div id="app-action-menu-${safeRealId}" class="hidden absolute right-0 top-full mt-2 w-48 bg-white border border-pink-100 rounded-2xl shadow-2xl text-left text-slate-600 font-normal z-[99999] overflow-hidden">
                                             <div class="flex flex-col">
-                                                <button onclick="window.sendToServiceQueueById('${realId}')" 
+                                                <button onclick="window.sendToServiceQueueById('${safeRealId}')" 
                                                     class="w-full px-5 py-3 text-[11px] text-green-600 hover:bg-green-50 border-b border-gray-50 flex items-center gap-3 transition-colors font-normal">
                                                     🔄 ส่งเข้าห้องจัดการคิว
                                                 </button>
 
-                                                <button onclick="window.viewAllAppointmentsById('${ap.customer_id || ''}')" 
+                                                <button onclick="window.viewAllAppointmentsById('${escapeSafe(ap.customer_id || ap.hn || ap.customer_hn || '')}')"
                                                     class="w-full px-5 py-3 text-[11px] text-gray-500 hover:bg-gray-50 border-b border-gray-50 flex items-center gap-3 transition-colors font-normal">
                                                     🗓️ ดูวันนัดทั้งหมด
                                                 </button>
 
-                                                <button onclick="window.printAppointmentCardById('${realId}')" 
+                                                <button onclick="window.printAppointmentCardById('${safeRealId}')" 
                                                     class="w-full px-5 py-3 text-[11px] text-blue-500 hover:bg-blue-50 border-b border-gray-50 flex items-center gap-3 transition-colors font-normal">
                                                     📄 พิมพ์บัตรนัด
                                                 </button>
 
-                                                <button onclick="window.deleteAppointmentById('${realId}')" 
+                                                <button onclick="window.deleteAppointmentById('${safeRealId}')" 
                                                     class="w-full px-5 py-3 text-[11px] text-red-500 hover:bg-red-50 flex items-center gap-3 transition-colors font-normal">
                                                     🗑️ ลบนัดหมาย
                                                 </button>
@@ -7132,7 +7298,12 @@ const holidayForDate =
 
     <!-- 🔹 ซ้าย: จำนวนเคส -->
     <div class="bg-pink-50 border border-pink-100 text-[#D48197] px-5 py-2 rounded-full text-[12px] font-bold shadow-sm">
-        รายการนัดวันนี้ ${filteredData.length} เคส
+        ${currentSearch 
+    ? `ผลค้นหา "${escapeSafe(currentSearch)}"` 
+    : dateFilter 
+        ? `รายการนัดวันที่ ${formatDateTH(dateFilter)}` 
+        : 'รายการนัดทั้งหมด'
+} ${filteredData.length} เคส
     </div>
 
     <!-- 🔹 กลาง: pagination -->
@@ -8789,9 +8960,11 @@ try {
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-    if (typeof window.currentQDateFilter === 'undefined') {
-        window.currentQDateFilter = todayStr;
-    }
+   // ✅ เปิดหน้าห้องจัดการคิวครั้งแรก ให้เป็นวันที่ปัจจุบัน
+// ✅ แต่ถ้ากด x แล้วเป็นค่าว่าง จะดูทั้งหมดได้
+if (typeof window.currentQDateFilter === 'undefined' || window.currentQDateFilter === null) {
+    window.currentQDateFilter = todayStr;
+}
 
     let filteredData = allQueue.filter(item => {
         const itemBranch = window.normalizeBranch ? window.normalizeBranch(item.branch || '') : String(item.branch || '').replace('สาขา', '').trim();
@@ -13004,21 +13177,25 @@ if (typeof window.updateBillLinePreview === 'function') {
 }
 
 // ✅ refresh เบื้องหลัง ไม่ await จะไม่หน่วงหน้าจอ
-setTimeout(() => {
+(async () => {
     if (typeof window.refreshActiveCustomerDetailRealtime === 'function' && customerId) {
-        window.refreshActiveCustomerDetailRealtime(customerId);
+        await window.refreshActiveCustomerDetailRealtime(customerId);
     }
 
-    if (typeof window.renderSalesPage === 'function') {
-        window.renderSalesPage();
-    }
-
-    // ✅ ให้ Dashboard รายวัน/รายเดือน/รายปี โหลดยอดใหม่
     window.__dashboardCache = {};
-    if (typeof window.renderDashboard === 'function') {
-        window.renderDashboard(null, window.currentPeriod || 'day', true);
+
+    const pageTitle = document.getElementById('pageTitle')?.innerText || '';
+
+    if (pageTitle.includes('DASHBOARD') || pageTitle.includes('Dashboard') || pageTitle.includes('ภาพรวม')) {
+        if (typeof window.renderDashboard === 'function') {
+            await window.renderDashboard(null, window.currentPeriod || 'day', true);
+        }
+    } else {
+        if (typeof window.renderSalesPage === 'function') {
+            await window.renderSalesPage();
+        }
     }
-}, 100);
+})();
 
     } catch (e) {
         console.error('confirmFinalPayment error:', e);
@@ -13541,15 +13718,44 @@ if (!target) return;
                     </div>
                 </div>
 
-                <div class="flex flex-wrap gap-2 mb-8 bg-slate-100/80 p-2.5 rounded-[2.5rem] border-2 border-slate-200 w-max mx-auto md:mx-0 shadow-inner">
-                    <button onclick="window.switchCustomerTab('info', '${c.id}')" class="cust-tab active px-8 py-3.5 rounded-full text-[12px] font-black transition-all flex items-center gap-2" data-tab="info"><i data-lucide="pin" class="w-4 h-4"></i> ข้อมูลพื้นฐาน</button>
-                    <button onclick="window.switchCustomerTab('remaining', '${c.id}')" class="cust-tab px-8 py-3.5 rounded-full text-[12px] font-black transition-all text-slate-500 hover:text-pink-600 flex items-center gap-2" data-tab="remaining"><i data-lucide="ticket" class="w-4 h-4"></i> คอร์สคงเหลือ</button>
-                    <button onclick="window.switchCustomerTab('usage', '${c.id}')" class="cust-tab px-8 py-3.5 rounded-full text-[12px] font-black transition-all text-slate-500 hover:text-pink-600 flex items-center gap-2" data-tab="usage"><i data-lucide="scroll" class="w-4 h-4"></i> ประวัติใช้คอร์ส</button>
-                    <button onclick="window.switchCustomerTab('receipts', '${c.id}')" class="cust-tab px-8 py-3.5 rounded-full text-[12px] font-black transition-all text-slate-500 hover:text-pink-600 flex items-center gap-2" data-tab="receipts"><i data-lucide="file-text" class="w-4 h-4"></i> ใบเสร็จย้อนหลัง</button>
-                    <button onclick="window.switchCustomerTab('appoints', '${c.id}')" class="cust-tab px-8 py-3.5 rounded-full text-[12px] font-black transition-all text-slate-500 hover:text-pink-600 flex items-center gap-2" data-tab="appoints"><i data-lucide="calendar-days" class="w-4 h-4"></i> ประวัตินัดหมาย</button>
-                </div>
+                <div class="mb-8 bg-slate-100/80 p-2.5 rounded-[2rem] md:rounded-[2.5rem] border-2 border-slate-200 shadow-inner w-full overflow-x-auto no-scrollbar">
+    <div class="flex gap-2 min-w-max md:min-w-0 md:flex-wrap">
 
-                <div id="customerTabContent" class="bg-white rounded-[4rem] shadow-2xl border-2 border-slate-200 p-12 min-h-[500px] text-left relative overflow-hidden">
+        <button onclick="window.switchCustomerTab('info', '${c.id}')"
+            class="cust-tab active shrink-0 px-5 md:px-8 py-3 rounded-full text-[11px] md:text-[12px] font-black transition-all flex items-center gap-2"
+            data-tab="info">
+            <i data-lucide="pin" class="w-4 h-4"></i> ข้อมูลพื้นฐาน
+        </button>
+
+        <button onclick="window.switchCustomerTab('remaining', '${c.id}')"
+            class="cust-tab shrink-0 px-5 md:px-8 py-3 rounded-full text-[11px] md:text-[12px] font-black transition-all text-slate-500 hover:text-pink-600 flex items-center gap-2"
+            data-tab="remaining">
+            <i data-lucide="ticket" class="w-4 h-4"></i> คอร์สคงเหลือ
+        </button>
+
+        <button onclick="window.switchCustomerTab('usage', '${c.id}')"
+            class="cust-tab shrink-0 px-5 md:px-8 py-3 rounded-full text-[11px] md:text-[12px] font-black transition-all text-slate-500 hover:text-pink-600 flex items-center gap-2"
+            data-tab="usage">
+            <i data-lucide="scroll" class="w-4 h-4"></i> ประวัติใช้คอร์ส
+        </button>
+
+        <button onclick="window.switchCustomerTab('receipts', '${c.id}')"
+            class="cust-tab shrink-0 px-5 md:px-8 py-3 rounded-full text-[11px] md:text-[12px] font-black transition-all text-slate-500 hover:text-pink-600 flex items-center gap-2"
+            data-tab="receipts">
+            <i data-lucide="file-text" class="w-4 h-4"></i> ใบเสร็จย้อนหลัง
+        </button>
+
+        <button onclick="window.switchCustomerTab('appoints', '${c.id}')"
+            class="cust-tab shrink-0 px-5 md:px-8 py-3 rounded-full text-[11px] md:text-[12px] font-black transition-all text-slate-500 hover:text-pink-600 flex items-center gap-2"
+            data-tab="appoints">
+            <i data-lucide="calendar-days" class="w-4 h-4"></i> ประวัตินัดหมาย
+        </button>
+
+    </div>
+</div>
+
+                <div id="customerTabContent"
+    class="bg-white rounded-[2rem] md:rounded-[4rem] shadow-2xl border-2 border-slate-200 p-5 md:p-12 min-h-[500px] text-left relative overflow-hidden">
                     <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.015] select-none">
                         <h1 style="font-size: 25rem;" class="font-black italic text-pink-300">ACE</h1>
                     </div>
@@ -14666,15 +14872,125 @@ window.loadCustomerUsageRows = async function(customerIdStr, customerHN = '', cu
     return usageRows;
 };
 
-window.renderUsageTabContent = function(container, usageRows, customerBranch, formatThaiDate) {
+window.renderUsageTabContent = async function(container, usageRows, customerBranch, formatThaiDate) {
     const normalizeText = (value) => String(value || '').trim();
+  const getQueueTimeForUsage = (row) => {
+    const usageDate = String(row.used_date || row.created_at || '').slice(0, 10);
+
+    const clean = (v) => String(v || '')
+        .replace(/[^0-9a-zก-๙]/gi, '')
+        .toLowerCase();
+
+    const usageHN = clean(row.hn || row.customer_hn || '');
+    const usageItem = clean(row.item_name || row.course_name || '');
+
+    const q = (window.__customerQueueRows || []).find(x => {
+        const qDate = String(x.date || x.queue_date || x.service_date || x.created_at || '').slice(0, 10);
+        const qHN = clean(x.hn || x.customer_hn || '');
+        const qCourse = clean(x.course || x.course_name || x.item_name || x.service_name || '');
+
+        const matchDate = qDate === usageDate;
+        const matchHN = usageHN && qHN && (qHN === usageHN || qHN.includes(usageHN) || usageHN.includes(qHN));
+        const matchCourse = usageItem && qCourse && (qCourse.includes(usageItem) || usageItem.includes(qCourse));
+
+        return matchDate && (matchHN || matchCourse);
+    });
+
+    const rawTime =
+    q?.finished_time ||
+    q?.finish_time ||
+    q?.completed_time ||
+    q?.done_time ||
+    q?.end_time ||
+    q?.finished_at ||
+    q?.completed_at ||
+    q?.done_at ||
+    q?.updated_at ||   // ใช้เวลาสำเร็จจริงก่อน
+    q?.time ||         // ถ้าไม่มี ค่อยใช้เวลานัด
+    '';
+
+const rawText = String(rawTime || '').trim();
+
+if (!rawText) return '';
+
+const isoMatch = rawText.match(/T(\d{2}):(\d{2})/);
+if (isoMatch) return `${isoMatch[1]}:${isoMatch[2]}`;
+
+const timeMatch = rawText.match(/(\d{1,2}):(\d{2})/);
+return timeMatch ? `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}` : '';
+};
+
+const getUsageDateTime = (row) => {
+    const rawDate = String(row.used_date || row.created_at || '').trim();
+    const datePart = rawDate.slice(0, 10);
+    const queueTime = getQueueTimeForUsage(row);
+
+    // ถ้าเจอเวลาใน queues ค่อยต่อเวลา
+    if (queueTime) return `${datePart} ${queueTime}`;
+
+    // ถ้า used_date มีเวลาจริง เช่น 2026-04-24T14:30:00 ให้ใช้เวลานั้น
+    const timeMatch = rawDate.match(/T(\d{2}:\d{2})| (\d{2}:\d{2})/);
+    if (timeMatch) {
+        const realTime = timeMatch[1] || timeMatch[2];
+        if (realTime && realTime !== '00:00') return `${datePart} ${realTime}`;
+    }
+
+    // ถ้าไม่มีเวลาจริง ให้แสดงแค่วันที่ ห้ามให้ระบบเติม 07:00
+    return datePart;
+};
+const formatUsageDateDisplay = (value) => {
+    const text = String(value || '').trim();
+
+    // ถ้าเป็นแค่วันที่ YYYY-MM-DD ให้ใช้ formatThaiDate ธรรมดา ไม่เอาเวลา
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+        return formatThaiDate(text);
+    }
+
+    // ถ้ามีเวลา ค่อยใช้ตัวเต็ม
+    if (typeof window.formatThaiDateTimeFull === 'function') {
+        return window.formatThaiDateTimeFull(text);
+    }
+
+    return formatThaiDate(text.slice(0, 10));
+};
+
+// โหลดข้อมูลคิวของลูกค้าคนนี้ เพื่อเอาเวลาจริงมาแสดงในประวัติใช้คอร์ส
+const loadCustomerQueueRowsForUsage = async () => {
+    window.__customerQueueRows = []; // บังคับโหลดใหม่ทุกครั้ง
+
+    if (!window.supabaseClient) return [];
+
+    const hnList = [...new Set(
+        (usageRows || [])
+            .map(r => r.hn || r.customer_hn)
+            .filter(Boolean)
+            .map(v => String(v).trim())
+    )];
+
+    if (!hnList.length) return [];
+
+    const { data, error } = await window.supabaseClient
+        .from('queues')
+        .select('*')
+        .in('hn', hnList);
+
+    if (error) {
+        console.error('load queues for usage error:', error);
+        return [];
+    }
+
+    console.log('QUEUE ROWS FOR USAGE:', data);
+
+    window.__customerQueueRows = data || [];
+    return window.__customerQueueRows;
+};
+
+await loadCustomerQueueRowsForUsage();
 
     usageRows = (usageRows || []).filter(x => Number(x.used_qty || 0) > 0);
 
-    usageRows.sort((a, b) => {
-    const da = String(a.created_at || a.used_date || '');
-    const db = String(b.created_at || b.used_date || '');
-    return db.localeCompare(da);
+   usageRows.sort((a, b) => {
+    return getUsageDateTime(b).localeCompare(getUsageDateTime(a));
 });
     const usageGroupMap = new Map();
 
@@ -14685,7 +15001,7 @@ window.renderUsageTabContent = function(container, usageRows, customerBranch, fo
         ].join('|');
 
         const rowRef = row.bill_no || row.invoice_no || row.service_no || row.legacy_ref_no || '';
-        const rowDate = String(row.created_at || row.used_date || '');
+        const rowDate = getUsageDateTime(row);
 
         if (!usageGroupMap.has(groupKey)) {
             usageGroupMap.set(groupKey, {
@@ -14730,7 +15046,7 @@ window.renderUsageTabContent = function(container, usageRows, customerBranch, fo
         const isExpanded = window.courseUsageRowState.expandedKey === group.key;
 
         const detailRows = [...group.rows].sort((a, b) =>
-            String(b.created_at || b.used_date || '').localeCompare(String(a.used_date || a.created_at || ''))
+            getUsageDateTime(b).localeCompare(getUsageDateTime(a))
         );
 
         return `
@@ -14742,7 +15058,7 @@ window.renderUsageTabContent = function(container, usageRows, customerBranch, fo
 
                     <div class="text-left">
                         <div class="text-[11px] text-[#D48197] font-black mb-1">
-                            ใช้ล่าสุด ${formatThaiDate(group.last_used_date)}
+                            ใช้ล่าสุด ${formatUsageDateDisplay(group.last_used_date)}
                         </div>
                         <div class="font-black text-slate-900 text-sm leading-snug">
                             ${window.escapeHtml(group.item_name || '-')}
@@ -14789,11 +15105,11 @@ window.renderUsageTabContent = function(container, usageRows, customerBranch, fo
                                 </div>
                                 <div class="rounded-2xl bg-slate-50 p-4">
                                     <div class="text-[10px] text-slate-400 font-black">ใช้ครั้งแรก</div>
-                                    <div class="text-xs font-black text-slate-700 mt-1">${window.formatThaiDateTimeFull(group.first_used_date)}</div>
+                                    <div class="text-xs font-black text-slate-700 mt-1">${formatUsageDateDisplay(group.first_used_date)}</div>
                                 </div>
                                 <div class="rounded-2xl bg-slate-50 p-4">
                                     <div class="text-[10px] text-slate-400 font-black">ใช้ล่าสุด</div>
-                                    <div class="text-xs font-black text-slate-700 mt-1">${window.formatThaiDateTimeFull(group.last_used_date)}</div>
+                                    <div class="text-xs font-black text-slate-700 mt-1">${formatUsageDateDisplay(group.last_used_date)}</div>
                                 </div>
                             </div>
                         </div>
@@ -14815,7 +15131,7 @@ window.renderUsageTabContent = function(container, usageRows, customerBranch, fo
                                     </div>
 
                                     <div class="text-xs text-slate-500">
-                                        ${window.formatThaiDateTimeFull(u.created_at || u.used_date)}
+                                        ${formatUsageDateDisplay(getUsageDateTime(u))}
                                     </div>
 
                                     <div class="text-right">
@@ -16053,9 +16369,11 @@ window.openNewExpenseModal = function() {
                         <label class="text-[10px] font-bold text-slate-400 uppercase ml-2 block mb-1">หมวดหมู่</label>
                         <select id="expCat" class="swal2-input w-full m-0 rounded-2xl border-slate-200 text-sm">
                             <option value="ทั่วไป">ทั่วไป</option>
-                            <option value="ค่าของใช้">ค่าของใช้/วัสดุ</option>
-                            <option value="สาธารณูปโภค">ค่าน้ำ/ไฟ/เน็ต</option>
-                            <option value="เงินเดือน">เงินเดือน/ค่าจ้าง</option>
+                            <option value="ค่าของใช้">ค่าของใช้</option>
+                            <option value="สาธารณูปโภค">สาธารณูปโภค</option>
+                            <option value="ค่าโปรโมท">ค่าโปรโมท</option>
+				<option value="ค่าเช่า/ค่าใบคุมแพทย์">ค่ค่าเช่า/ค่าใบคุมแพทย์</option>
+				<option value="ค่าแพทย์">ค่าแพทย์</option>
                         </select>
                     </div>
                     <div>
@@ -22768,13 +23086,35 @@ window.openAddHolidayModal = function() {
             return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
         }
 
+// ✅ ดึงสาขาจาก user ที่ล็อกอิน
+const currentUser = typeof window.getCurrentUserSafe === 'function'
+    ? window.getCurrentUserSafe()
+    : (JSON.parse(localStorage.getItem('currentUser')) || {});
+
+const rawBranch = typeof window.getCurrentViewingBranch === 'function'
+    ? window.getCurrentViewingBranch()
+    : (currentUser.viewingBranch || currentUser.homeBranch || currentUser.branch || '');
+
+const safeBranch = String(rawBranch || '')
+    .replace('เอซคลินิก', '')
+    .replace('ACE Clinic', '')
+    .replace('สาขา', '')
+    .replace(':', '')
+    .trim();
+
+// ถ้าเป็นทุกสาขา → ให้เป็น "ทุกสาขา"
+const holidayBranch = safeBranch && safeBranch !== 'ทุกสาขา'
+    ? safeBranch
+    : 'ทุกสาขา';
+
         const { error } = await window.supabaseClient
-            .from('clinic_holidays')
-            .insert([{
-                title: result.value.title,
-                start_date: result.value.start,
-                end_date: result.value.end
-            }]);
+    .from('clinic_holidays')
+    .insert([{
+        title: result.value.title,
+        start_date: result.value.start,
+        end_date: result.value.end,
+        branch_name: holidayBranch // ✅ เพิ่มตรงนี้
+    }]);
 
         if (error) {
             console.error('openAddHolidayModal insert error:', error);
@@ -22943,7 +23283,674 @@ window.reportProfitLoss = () => Swal.fire('Coming Soon', 'ระบบราย�
 window.reportAttendance = () => Swal.fire('Coming Soon', 'ระบบรายงานขาดลามาสายกำลังพัฒนา', 'info');
 
 /* =======================================================
-    ZONE 8.1: ระบบรายงานยอดขาย
+    รายงานสรุปค่ามือ DF / คอมมิชชั่น
+   ======================================================= */
+window.reportStaffDF = function() {
+    window.renderDFCommissionReportPage();
+};
+
+window.renderDFCommissionReportPage = async function() {
+    const target = document.getElementById('dynamicContent');
+    if (!target) return;
+
+    if (!window.supabaseClient) {
+        return Swal.fire('Error', 'ยังไม่พบการเชื่อมต่อ Supabase', 'error');
+    }
+
+    const normalizeBranch = (v) => String(v || '')
+        .replace('เอซคลินิก', '')
+        .replace('ACE Clinic', '')
+        .replace('สาขา', '')
+        .replace(':', '')
+        .trim();
+
+    const escapeHtml = (v) => String(v ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+
+    const money = (v) => Number(v || 0).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+
+    const fieldClass = "h-[42px] bg-white border border-slate-300 rounded-xl px-4 text-[12px] text-slate-700 outline-none shadow-sm focus:border-[#D48197] focus:ring-2 focus:ring-pink-100 appearance-none";
+
+    const currentUser = window.getCurrentUserSafe ? window.getCurrentUserSafe() : {};
+    const viewingBranch = window.getCurrentViewingBranch
+        ? window.getCurrentViewingBranch()
+        : (currentUser.viewingBranch || currentUser.branch || currentUser.homeBranch || 'ทุกสาขา');
+
+    const safeBranch = normalizeBranch(viewingBranch);
+    const isAllBranch = safeBranch === 'ทุกสาขา';
+
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    const currentMonth = String(today.getMonth() + 1).padStart(2, '0');
+    const currentYear = String(today.getFullYear());
+
+    const pageSize = parseInt(document.getElementById('dfcPageSize')?.value || '20', 10);
+    const personFilter = document.getElementById('dfcPersonFilter')?.value || 'ทั้งหมด';
+    const periodFilter = document.getElementById('dfcPeriodFilter')?.value || 'รายวัน';
+    const dateFilter = document.getElementById('dfcDateFilter')?.value || todayStr;
+    const monthFilter = document.getElementById('dfcMonthFilter')?.value || currentMonth;
+    const yearFilter = document.getElementById('dfcYearFilter')?.value || currentYear;
+    const searchText = String(document.getElementById('dfcSearchInput')?.value || '').toLowerCase().trim();
+
+    const getLastDayOfMonth = (year, month) => {
+    return new Date(Number(year), Number(month), 0).getDate();
+};
+
+const getRange = () => {
+    if (periodFilter === 'ทั้งหมด') return { start: null, end: null };
+
+    if (periodFilter === 'รายวัน') {
+        return { start: dateFilter || todayStr, end: dateFilter || todayStr };
+    }
+
+    if (periodFilter === 'รายเดือน') {
+        const lastDay = getLastDayOfMonth(yearFilter, monthFilter);
+        return {
+            start: `${yearFilter}-${monthFilter}-01`,
+            end: `${yearFilter}-${monthFilter}-${String(lastDay).padStart(2, '0')}`
+        };
+    }
+
+    if (periodFilter === 'รายปี') {
+        return { start: `${yearFilter}-01-01`, end: `${yearFilter}-12-31` };
+    }
+
+    return { start: dateFilter || todayStr, end: dateFilter || todayStr };
+};
+
+    const range = getRange();
+
+    let query = window.supabaseClient
+        .from('queues')
+        .select('*')
+        .eq('status', 'เสร็จสิ้น')
+        .order('date', { ascending: false })
+        .order('time', { ascending: false });
+
+    if (range.start && range.end) {
+        query = query.gte('date', range.start).lte('date', range.end);
+    }
+
+    if (!isAllBranch && safeBranch) {
+        query = query.in('branch', [
+            safeBranch,
+            `สาขา${safeBranch}`,
+            `ACE Clinic ${safeBranch}`,
+            `เอซคลินิก ${safeBranch}`
+        ]);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+        console.error('renderDFCommissionReportPage error:', error);
+        return Swal.fire('โหลดข้อมูลไม่สำเร็จ', error.message || 'เกิดข้อผิดพลาด', 'error');
+    }
+
+    const rowsRaw = Array.isArray(data) ? data : [];
+const getJobMonth = (q) => {
+    const d = getDate(q);
+    if (d.includes('-')) return d.slice(5, 7);
+    if (d.includes('/')) return String(d.split('/')[1] || '').padStart(2, '0');
+    return '';
+};
+
+const getJobBranch = (q) => normalizeBranch(q.branch || q.branch_name || q.branchName || '');
+
+    const getDate = (r) => String(r.date || r.service_date || r.used_date || r.created_at || '').slice(0, 10);
+    const getTime = (r) => r.time || r.finish_time || r.updated_at?.slice(11, 16) || '-';
+    const getStaff = (r) => r.staff_nickname || r.staffNickname || r.staff || r.staff_name || r.staffName || '-';
+    const getDoctor = (r) => r.doctor_nickname || r.doctorNickname || r.doctor || r.doctor_name || r.doctorName || '-';
+    const getHN = (r) => r.hn || r.customer_hn || '-';
+    const getCustomer = (r) => r.customer_name || r.customerName || r.name || r.fullname || '-';
+    const parseUsedCourses = (r) => {
+    if (Array.isArray(r.used_courses)) return r.used_courses;
+    if (typeof r.used_courses === 'string') {
+        try { return JSON.parse(r.used_courses); } catch { return []; }
+    }
+    return [];
+};
+
+const getCode = (r) => {
+    const courses = parseUsedCourses(r);
+    const first = courses[0] || {};
+
+    return (
+        r.item_code ||
+        r.course_code ||
+        r.old_course_code ||
+        first.item_code ||
+        first.course_code ||
+        first.old_course_code ||
+        first.code ||
+        '-'
+    );
+};
+
+    const getCourse = (r) => r.course || r.courseName || r.course_name || r.item_name || r.service_name || '-';
+    const getQty = (r) => Number(r.used_qty || r.qty || r.quantity || 1) || 1;
+    const getUnit = (r) => r.unit || 'ครั้ง';
+    const getStaffDF = (r) => Number(r.staffDF ?? r.staff_df ?? r.staff_fee ?? r.staffDf ?? r.staff_commission ?? 0) || 0;
+    const getDoctorDF = (r) => Number(r.doctorDF ?? r.doctor_df ?? r.doctor_fee ?? r.doctorDf ?? r.doctor_commission ?? 0) || 0;
+
+    const cleanPersonName = (v) => String(v || '')
+    .replace(/แพทย์/g, '')
+    .replace(/หมอ/g, '')
+    .replace(/\s+/g, '')
+    .trim();
+
+const nameMatch = (value, selectedName) => {
+    if (selectedName === 'ทั้งหมด') return true;
+
+    const a = cleanPersonName(value);
+    const b = cleanPersonName(selectedName);
+
+    if (!a || !b) return false;
+
+    return a === b || a.includes(b) || b.includes(a);
+};
+
+// ✅ รายชื่อพนักงาน/แพทย์ ดึงจาก staff_profiles เป็นหลัก
+let staffNameList = [];
+
+try {
+    let staffQuery = window.supabaseClient
+        .from('staff_profiles')
+        .select('full_name, nickname, role, branch, is_active, employment_status')
+        .eq('is_active', true)
+        .order('nickname', { ascending: true });
+
+    if (!isAllBranch && safeBranch) {
+        staffQuery = staffQuery.in('branch', [
+            safeBranch,
+            `สาขา${safeBranch}`,
+            `ACE Clinic ${safeBranch}`,
+            `เอซคลินิก ${safeBranch}`
+        ]);
+    }
+
+    const { data: staffRows, error: staffError } = await staffQuery;
+
+    if (staffError) {
+        console.error('load staff_profiles for DF filter error:', staffError);
+    }
+
+    staffNameList = [...new Set(
+        (staffRows || [])
+            .filter(s => String(s.employment_status || 'ทำงาน').trim() !== 'ลาออก')
+            .map(s => String(s.nickname || s.full_name || '').trim())
+            .filter(Boolean)
+    )];
+
+} catch (e) {
+    console.error('staff_profiles dropdown error:', e);
+}
+
+// ✅ สำรอง: ถ้า staff_profiles ไม่มีข้อมูล ให้ดึงจาก queues แทน
+if (staffNameList.length === 0) {
+    staffNameList = [...new Set(
+        rowsRaw
+            .flatMap(r => [getStaff(r), getDoctor(r)])
+            .map(v => String(v || '').trim())
+            .filter(v => v && v !== '-')
+    )];
+}
+
+staffNameList = staffNameList.sort();
+
+const filteredJobs = rowsRaw.filter(q => {
+    const jobDate = getDate(q);
+
+    const matchBranch =
+        !safeBranch ||
+        safeBranch === 'ทุกสาขา' ||
+        getJobBranch(q) === safeBranch;
+
+    const matchDate =
+        periodFilter === 'ทั้งหมด'
+            ? true
+            : periodFilter === 'รายวัน'
+                ? jobDate === dateFilter
+                : periodFilter === 'รายเดือน'
+                    ? getJobMonth(q) === monthFilter && jobDate.startsWith(yearFilter)
+                    : periodFilter === 'รายปี'
+                        ? jobDate.startsWith(yearFilter)
+                        : true;
+
+    const matchPerson =
+        personFilter === 'ทั้งหมด' ||
+        nameMatch(getStaff(q), personFilter) ||
+        nameMatch(getDoctor(q), personFilter);
+
+    return matchBranch && matchDate && matchPerson;
+});
+
+let detailRows = filteredJobs.map(r => {
+    const staffDF = getStaffDF(r);
+    const doctorDF = getDoctorDF(r);
+
+    let dfAmount = 0;
+
+    if (personFilter === 'ทั้งหมด') {
+        // ✅ ทั้งหมด = รวมค่ามือพนักงาน + แพทย์
+        dfAmount = staffDF + doctorDF;
+    } else if (nameMatch(getStaff(r), personFilter)) {
+        dfAmount = staffDF;
+    } else if (nameMatch(getDoctor(r), personFilter)) {
+        dfAmount = doctorDF;
+    }
+
+    return {
+        date: getDate(r),
+        time: getTime(r),
+        staff: getStaff(r),
+        doctor: getDoctor(r),
+        hn: getHN(r),
+        customer: getCustomer(r),
+        code: getCode(r),
+        item: getCourse(r),
+        qty: getQty(r),
+        unit: getUnit(r),
+        df: dfAmount,
+        branch: normalizeBranch(r.branch || r.branch_name || '')
+    };
+});
+
+// ✅ ถ้าเลือกทั้งหมด ค่อยซ่อนแถวค่ามือ 0
+// ✅ ถ้าเลือกชื่อหมอ/พนักงาน ให้โชว์เคสนั้นไว้ก่อน ถึงค่ามือเป็น 0 จะได้เห็นว่ามีเคสจริง
+if (personFilter === 'ทั้งหมด') {
+    detailRows = detailRows.filter(r => Number(r.df || 0) > 0);
+}
+
+if (searchText) {
+    detailRows = detailRows.filter(r =>
+        String(r.staff).toLowerCase().includes(searchText) ||
+        String(r.doctor).toLowerCase().includes(searchText) ||
+        String(r.hn).toLowerCase().includes(searchText) ||
+        String(r.customer).toLowerCase().includes(searchText) ||
+        String(r.code).toLowerCase().includes(searchText) ||
+        String(r.item).toLowerCase().includes(searchText)
+    );
+}
+
+window.__dfCommissionReportRows = detailRows;
+
+const totalDF = detailRows.reduce((sum, r) => sum + Number(r.df || 0), 0);
+const totalCases = detailRows.length;
+   
+    window.currentDFCPage = window.currentDFCPage || 1;
+    const totalPages = Math.max(1, Math.ceil(detailRows.length / pageSize));
+    window.currentDFCPage = Math.max(1, Math.min(window.currentDFCPage, totalPages));
+
+    const startIndex = (window.currentDFCPage - 1) * pageSize;
+    const paginatedRows = detailRows.slice(startIndex, startIndex + pageSize);
+
+    const monthOptions = Array.from({ length: 12 }, (_, i) => {
+        const m = String(i + 1).padStart(2, '0');
+        const label = new Intl.DateTimeFormat('th-TH', { month: 'short' }).format(new Date(2026, i, 1));
+        return `<option value="${m}" ${monthFilter === m ? 'selected' : ''}>${label}</option>`;
+    }).join('');
+
+    const monthNameFull = new Intl.DateTimeFormat('th-TH', { month: 'long' })
+        .format(new Date(Number(yearFilter), Number(monthFilter) - 1, 1));
+
+    const periodText =
+        periodFilter === 'รายวัน'
+            ? (dateFilter || todayStr)
+            : periodFilter === 'รายเดือน'
+                ? `${monthNameFull} ${Number(yearFilter) + 543}`
+                : periodFilter === 'รายปี'
+                    ? `${Number(yearFilter) + 543}`
+                    : 'ทั้งหมด';
+
+    target.innerHTML = `
+        <div class="animate-in fade-in duration-500 p-4 -mt-6 text-left pb-20">
+
+            <div class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-pink-100 no-print mb-6">
+                <div class="flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-2xl bg-[#D48197] text-white flex items-center justify-center text-xl shadow-lg">💰</div>
+                        <div>
+                            <h2 class="text-2xl font-black text-[#D48197]">รายงานสรุปค่ามือ DF / คอมมิชชั่น</h2>
+                            <p class="text-[11px] text-slate-400 font-bold">สาขา: ${escapeHtml(safeBranch || 'ทุกสาขา')}</p>
+                        </div>
+                    </div>
+<button onclick="window.renderReportPage()"
+    class="bg-white border border-slate-300 text-slate-600 px-5 py-3 rounded-xl text-[12px] font-bold hover:bg-slate-50">
+    ← กลับ
+</button>
+
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-[2.5rem] shadow-sm border border-pink-100 no-print mb-6">
+                <div class="flex flex-wrap items-end gap-4">
+
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] font-bold text-[#D48197] ml-2">แสดง</label>
+                        <select id="dfcPageSize" onchange="window.currentDFCPage=1; window.renderDFCommissionReportPage()"
+                            class="${fieldClass} min-w-[120px]">
+                            <option value="20" ${pageSize === 20 ? 'selected' : ''}>20 รายการ</option>
+                            <option value="50" ${pageSize === 50 ? 'selected' : ''}>50 รายการ</option>
+                            <option value="100" ${pageSize === 100 ? 'selected' : ''}>100 รายการ</option>
+                        </select>
+                    </div>
+
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] font-bold text-[#D48197] ml-2">พนักงาน/แพทย์</label>
+                        <select id="dfcPersonFilter" onchange="window.currentDFCPage=1; window.renderDFCommissionReportPage()"
+                            class="${fieldClass} min-w-[170px]">
+                            <option value="ทั้งหมด" ${personFilter === 'ทั้งหมด' ? 'selected' : ''}>ทั้งหมด</option>
+                            ${staffNameList.map(name => `
+                                <option value="${escapeHtml(name)}" ${personFilter === name ? 'selected' : ''}>${escapeHtml(name)}</option>
+                            `).join('')}
+                        </select>
+                    </div>
+
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] font-bold text-[#D48197] ml-2">ช่วงเวลา</label>
+                        <select id="dfcPeriodFilter" onchange="window.currentDFCPage=1; window.renderDFCommissionReportPage()"
+                            class="${fieldClass} min-w-[150px]">
+                            <option value="รายวัน" ${periodFilter === 'รายวัน' ? 'selected' : ''}>รายวัน</option>
+                            <option value="รายเดือน" ${periodFilter === 'รายเดือน' ? 'selected' : ''}>รายเดือน</option>
+                            <option value="รายปี" ${periodFilter === 'รายปี' ? 'selected' : ''}>รายปี</option>
+                            <option value="ทั้งหมด" ${periodFilter === 'ทั้งหมด' ? 'selected' : ''}>ทั้งหมด</option>
+                        </select>
+                    </div>
+
+                    ${periodFilter === 'รายวัน' ? `
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] font-bold text-[#D48197] ml-2">เลือกวันที่</label>
+                            <input id="dfcDateFilter" type="date" value="${dateFilter}"
+                                onchange="window.currentDFCPage=1; window.renderDFCommissionReportPage()"
+                                class="${fieldClass} min-w-[160px]">
+                        </div>
+                    ` : ''}
+
+                    ${periodFilter === 'รายเดือน' ? `
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] font-bold text-[#D48197] ml-2">เลือกเดือน</label>
+                            <select id="dfcMonthFilter" onchange="window.currentDFCPage=1; window.renderDFCommissionReportPage()"
+                                class="${fieldClass} min-w-[120px]">
+                                ${monthOptions}
+                            </select>
+                        </div>
+                    ` : ''}
+
+                    ${(periodFilter === 'รายเดือน' || periodFilter === 'รายปี') ? `
+                        <div class="flex flex-col gap-1">
+                            <label class="text-[10px] font-bold text-[#D48197] ml-2">เลือกปี</label>
+                            <select id="dfcYearFilter" onchange="window.currentDFCPage=1; window.renderDFCommissionReportPage()"
+                                class="${fieldClass} min-w-[120px]">
+                                ${[2025, 2026, 2027, 2028].map(y => `
+                                    <option value="${y}" ${yearFilter === String(y) ? 'selected' : ''}>${y + 543}</option>
+                                `).join('')}
+                            </select>
+                        </div>
+                    ` : ''}
+
+                    <div class="flex flex-col gap-1 flex-1 min-w-[260px]">
+                        <label class="text-[10px] font-bold text-[#D48197] ml-2">ค้นหา ชื่อลูกค้า / รายการ / HN</label>
+                        <input id="dfcSearchInput" value="${escapeHtml(searchText)}"
+                            onkeyup="if(event.key==='Enter'){window.currentDFCPage=1; window.renderDFCommissionReportPage()}"
+                            placeholder="ค้นหา..."
+                            class="${fieldClass} w-full">
+                    </div>
+
+                    <button onclick="window.currentDFCPage=1; window.renderDFCommissionReportPage()"
+                        class="h-[42px] px-6 rounded-xl bg-[#D48197] text-white text-[11px] font-bold shadow-md hover:bg-black">
+                        ค้นหา
+                    </button>
+
+                    <button onclick="window.exportDFCommissionExcel()"
+                        class="h-[42px] px-6 rounded-xl bg-black text-white text-[11px] font-bold shadow-md hover:bg-[#D48197]">
+                        โหลดข้อมูล Excel
+                    </button>
+
+                </div>
+            </div>
+                             
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div class="bg-white p-6 rounded-[2rem] border border-pink-100 shadow-sm">
+                    <p class="text-[10px] text-slate-400 font-bold">จำนวนรายการ</p>
+                    <h3 class="text-3xl font-black text-slate-800 mt-2">${totalCases.toLocaleString()} รายการ</h3>
+                </div>
+                <div class="bg-white p-6 rounded-[2rem] border border-pink-100 shadow-sm">
+                    <p class="text-[10px] text-slate-400 font-bold">ยอดรวมค่ามือ</p>
+                    <h3 class="text-3xl font-black text-[#D48197] mt-2">฿${money(totalDF)}</h3>
+                </div>
+                <div class="bg-white p-6 rounded-[2rem] border border-pink-100 shadow-sm">
+                    <p class="text-[10px] text-slate-400 font-bold">ช่วงข้อมูล</p>
+                    <h3 class="text-xl font-black text-slate-700 mt-3">${periodText}</h3>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-[2.5rem] shadow-xl border border-pink-100 p-8 overflow-x-auto">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-black text-[#D48197]">ตารางรายงานค่ามือ</h3>
+                    <p class="text-[12px] text-slate-400">ทั้งหมด ${detailRows.length.toLocaleString()} รายการ</p>
+                </div>
+
+                <table class="w-full min-w-[1300px] text-sm text-left">
+                    <thead>
+                        <tr class="bg-pink-50 text-[#D48197]">
+                            <th class="p-4 rounded-l-2xl text-center">ลำดับ</th>
+                            <th class="p-4">วันที่</th>
+                            <th class="p-4">เวลา</th>
+                            <th class="p-4">พนักงาน</th>
+                            <th class="p-4">แพทย์</th>
+                            <th class="p-4">HN ลูกค้า</th>
+                            <th class="p-4">ชื่อลูกค้า</th>
+                            <th class="p-4">รหัส</th>
+                            <th class="p-4">รายการ</th>
+                            <th class="p-4 text-center">จำนวน</th>
+                            <th class="p-4 text-center">หน่วย</th>
+                            <th class="p-4 text-right rounded-r-2xl">ค่ามือ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${paginatedRows.length ? paginatedRows.map((r, i) => `
+                            <tr class="border-b border-pink-50 hover:bg-pink-50/30">
+                                <td class="p-4 text-center">${startIndex + i + 1}</td>
+                                <td class="p-4">${escapeHtml(r.date)}</td>
+                                <td class="p-4">${escapeHtml(r.time)}</td>
+                                <td class="p-4">${escapeHtml(r.staff)}</td>
+                                <td class="p-4">${escapeHtml(r.doctor)}</td>
+                                <td class="p-4 font-bold text-[#D48197]">${escapeHtml(r.hn)}</td>
+                                <td class="p-4 font-bold text-slate-700">${escapeHtml(r.customer)}</td>
+                                <td class="p-4">${escapeHtml(r.code)}</td>
+                                <td class="p-4">${escapeHtml(r.item)}</td>
+                                <td class="p-4 text-center">${escapeHtml(r.qty)}</td>
+                                <td class="p-4 text-center">${escapeHtml(r.unit)}</td>
+                                <td class="p-4 text-right font-black text-[#D48197]">฿${money(r.df)}</td>
+                            </tr>
+                        `).join('') : `
+                            <tr>
+                                <td colspan="12" class="p-20 text-center text-slate-300 italic">
+                                    ไม่พบข้อมูลค่ามือตามเงื่อนไขที่เลือก
+                                </td>
+                            </tr>
+                        `}
+                    </tbody>
+                </table>
+
+                <div class="flex justify-end items-center mt-8">
+                    <div class="flex items-center gap-3">
+                        <button onclick="window.currentDFCPage=Math.max(1, window.currentDFCPage-1); window.renderDFCommissionReportPage()"
+                            ${window.currentDFCPage === 1 ? 'disabled' : ''}
+                            class="px-5 py-2 rounded-xl border border-slate-300 text-[11px] disabled:opacity-30">
+                            ก่อนหน้า
+                        </button>
+
+                        <span class="text-[12px] text-slate-500">
+                            หน้า ${window.currentDFCPage} / ${totalPages}
+                        </span>
+
+                        <button onclick="window.currentDFCPage=Math.min(${totalPages}, window.currentDFCPage+1); window.renderDFCommissionReportPage()"
+                            ${window.currentDFCPage === totalPages ? 'disabled' : ''}
+                            class="px-5 py-2 rounded-xl border border-slate-300 text-[11px] disabled:opacity-30">
+                            ถัดไป
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+window.exportDFCommissionExcel = function() {
+    if (typeof XLSX === 'undefined') {
+        return Swal.fire('ยังไม่พบ XLSX', 'กรุณาใส่ CDN xlsx ก่อนค่ะ', 'warning');
+    }
+
+    const rows = Array.isArray(window.__dfCommissionReportRows)
+        ? window.__dfCommissionReportRows
+        : [];
+
+    if (!rows.length) {
+        return Swal.fire('ไม่มีข้อมูล', 'ไม่มีข้อมูลสำหรับ Export Excel ค่ะ', 'warning');
+    }
+
+    const personName = document.getElementById('dfcPersonFilter')?.value || 'ทั้งหมด';
+
+    const periodFilter = document.getElementById('dfcPeriodFilter')?.value || 'ทั้งหมด';
+    const dateFilter = document.getElementById('dfcDateFilter')?.value || '';
+    const monthText = document.querySelector('#dfcMonthFilter option:checked')?.textContent || '';
+    const yearText = document.querySelector('#dfcYearFilter option:checked')?.textContent || '';
+
+    const periodText =
+        periodFilter === 'รายวัน'
+            ? dateFilter
+            : periodFilter === 'รายเดือน'
+                ? `${monthText} ${yearText}`
+                : periodFilter === 'รายปี'
+                    ? yearText
+                    : 'ทั้งหมด';
+
+    const totalCases = rows.length;
+    const totalDF = rows.reduce((sum, r) => sum + (Number(r.df || 0) || 0), 0);
+
+    const data = [
+        ['ACE CLINIC'],
+        ['รายงานสรุปค่ามือ DF / คอมมิชชั่น'],
+        [],
+        ['ชื่อพนักงาน/แพทย์', personName],
+        ['วัน/เดือน/ปี', periodText],
+        ['ยอดรวมเคส', totalCases],
+        ['ยอดรวมค่ามือ', totalDF],
+        [],
+        [
+            'ลำดับ',
+            'วันที่',
+            'เวลา',
+            'พนักงาน',
+            'แพทย์',
+            'HN ลูกค้า',
+            'ชื่อลูกค้า',
+            'รหัส',
+            'รายการ',
+            'จำนวน',
+            'หน่วย',
+            'ค่ามือ'
+        ],
+        ...rows.map((r, i) => ([
+            i + 1,
+            r.date || '',
+            r.time || '',
+            r.staff || '',
+            r.doctor || '',
+            r.hn || '',
+            r.customer || '',
+            r.code || '',
+            r.item || '',
+            Number(r.qty || 0) || 0,
+            r.unit || '',
+            Number(r.df || 0) || 0
+        ])),
+        [],
+        ['', '', '', '', '', '', '', '', '', '', 'รวม', totalDF]
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    ws['!cols'] = [
+        { wch: 8 },
+        { wch: 14 },
+        { wch: 10 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 28 },
+        { wch: 14 },
+        { wch: 55 },
+        { wch: 10 },
+        { wch: 10 },
+        { wch: 14 }
+    ];
+
+    ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 11 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 11 } }
+    ];
+
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            if (!ws[cellAddress]) continue;
+
+            ws[cellAddress].s = {
+                font: {
+                    name: 'Tahoma',
+                    sz: R <= 1 ? 16 : 11,
+                    bold: R <= 1 || R === 8 || R === data.length - 1,
+                    color: { rgb: R <= 1 ? 'D48197' : '111827' }
+                },
+                alignment: {
+                    horizontal: R <= 1 ? 'center' : 'left',
+                    vertical: 'center',
+                    wrapText: true
+                },
+                border: {
+                    top: { style: 'thin', color: { rgb: 'E5E7EB' } },
+                    bottom: { style: 'thin', color: { rgb: 'E5E7EB' } },
+                    left: { style: 'thin', color: { rgb: 'E5E7EB' } },
+                    right: { style: 'thin', color: { rgb: 'E5E7EB' } }
+                }
+            };
+
+            if (R === 8) {
+                ws[cellAddress].s.fill = { fgColor: { rgb: 'FCE7F3' } };
+                ws[cellAddress].s.font.color = { rgb: 'D48197' };
+                ws[cellAddress].s.alignment.horizontal = 'center';
+            }
+
+            if (C === 11 && R >= 9) {
+                ws[cellAddress].z = '฿#,##0.00';
+                ws[cellAddress].s.alignment.horizontal = 'right';
+            }
+        }
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'รายงานค่ามือ');
+
+    const fileDate = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `ACE_DF_Commission_Report_${fileDate}.xlsx`);
+};
+
+/* =======================================================
+    ZONE: ระบบรายงานยอดขาย
 ใช้ตาราง:
    - sales_header รายรับ
    - expenses รายจ่าย
@@ -23325,10 +24332,10 @@ const expensePageRows = expenseRows.slice(expenseStart, expenseStart + pageSize)
                         </div>
                     </div>
 
-                    <button onclick="window.loadPage ? window.loadPage(1, 'Dashboard') : window.history.back()"
-                        class="bg-white border border-pink-100 text-slate-500 px-5 py-3 rounded-2xl text-[12px] font-bold hover:bg-pink-50">
-                        ← กลับ
-                    </button>
+                    <button onclick="window.renderReportPage()"
+    class="bg-white border border-pink-100 text-slate-500 px-5 py-3 rounded-2xl text-[12px] font-bold hover:bg-pink-50">
+    ← กลับ
+</button>
                 </div>
 
                 <div class="bg-white rounded-[2.5rem] border border-pink-100 shadow-sm p-5 mb-5">
@@ -24467,10 +25474,10 @@ window.reportRemainingCourse = async function() {
                     </div>
                 </div>
 
-                <button onclick="window.loadPage ? window.loadPage(1, 'Dashboard') : window.history.back()"
-                    class="bg-white border border-pink-100 text-slate-500 px-5 py-3 rounded-2xl text-[12px] font-bold hover:bg-pink-50">
-                    ← กลับ
-                </button>
+               <button onclick="window.renderReportPage()"
+    class="bg-white border border-pink-100 text-slate-500 px-5 py-3 rounded-2xl text-[12px] font-bold hover:bg-pink-50">
+    ← กลับ
+</button>
             </div>
 
             <div class="bg-white rounded-[2.5rem] border border-pink-100 shadow-sm p-5 mb-5">
@@ -26586,6 +27593,56 @@ window.renderDFReportPage = async function() {
         if (selStaff === 'ทั้งหมด' || getStaffName(q) === selStaff) displayStaffTotal += getStaffDF(q);
         if (selStaff === 'ทั้งหมด' || getDoctorName(q) === selStaff) displayDocTotal += getDoctorDF(q);
     });
+const monthNameTH = {
+    '01': 'มกราคม',
+    '02': 'กุมภาพันธ์',
+    '03': 'มีนาคม',
+    '04': 'เมษายน',
+    '05': 'พฤษภาคม',
+    '06': 'มิถุนายน',
+    '07': 'กรกฎาคม',
+    '08': 'สิงหาคม',
+    '09': 'กันยายน',
+    '10': 'ตุลาคม',
+    '11': 'พฤศจิกายน',
+    '12': 'ธันวาคม'
+};
+
+const reportPeriodText = selDate
+    ? selDate
+    : (selMonth === 'ทั้งหมด'
+        ? 'ทุกเดือน'
+        : `${monthNameTH[selMonth] || selMonth} ${now.getFullYear() + 543}`);
+
+window.__dfImageReportData = filteredJobs
+    .map(q => {
+        const staffDF = getStaffDF(q);
+        const doctorDF = getDoctorDF(q);
+
+        let dfAmount = 0;
+
+        if (selStaff === 'ทั้งหมด') {
+            dfAmount = staffDF + doctorDF;
+        } else if (getStaffName(q) === selStaff) {
+            dfAmount = staffDF;
+        } else if (getDoctorName(q) === selStaff) {
+            dfAmount = doctorDF;
+        }
+
+        if (dfAmount <= 0) return null;
+
+        return {
+            customer: getCustomerName(q),
+            item: getCourseName(q),
+            df: dfAmount
+        };
+    })
+    .filter(Boolean);
+
+window.__dfImageReportMeta = {
+    staffName: selStaff,
+    periodText: reportPeriodText
+};
 
     target.innerHTML = `
     <div class="animate-in fade-in duration-500 p-4 -mt-6 text-left pb-20 font-sans">
@@ -26662,6 +27719,10 @@ window.renderDFReportPage = async function() {
             <span class="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] text-pink-300 pointer-events-none">▼</span>
         </div>
     </div>
+<button onclick="window.openDFImageReport()"
+    class="bg-[#D48197] text-white px-5 h-[42px] rounded-xl text-[10px] font-bold shadow-md hover:bg-black transition-all">
+   บันทึกรูปค่ามือ
+</button>
                     <button onclick="loadPage(52, 'ห้องจัดการคิว')" 
                         class="bg-[#D48197] text-white px-4 h-[42px] rounded-xl text-[10px] font-black shadow-md hover:bg-black transition-all uppercase italic whitespace-nowrap">
                         กลับหน้าคิว
@@ -26734,93 +27795,102 @@ window.renderDFReportPage = async function() {
     </div>`;
 };
 
-// 1. ฟังก์ชันระงับการใช้งานพนักงาน (Toggle Active)
-window.suspendStaff = async function(staffCode) {
-    if (!window.supabaseClient) {
-        return Swal.fire({
-            icon: 'error',
-            title: 'ยังไม่พบการเชื่อมต่อ Supabase',
-            confirmButtonColor: '#D48197'
-        });
+// ปุ่มบันทึกรูปค่ามือ
+window.openDFImageReport = async function() {
+    if (typeof html2canvas === 'undefined') {
+        return Swal.fire('ยังไม่มี html2canvas', 'กรุณาเช็ค script html2canvas ก่อนค่ะ', 'warning');
     }
 
-    try {
-        // 1) ดึงข้อมูลพนักงานปัจจุบัน
-        const { data: staff, error: fetchError } = await window.supabaseClient
-            .from('staff_profiles')
-            .select('id, staff_code, full_name, is_active')
-            .eq('staff_code', staffCode)
-            .single();
+    document.getElementById('dfImageReportModal')?.remove();
 
-        if (fetchError || !staff) {
-            console.error('suspendStaff fetch error:', fetchError);
-            return Swal.fire({
-                icon: 'error',
-                title: 'ไม่พบข้อมูลพนักงาน',
-                text: 'กรุณาลองใหม่อีกครั้ง',
-                confirmButtonColor: '#D48197'
-            });
-        }
+    const tableRows = Array.isArray(window.__dfImageReportData)
+        ? window.__dfImageReportData
+        : [];
 
-        const isActive = staff.is_active !== false;
-        const actionText = isActive ? 'ระงับการใช้งาน' : 'เปิดสิทธิ์ใช้งาน';
-        const nextIsActive = !isActive;
+    const meta = window.__dfImageReportMeta || {};
 
-        const result = await Swal.fire({
-            title: `ยืนยัน${actionText}?`,
-            text: `คุณต้องการ${actionText} คุณ ${staff.full_name || '-'} ใช่หรือไม่`,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: isActive ? '#d33' : '#2ecc71',
-            confirmButtonText: 'ใช่, ดำเนินการ',
-            cancelButtonText: 'ยกเลิก',
-            customClass: { popup: 'rounded-[2rem]' }
-        });
-
-        if (!result.isConfirmed) return;
-
-        // 2) อัปเดต Supabase
-        const { error: updateError } = await window.supabaseClient
-            .from('staff_profiles')
-            .update({
-                is_active: nextIsActive
-            })
-            .eq('staff_code', staffCode);
-
-        if (updateError) {
-            console.error('suspendStaff update error:', updateError);
-            return Swal.fire({
-                icon: 'error',
-                title: 'อัปเดตไม่สำเร็จ',
-                text: updateError.message || 'กรุณาลองใหม่อีกครั้ง',
-                confirmButtonColor: '#D48197'
-            });
-        }
-
-        await Swal.fire({
-            icon: 'success',
-            title: 'สำเร็จ!',
-            text: `${actionText}เรียบร้อยแล้วค่ะ`,
-            timer: 1500,
-            showConfirmButton: false
-        });
-
-        // 3) รีเฟรชหน้าตาราง
-        if (typeof window.renderStaffProfileList === 'function') {
-            window.renderStaffProfileList();
-        }
-
-    } catch (e) {
-        console.error('suspendStaff exception:', e);
-        Swal.fire({
-            icon: 'error',
-            title: 'เกิดข้อผิดพลาด',
-            text: e.message || 'กรุณาลองใหม่อีกครั้ง',
-            confirmButtonColor: '#D48197'
-        });
+    if (!tableRows.length) {
+        return Swal.fire('ไม่มีข้อมูล', 'ไม่พบรายการค่ามือสำหรับบันทึกรูปค่ะ', 'warning');
     }
+
+    const totalDF = tableRows.reduce((sum, r) => sum + Number(r.df || 0), 0);
+
+    const modal = document.createElement('div');
+    modal.id = 'dfImageReportModal';
+    modal.className = 'fixed inset-0 bg-black/50 z-[99999] flex items-center justify-center p-4';
+
+    modal.innerHTML = `
+        <div class="bg-white rounded-[2rem] p-6 max-w-5xl w-full max-h-[95vh] overflow-y-auto">
+            <div id="dfImageReportArea" class="bg-white p-8 text-slate-700">
+                <div class="text-center border-b border-pink-100 pb-5 mb-6">
+                    <h1 class="text-3xl font-black text-[#D48197]">ACE CLINIC</h1>
+                    <h2 class="text-xl font-black mt-2">รายงานค่ามือพนักงาน / DF</h2>
+                    <p class="text-sm mt-2">พนักงาน/แพทย์: <b>${meta.staffName || 'ทั้งหมด'}</b></p>
+                    <p class="text-sm">ช่วงเวลา: <b>${meta.periodText || '-'}</b></p>
+                </div>
+
+                <table class="w-full text-sm border-collapse">
+                    <thead>
+                        <tr class="bg-pink-50 text-[#D48197]">
+                            <th class="p-3 border">ลำดับ</th>
+                            <th class="p-3 border">ชื่อลูกค้า</th>
+                            <th class="p-3 border">รายการ</th>
+                            <th class="p-3 border text-right">ค่ามือ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tableRows.map((r, idx) => `
+                            <tr>
+                                <td class="p-3 border text-center">${idx + 1}</td>
+                                <td class="p-3 border">${r.customer || '-'}</td>
+                                <td class="p-3 border">${r.item || '-'}</td>
+                                <td class="p-3 border text-right font-bold">
+                                    ฿${Number(r.df || 0).toLocaleString()}
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+
+                <div class="text-right mt-6 text-xl font-black text-[#D48197]">
+                    รวมค่ามือทั้งหมด: ฿${totalDF.toLocaleString()}
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6">
+                <button onclick="document.getElementById('dfImageReportModal')?.remove()"
+                    class="px-6 py-3 rounded-2xl bg-slate-100 text-slate-500 text-xs font-black">
+                    ปิด
+                </button>
+
+                <button onclick="window.downloadDFReportImage()"
+                    class="px-8 py-3 rounded-2xl bg-[#D48197] text-white text-xs font-black">
+                    📸 บันทึกรูป
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
 };
 
+window.downloadDFReportImage = async function() {
+    const area = document.getElementById('dfImageReportArea');
+    if (!area) {
+        return Swal.fire('ผิดพลาด', 'ไม่พบพื้นที่รายงานสำหรับบันทึกรูปค่ะ', 'error');
+    }
+
+    const canvas = await html2canvas(area, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true
+    });
+
+    const link = document.createElement('a');
+    link.download = `ACE_DF_Report_${new Date().toISOString().slice(0, 10)}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+};
 
 // 1. ฟังก์ชันระงับการใช้งานพนักงาน (Toggle Active)
 window.suspendStaff = async function(staffCode) {

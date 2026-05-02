@@ -1179,148 +1179,116 @@ window.getCustomers = function() {
 
 /* -------------------- อ่านบัตรประชาชน -------------------- */
 window.readIDCard = async function() {
-
     Swal.fire({
-
         title: 'กำลังอ่านข้อมูลจากบัตร...',
-
         text: 'กรุณาเสียบบัตรประชาชนที่เครื่องอ่าน ZOWEETEK',
-
         allowOutsideClick: false,
-
         allowEscapeKey: false,
-
         didOpen: () => { Swal.showLoading(); }
-
     });
 
     try {
-
         const urls = [
-    'http://127.0.0.1:8008/read-card',
-    'http://127.0.0.1:8008/read',
-    'http://127.0.0.1:8008'
-];
+            'http://localhost:8008/read-card',
+            'http://localhost:8008/read',
+            'http://localhost:8008'
+        ];
 
-let data = null;
+        let data = null;
+        let foundUrl = '';
 
-for (const url of urls) {
-    try {
-        const res = await fetch(url);
-        if (res.ok) {
-            data = await res.json();
-            console.log('FOUND API:', url);
-            break;
+        for (const url of urls) {
+            try {
+                const res = await fetch(url, { method: 'GET' });
+                const text = await res.text();
+
+                console.log('ลอง API:', url, 'status:', res.status, 'response:', text);
+
+                if (!res.ok) continue;
+
+                try {
+                    data = JSON.parse(text);
+                    foundUrl = url;
+                    break;
+                } catch (jsonErr) {
+                    console.warn('API นี้ตอบกลับไม่ใช่ JSON:', url, text);
+                }
+            } catch (e) {
+                console.log('ลองแล้วไม่เจอ:', url, e);
+            }
         }
-    } catch (e) {
-        console.log('ลองแล้วไม่เจอ:', url);
-    }
-}
 
-if (!data) {
-    throw new Error('ไม่พบ API ของเครื่องอ่านบัตร');
-}
+        if (!data) {
+            throw new Error('ไม่พบ API ของเครื่องอ่านบัตร หรือ API ไม่ได้ส่งกลับเป็น JSON');
+        }
 
+        console.log('FOUND API:', foundUrl);
         console.log('READ CARD DATA =', data);
 
-        if (data && data.success) {
+        const success =
+            data.success === true ||
+            data.status === 'success' ||
+            data.citizen_id ||
+            data.idCardNo;
 
-            const firstName = String(data.first_name_th || '').trim();
-
-            const lastName = String(data.last_name_th || '').trim();
-
+        if (success) {
+            const citizenId = data.citizen_id || data.idCardNo || data.pid || '';
+            const firstName = String(data.first_name_th || data.firstNameTH || data.firstnameTH || '').trim();
+            const lastName = String(data.last_name_th || data.lastNameTH || data.lastnameTH || '').trim();
             const fullName = `${firstName} ${lastName}`.trim();
+            const birthDate = data.birth_date || data.birthDateISO || data.birthdate || '';
+            const address = data.address || data.fullAddress || '';
 
-            // ✅ หยอดลงฟอร์มลูกค้าให้ตรงกับตาราง customers
-
-            setInputValue('customerCitizenId', data.citizen_id);
-
-            setInputValue('customerFirstName', firstName);
-
-            setInputValue('customerLastName', lastName);
-
-            setInputValue('customerFullName', fullName);
-
-            setInputValue('customerBirthDate', data.birth_date);
-
-            setInputValue('customerAddress', data.address);
+            window.setInputValue('customerCitizenId', citizenId);
+            window.setInputValue('customerFirstName', firstName);
+            window.setInputValue('customerLastName', lastName);
+            window.setInputValue('customerFullName', fullName);
+            window.setInputValue('customerBirthDate', birthDate);
+            window.setInputValue('customerAddress', address);
 
             Swal.fire({
-
                 icon: 'success',
-
                 title: 'อ่านข้อมูลสำเร็จ',
-
-                text: `ยินดีต้อนรับคุณ ${firstName || ''}`,
-
+                text: `ยินดีต้อนรับคุณ ${firstName || fullName || ''}`,
                 timer: 1800,
-
                 showConfirmButton: false
-
             });
-
         } else {
-
             Swal.fire(
-
                 'แจ้งเตือน',
-
                 data?.message || 'ไม่พบข้อมูลบัตร กรุณาเสียบบัตรใหม่อีกครั้ง',
-
                 'warning'
-
             );
-
         }
 
     } catch (error) {
-
         console.error('ID Card Error:', error);
 
         Swal.fire({
-
             icon: 'error',
-
             title: 'เชื่อมต่อโปรแกรมอ่านบัตรไม่ได้',
-
             html: `
-
                 <div style="text-align:left; line-height:1.7">
-
                     <div>กรุณาตรวจสอบว่า</div>
-
                     <div>1. เสียบเครื่องอ่าน ZOWEETEK แล้ว</div>
-
                     <div>2. เสียบบัตรประชาชนแล้ว</div>
-
-                    <div>3. เปิดโปรแกรม C# Helper แล้ว</div>
-
-                    <div>4. โปรแกรมรันที่ <b>127.0.0.1:3007</b></div>
-
+                    <div>3. เปิดโปรแกรมอ่านบัตรแล้ว</div>
+                    <div>4. โปรแกรมรันที่ <b>http://localhost:8008</b></div>
+                    <div>5. ลองเปิด <b>http://localhost:8008/read-card</b> ต้องได้ข้อมูล JSON</div>
                 </div>
-
             `,
-
             confirmButtonText: 'รับทราบ'
-
         });
-
     }
-
 };
 
 /* -------------------- ฟังก์ชันหยอดค่าลง Input -------------------- */
-
 window.setInputValue = function(id, value) {
-
     const el = document.getElementById(id);
 
     if (!el) {
-
         console.warn('ไม่พบ input id =', id);
-
         return;
-
     }
 
     if (value === undefined || value === null) return;
@@ -1328,10 +1296,9 @@ window.setInputValue = function(id, value) {
     el.value = value;
 
     el.dispatchEvent(new Event('input', { bubbles: true }));
-
     el.dispatchEvent(new Event('change', { bubbles: true }));
-   };
-
+};
+	
 /* =======================================================
    🚀 ZONE 2: CORE SYSTEM (ระบบล็อกอิน & สลับหน้าเมนู)
    ======================================================= */

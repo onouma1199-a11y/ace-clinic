@@ -1195,9 +1195,6 @@ window.setInputValue = function(id, value) {
 let isReadingCard = false;
 
 window.readIDCard = async function() {
-    if (isReadingCard) return;
-    isReadingCard = true;
-
     try {
         Swal.fire({
             title: 'กำลังอ่านบัตร...',
@@ -1205,22 +1202,27 @@ window.readIDCard = async function() {
             didOpen: () => Swal.showLoading()
         });
 
-        const res = await fetch('http://127.0.0.1:9000/read-card', {
-            cache: 'no-store'
-        });
-
+        const res = await fetch('http://127.0.0.1:8008/read-card');
         const data = await res.json();
-        console.log('READ CARD DATA =', data);
 
-        if (!data.success) {
-            throw new Error(data.message || 'อ่านบัตรไม่สำเร็จ');
-        }
+        console.log(data);
 
-        window.setInputValue('modalCitizenId', data.citizen_id || '');
-        window.setInputValue('modalFirstName', data.first_name_th || '');
-        window.setInputValue('modalLastName', data.last_name_th || '');
-        window.setInputValue('modalBirthDate', data.birth_date || '');
-        window.setInputValue('modalAddress', data.address || '');
+        if (!data) throw new Error('อ่านบัตรไม่สำเร็จ');
+
+        document.getElementById('modalCitizenId').value =
+            data.citizen_id || data.pid || '';
+
+        document.getElementById('modalFirstName').value =
+            data.first_name_th || data.fname || '';
+
+        document.getElementById('modalLastName').value =
+            data.last_name_th || data.lname || '';
+
+        document.getElementById('modalBirthDate').value =
+            data.birth_date || '';
+
+        document.getElementById('modalAddress').value =
+            data.address || '';
 
         Swal.fire({
             icon: 'success',
@@ -1230,12 +1232,10 @@ window.readIDCard = async function() {
         });
 
     } catch (err) {
-        console.error(err);
         Swal.fire('ผิดพลาด', err.message, 'error');
-    } finally {
-        isReadingCard = false;
     }
 };
+	
 /* =======================================================
    🚀 ZONE 2: CORE SYSTEM (ระบบล็อกอิน & สลับหน้าเมนู)
    ======================================================= */

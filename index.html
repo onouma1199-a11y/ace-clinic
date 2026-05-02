@@ -1177,91 +1177,21 @@ window.getCustomers = function() {
     }
 };
 
-/* -------------------- อ่านบัตรประชาชน -------------------- */
-window.readIDCard = async function() {
-    Swal.fire({
-        title: 'กำลังอ่านข้อมูลจากบัตร...',
-        text: 'กรุณาเสียบบัตรประชาชนที่เครื่องอ่าน ZOWEETEK',
-        allowOutsideClick: false,
-        allowEscapeKey: false,
-        didOpen: () => Swal.showLoading()
-    });
-
-    try {
-        const response = await fetch('http://127.0.0.1:9000/read-card', {
-            method: 'GET',
-            cache: 'no-store'
-        });
-
-        if (!response.ok) {
-            throw new Error('HTTP ' + response.status);
-        }
-
-        const data = await response.json();
-        console.log('READ CARD DATA =', data);
-
-        if (!data || data.success !== true) {
-            throw new Error(data?.message || 'ไม่พบข้อมูลบัตร');
-        }
-
-        const firstName = String(data.first_name_th || '').trim();
-        const lastName = String(data.last_name_th || '').trim();
-        const fullName = `${firstName} ${lastName}`.trim();
-
-        // ✅ หยอดข้อมูลลงฟอร์มลูกค้า
-        window.setInputValue('customerCitizenId', data.citizen_id);
-        window.setInputValue('customerFirstName', firstName);
-        window.setInputValue('customerLastName', lastName);
-        window.setInputValue('customerFullName', fullName);
-        window.setInputValue('customerBirthDate', data.birth_date);
-        window.setInputValue('customerAddress', data.address);
-
-        Swal.fire({
-            icon: 'success',
-            title: 'อ่านข้อมูลสำเร็จ',
-            text: `ดึงข้อมูลคุณ ${firstName || ''} สำเร็จ`,
-            timer: 1800,
-            showConfirmButton: false
-        });
-
-    } catch (error) {
-        console.error('ID Card Error:', error);
-
-        Swal.fire({
-            icon: 'error',
-            title: 'เชื่อมต่อโปรแกรมอ่านบัตรไม่ได้',
-            html: `
-                <div style="text-align:left; line-height:1.7">
-                    <div>กรุณาตรวจสอบว่า</div>
-                    <div>1. Visual Studio / C# Helper ยังรันอยู่</div>
-                    <div>2. Console ขึ้นว่า <b>Server started at http://localhost:9000</b></div>
-                    <div>3. เปิด <b>http://localhost:9000/read-card</b> แล้วต้องเห็น JSON</div>
-                    <div>4. เว็บต้องเรียกพอร์ต <b>9000</b> ไม่ใช่ 8008</div>
-                </div>
-            `,
-            confirmButtonText: 'รับทราบ'
-        });
-    }
-};
-
 /* -------------------- ฟังก์ชันหยอดค่าลง Input -------------------- */
-window.setInputValue = function(ids, value) {
-    const idList = Array.isArray(ids) ? ids : [ids];
-
-    for (const id of idList) {
-        const el = document.getElementById(id);
-        if (el) {
-            el.value = value ?? '';
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-            return true;
-        }
+window.setInputValue = function(id, value) {
+    const el = document.getElementById(id);
+    if (!el) {
+        console.warn('ไม่พบ input id =', id);
+        return false;
     }
 
-    console.warn('ไม่พบ input ids =', idList);
-    return false;
+    el.value = value ?? '';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
 };
 
+/* -------------------- อ่านบัตรประชาชน -------------------- */
 window.readIDCard = async function() {
     Swal.fire({
         title: 'กำลังอ่านข้อมูลจากบัตร...',
@@ -1272,42 +1202,35 @@ window.readIDCard = async function() {
     });
 
     try {
-        const res = await fetch('http://127.0.0.1:9000/read-card', {
-            method: 'GET',
-            cache: 'no-store'
-        });
+        const res = await fetch('http://127.0.0.1:9000/read-card');
 
         if (!res.ok) throw new Error('HTTP ' + res.status);
 
         const data = await res.json();
         console.log('READ CARD DATA =', data);
 
-        if (!data?.success) throw new Error(data?.message || 'อ่านบัตรไม่สำเร็จ');
+        if (!data?.success) throw new Error('อ่านบัตรไม่สำเร็จ');
 
-        const citizenId = String(data.citizen_id || '').trim();
-        const firstName = String(data.first_name_th || '').trim();
-        const lastName = String(data.last_name_th || '').trim();
-        const fullName = `${firstName} ${lastName}`.trim();
+        const firstName = data.first_name_th || '';
+        const lastName = data.last_name_th || '';
 
-        // ✅ รองรับหลายชื่อ id เผื่อฟอร์มคุณใช้คนละชื่อ
-        window.setInputValue(['customerCitizenId', 'citizen_id', 'customer_citizen_id', 'citizenId'], citizenId);
-        window.setInputValue(['customerFirstName', 'first_name', 'customer_firstname', 'customerFirst'], firstName);
-        window.setInputValue(['customerLastName', 'last_name', 'customer_lastname', 'customerLast'], lastName);
-        window.setInputValue(['customerFullName', 'fullname', 'customer_fullname', 'customerName'], fullName);
-        window.setInputValue(['customerBirthDate', 'birth_date', 'customer_birthdate', 'birthDate'], data.birth_date);
-        window.setInputValue(['customerAddress', 'address', 'customer_address'], data.address);
+        window.setInputValue('modalCitizenId', data.citizen_id);
+        window.setInputValue('modalFirstName', firstName);
+        window.setInputValue('modalLastName', lastName);
+        window.setInputValue('modalBirthDate', data.birth_date);
+        window.setInputValue('modalAddress', data.address);
 
         Swal.fire({
             icon: 'success',
             title: 'ดึงข้อมูลสำเร็จ',
-            text: fullName || 'อ่านข้อมูลบัตรสำเร็จ',
+            text: `${firstName} ${lastName}`,
             timer: 1500,
             showConfirmButton: false
         });
 
     } catch (err) {
-        console.error('ID Card Error:', err);
-        Swal.fire('เชื่อมต่อไม่ได้', err.message || 'อ่านข้อมูลบัตรไม่สำเร็จ', 'error');
+        console.error(err);
+        Swal.fire('ผิดพลาด', err.message, 'error');
     }
 };
 	

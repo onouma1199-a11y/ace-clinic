@@ -1184,82 +1184,45 @@ window.readIDCard = async function() {
         text: 'กรุณาเสียบบัตรประชาชนที่เครื่องอ่าน ZOWEETEK',
         allowOutsideClick: false,
         allowEscapeKey: false,
-        didOpen: () => { Swal.showLoading(); }
+        didOpen: () => Swal.showLoading()
     });
 
     try {
-        const urls = [
-    'http://127.0.0.1:9000/read-card',
-    'http://127.0.0.1:9000/read',
-    'http://127.0.0.1:9000'
-];
+        const response = await fetch('http://127.0.0.1:9000/read-card', {
+            method: 'GET',
+            cache: 'no-store'
+        });
 
-        let data = null;
-        let foundUrl = '';
-
-        for (const url of urls) {
-            try {
-                const res = await fetch(url, { method: 'GET' });
-                const text = await res.text();
-
-                console.log('ลอง API:', url, 'status:', res.status, 'response:', text);
-
-                if (!res.ok) continue;
-
-                try {
-                    data = JSON.parse(text);
-                    foundUrl = url;
-                    break;
-                } catch (jsonErr) {
-                    console.warn('API นี้ตอบกลับไม่ใช่ JSON:', url, text);
-                }
-            } catch (e) {
-                console.log('ลองแล้วไม่เจอ:', url, e);
-            }
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status);
         }
 
-        if (!data) {
-            throw new Error('ไม่พบ API ของเครื่องอ่านบัตร หรือ API ไม่ได้ส่งกลับเป็น JSON');
-        }
-
-        console.log('FOUND API:', foundUrl);
+        const data = await response.json();
         console.log('READ CARD DATA =', data);
 
-        const success =
-            data.success === true ||
-            data.status === 'success' ||
-            data.citizen_id ||
-            data.idCardNo;
-
-        if (success) {
-            const citizenId = data.citizen_id || data.idCardNo || data.pid || '';
-            const firstName = String(data.first_name_th || data.firstNameTH || data.firstnameTH || '').trim();
-            const lastName = String(data.last_name_th || data.lastNameTH || data.lastnameTH || '').trim();
-            const fullName = `${firstName} ${lastName}`.trim();
-            const birthDate = data.birth_date || data.birthDateISO || data.birthdate || '';
-            const address = data.address || data.fullAddress || '';
-
-            window.setInputValue('customerCitizenId', citizenId);
-            window.setInputValue('customerFirstName', firstName);
-            window.setInputValue('customerLastName', lastName);
-            window.setInputValue('customerFullName', fullName);
-            window.setInputValue('customerBirthDate', birthDate);
-            window.setInputValue('customerAddress', address);
-
-            Swal.fire({
-                icon: 'success',
-                title: 'อ่านข้อมูลสำเร็จ',
-                text: `ยินดีต้อนรับคุณ ${firstName || fullName || ''}`,
-                timer: 1800,
-                showConfirmButton: false
-            });
-        } else {
-            Swal.fire(
-                'แจ้งเตือน',
-                data?.message || 'ไม่พบข้อมูลบัตร กรุณาเสียบบัตรใหม่อีกครั้ง',
-                'warning'
-            );
+        if (!data || data.success !== true) {
+            throw new Error(data?.message || 'ไม่พบข้อมูลบัตร');
         }
+
+        const firstName = String(data.first_name_th || '').trim();
+        const lastName = String(data.last_name_th || '').trim();
+        const fullName = `${firstName} ${lastName}`.trim();
+
+        // ✅ หยอดข้อมูลลงฟอร์มลูกค้า
+        window.setInputValue('customerCitizenId', data.citizen_id);
+        window.setInputValue('customerFirstName', firstName);
+        window.setInputValue('customerLastName', lastName);
+        window.setInputValue('customerFullName', fullName);
+        window.setInputValue('customerBirthDate', data.birth_date);
+        window.setInputValue('customerAddress', data.address);
+
+        Swal.fire({
+            icon: 'success',
+            title: 'อ่านข้อมูลสำเร็จ',
+            text: `ดึงข้อมูลคุณ ${firstName || ''} สำเร็จ`,
+            timer: 1800,
+            showConfirmButton: false
+        });
 
     } catch (error) {
         console.error('ID Card Error:', error);
@@ -1270,11 +1233,10 @@ window.readIDCard = async function() {
             html: `
                 <div style="text-align:left; line-height:1.7">
                     <div>กรุณาตรวจสอบว่า</div>
-                    <div>1. เสียบเครื่องอ่าน ZOWEETEK แล้ว</div>
-                    <div>2. เสียบบัตรประชาชนแล้ว</div>
-                    <div>3. เปิดโปรแกรมอ่านบัตรแล้ว</div>
-                    <div>4. โปรแกรมรันที่ <b>http://localhost:8008</b></div>
-                    <div>5. ลองเปิด <b>http://localhost:8008/read-card</b> ต้องได้ข้อมูล JSON</div>
+                    <div>1. Visual Studio / C# Helper ยังรันอยู่</div>
+                    <div>2. Console ขึ้นว่า <b>Server started at http://localhost:9000</b></div>
+                    <div>3. เปิด <b>http://localhost:9000/read-card</b> แล้วต้องเห็น JSON</div>
+                    <div>4. เว็บต้องเรียกพอร์ต <b>9000</b> ไม่ใช่ 8008</div>
                 </div>
             `,
             confirmButtonText: 'รับทราบ'
@@ -1285,7 +1247,6 @@ window.readIDCard = async function() {
 /* -------------------- ฟังก์ชันหยอดค่าลง Input -------------------- */
 window.setInputValue = function(id, value) {
     const el = document.getElementById(id);
-
     if (!el) {
         console.warn('ไม่พบ input id =', id);
         return;
@@ -1294,7 +1255,6 @@ window.setInputValue = function(id, value) {
     if (value === undefined || value === null) return;
 
     el.value = value;
-
     el.dispatchEvent(new Event('input', { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
 };

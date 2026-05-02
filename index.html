@@ -1195,7 +1195,7 @@ window.setInputValue = function(id, value) {
 let isReadingCard = false;
 
 window.readIDCard = async function() {
-    if (isReadingCard) return; // กันกดซ้ำ
+    if (isReadingCard) return;
     isReadingCard = true;
 
     try {
@@ -1216,11 +1216,11 @@ window.readIDCard = async function() {
             throw new Error(data.message || 'อ่านบัตรไม่สำเร็จ');
         }
 
-        document.getElementById('modalCitizenId').value = data.citizen_id || '';
-        document.getElementById('modalFirstName').value = data.first_name_th || '';
-        document.getElementById('modalLastName').value = data.last_name_th || '';
-        document.getElementById('modalBirthDate').value = data.birth_date || '';
-        document.getElementById('modalAddress').value = data.address || '';
+        window.setInputValue('modalCitizenId', data.citizen_id || '');
+        window.setInputValue('modalFirstName', data.first_name_th || '');
+        window.setInputValue('modalLastName', data.last_name_th || '');
+        window.setInputValue('modalBirthDate', data.birth_date || '');
+        window.setInputValue('modalAddress', data.address || '');
 
         Swal.fire({
             icon: 'success',
@@ -1232,9 +1232,9 @@ window.readIDCard = async function() {
     } catch (err) {
         console.error(err);
         Swal.fire('ผิดพลาด', err.message, 'error');
+    } finally {
+        isReadingCard = false;
     }
-
-    isReadingCard = false;
 };
 /* =======================================================
    🚀 ZONE 2: CORE SYSTEM (ระบบล็อกอิน & สลับหน้าเมนู)

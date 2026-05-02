@@ -1245,18 +1245,70 @@ window.readIDCard = async function() {
 };
 
 /* -------------------- ฟังก์ชันหยอดค่าลง Input -------------------- */
-window.setInputValue = function(id, value) {
-    const el = document.getElementById(id);
-    if (!el) {
-        console.warn('ไม่พบ input id =', id);
-        return;
+window.setInputValue = function(ids, value) {
+    const idList = Array.isArray(ids) ? ids : [ids];
+
+    for (const id of idList) {
+        const el = document.getElementById(id);
+        if (el) {
+            el.value = value ?? '';
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+        }
     }
 
-    if (value === undefined || value === null) return;
+    console.warn('ไม่พบ input ids =', idList);
+    return false;
+};
 
-    el.value = value;
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
+window.readIDCard = async function() {
+    Swal.fire({
+        title: 'กำลังอ่านข้อมูลจากบัตร...',
+        text: 'กรุณารอสักครู่',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    try {
+        const res = await fetch('http://127.0.0.1:9000/read-card', {
+            method: 'GET',
+            cache: 'no-store'
+        });
+
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+
+        const data = await res.json();
+        console.log('READ CARD DATA =', data);
+
+        if (!data?.success) throw new Error(data?.message || 'อ่านบัตรไม่สำเร็จ');
+
+        const citizenId = String(data.citizen_id || '').trim();
+        const firstName = String(data.first_name_th || '').trim();
+        const lastName = String(data.last_name_th || '').trim();
+        const fullName = `${firstName} ${lastName}`.trim();
+
+        // ✅ รองรับหลายชื่อ id เผื่อฟอร์มคุณใช้คนละชื่อ
+        window.setInputValue(['customerCitizenId', 'citizen_id', 'customer_citizen_id', 'citizenId'], citizenId);
+        window.setInputValue(['customerFirstName', 'first_name', 'customer_firstname', 'customerFirst'], firstName);
+        window.setInputValue(['customerLastName', 'last_name', 'customer_lastname', 'customerLast'], lastName);
+        window.setInputValue(['customerFullName', 'fullname', 'customer_fullname', 'customerName'], fullName);
+        window.setInputValue(['customerBirthDate', 'birth_date', 'customer_birthdate', 'birthDate'], data.birth_date);
+        window.setInputValue(['customerAddress', 'address', 'customer_address'], data.address);
+
+        Swal.fire({
+            icon: 'success',
+            title: 'ดึงข้อมูลสำเร็จ',
+            text: fullName || 'อ่านข้อมูลบัตรสำเร็จ',
+            timer: 1500,
+            showConfirmButton: false
+        });
+
+    } catch (err) {
+        console.error('ID Card Error:', err);
+        Swal.fire('เชื่อมต่อไม่ได้', err.message || 'อ่านข้อมูลบัตรไม่สำเร็จ', 'error');
+    }
 };
 	
 /* =======================================================

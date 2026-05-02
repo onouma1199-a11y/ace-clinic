@@ -1196,25 +1196,30 @@ window.readIDCard = async function() {
 
     try {
 
-        const response = await fetch('http://127.0.0.1:3007/read-card', {
+        const urls = [
+    'http://127.0.0.1:8008/read-card',
+    'http://127.0.0.1:8008/read',
+    'http://127.0.0.1:8008'
+];
 
-            method: 'GET',
+let data = null;
 
-            headers: {
-
-                'Content-Type': 'application/json'
-
-            }
-
-        });
-
-        if (!response.ok) {
-
-            throw new Error(`HTTP ${response.status}`);
-
+for (const url of urls) {
+    try {
+        const res = await fetch(url);
+        if (res.ok) {
+            data = await res.json();
+            console.log('FOUND API:', url);
+            break;
         }
+    } catch (e) {
+        console.log('ลองแล้วไม่เจอ:', url);
+    }
+}
 
-        const data = await response.json();
+if (!data) {
+    throw new Error('ไม่พบ API ของเครื่องอ่านบัตร');
+}
 
         console.log('READ CARD DATA =', data);
 

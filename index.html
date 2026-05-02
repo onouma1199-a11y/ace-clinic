@@ -1192,39 +1192,40 @@ window.setInputValue = function(id, value) {
 };
 
 /* -------------------- อ่านบัตรประชาชน -------------------- */
+let isReadingCard = false;
+
 window.readIDCard = async function() {
-    Swal.fire({
-        title: 'กำลังอ่านข้อมูลจากบัตร...',
-        text: 'กรุณารอสักครู่',
-        allowOutsideClick: false,
-        allowEscapeKey: false,
-        didOpen: () => Swal.showLoading()
-    });
+    if (isReadingCard) return; // กันกดซ้ำ
+    isReadingCard = true;
 
     try {
-        const res = await fetch('http://127.0.0.1:9000/read-card');
+        Swal.fire({
+            title: 'กำลังอ่านบัตร...',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
 
-        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const res = await fetch('http://127.0.0.1:9000/read-card', {
+            cache: 'no-store'
+        });
 
         const data = await res.json();
         console.log('READ CARD DATA =', data);
 
-        if (!data?.success) throw new Error('อ่านบัตรไม่สำเร็จ');
+        if (!data.success) {
+            throw new Error(data.message || 'อ่านบัตรไม่สำเร็จ');
+        }
 
-        const firstName = data.first_name_th || '';
-        const lastName = data.last_name_th || '';
-
-        window.setInputValue('modalCitizenId', data.citizen_id);
-        window.setInputValue('modalFirstName', firstName);
-        window.setInputValue('modalLastName', lastName);
-        window.setInputValue('modalBirthDate', data.birth_date);
-        window.setInputValue('modalAddress', data.address);
+        document.getElementById('modalCitizenId').value = data.citizen_id || '';
+        document.getElementById('modalFirstName').value = data.first_name_th || '';
+        document.getElementById('modalLastName').value = data.last_name_th || '';
+        document.getElementById('modalBirthDate').value = data.birth_date || '';
+        document.getElementById('modalAddress').value = data.address || '';
 
         Swal.fire({
             icon: 'success',
-            title: 'ดึงข้อมูลสำเร็จ',
-            text: `${firstName} ${lastName}`,
-            timer: 1500,
+            title: 'อ่านสำเร็จ',
+            timer: 1200,
             showConfirmButton: false
         });
 
@@ -1232,8 +1233,9 @@ window.readIDCard = async function() {
         console.error(err);
         Swal.fire('ผิดพลาด', err.message, 'error');
     }
+
+    isReadingCard = false;
 };
-	
 /* =======================================================
    🚀 ZONE 2: CORE SYSTEM (ระบบล็อกอิน & สลับหน้าเมนู)
    ======================================================= */
